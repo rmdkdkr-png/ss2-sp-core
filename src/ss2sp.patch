@@ -1,0 +1,197 @@
+diff --git a/Makefile.common b/Makefile.common
+index b61e812..8e7ff1b 100644
+--- a/Makefile.common
++++ b/Makefile.common
+@@ -82,7 +82,8 @@ SOURCES_CXX += \
+ 
+ SOURCES_C   += \
+ 	$(MEDNAFEN_DIR)/state.c \
+-	$(CORE_DIR)/libretro.c
++	$(CORE_DIR)/libretro.c \
++	$(CORE_DIR)/ss2sp.c
+ 
+ ifneq ($(STATIC_LINKING), 1)
+ SOURCES_C += \
+diff --git a/libretro.c b/libretro.c
+index ef01e22..581c7ae 100644
+--- a/libretro.c
++++ b/libretro.c
+@@ -334,7 +334,7 @@ void StateAction(StateMem *sm, int load, int data_only)
+ static bool update_video = false;
+ 
+ #define MEDNAFEN_CORE_NAME_MODULE "ngp"
+-#define MEDNAFEN_CORE_NAME "Beetle NeoPop"
++#define MEDNAFEN_CORE_NAME "Beetle NeoPop (SS2 One-button)"
+ /* TODO/FIXME - only thing missing is flash/RTC refactors */
+ #define MEDNAFEN_CORE_VERSION "v1.29.0.0"
+ #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
+@@ -377,6 +377,18 @@ static void check_color_depth(void)
+ #endif
+ }
+ 
++/* ── SS2 원버튼 필살기 엔진 (ss2sp.c) ──────────────────────────────
++   NGPC는 버튼이 A/B/Option 셋뿐이라 패드의 X·Y·L·R·L2·R2가 통째로 논다.
++   그 6개를 현재 캐릭터의 필살기 1~6번에 직결한다. 캐릭터·유파는 RAM에서 자동 인식. */
++extern uint8_t ss2sp_frame(uint8_t pad, uint16_t trig);
++extern void    ss2sp_reset(void);
++extern void    ss2sp_set_layout(int sp);
++extern const char *ss2sp_last_name;
++extern int         ss2sp_last_ok;
++
++/* SS2 원버튼 엔진 on/off (코어 옵션 ngp_ss2sp) */
++static bool ss2sp_enable = true;
++
+ static void check_variables(void)
+ {
+    struct retro_variable var = {0};
+@@ -392,6 +404,16 @@ static void check_variables(void)
+       else if (!strcmp(var.value, "english"))
+          setting_ngp_language = 1;
+    }
++
++   var.key   = "ngp_ss2sp";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      ss2sp_enable = strcmp(var.value, "disabled") ? true : false;
++
++   var.key   = "ngp_ss2sp_layout";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      ss2sp_set_layout(!strcmp(var.value, "sp"));
+ }
+ 
+ void retro_init(void)
+@@ -436,6 +458,7 @@ void retro_init(void)
+ 
+ void retro_reset(void)
+ {
++   ss2sp_reset();
+    neopop_reset();
+ }
+ 
+@@ -448,6 +471,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+ #define MAX_BUTTONS 7
+ static uint8_t input_buf;
+ 
++
+ bool retro_load_game(const struct retro_game_info *info)
+ {
+    struct retro_input_descriptor desc[] = {
+@@ -458,6 +482,12 @@ bool retro_load_game(const struct retro_game_info *info)
+       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
+       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
+       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
++      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,  "SP 1" },
++      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,  "SP 2" },
++      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,  "SP 3" },
++      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,  "SP 4" },
++      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2, "SP 5" },
++      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2, "SP 6" },
+ 
+       { 0 },
+    };
+@@ -556,6 +586,19 @@ static void update_input(void)
+    for (i = 0; i < MAX_BUTTONS; i++)
+       if ((map[i] != -1u) && (ret & (1 << map[i])))
+          input_buf |= (1 << i);
++
++   if (ss2sp_enable)
++   {
++      static const unsigned trig_map[6] = {
++         RETRO_DEVICE_ID_JOYPAD_X,  RETRO_DEVICE_ID_JOYPAD_Y,
++         RETRO_DEVICE_ID_JOYPAD_L,  RETRO_DEVICE_ID_JOYPAD_R,
++         RETRO_DEVICE_ID_JOYPAD_L2, RETRO_DEVICE_ID_JOYPAD_R2 };
++      uint16_t trig = 0;
++      for (i = 0; i < 6; i++)
++         if (ret & (1 << trig_map[i]))
++            trig |= (uint16_t)(1u << i);
++      input_buf = ss2sp_frame(input_buf, trig);
++   }
+ }
+ 
+ void retro_run(void)
+@@ -762,6 +805,7 @@ bool retro_serialize(void *data, size_t size)
+ 
+ bool retro_unserialize(const void *data, size_t size)
+ {
++   ss2sp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
+    StateMem st;
+ 
+    st.data           = (uint8_t*)data;
+diff --git a/libretro_core_options.h b/libretro_core_options.h
+index a0dc3ec..4868506 100644
+--- a/libretro_core_options.h
++++ b/libretro_core_options.h
+@@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
+    {"system",  "System",   NULL},
+    //{"video",   "Video",    NULL},
+    //{"audio",   "Audio",    NULL},
+-   //{"input",   "Input",    NULL},
++   {"input",   "Input",    NULL},
+    //{"advanced","Advanced", NULL},
+    { NULL,     NULL,       NULL },
+ };
+@@ -52,6 +52,34 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+       },
+       "english",
+    },
++   {
++      "ngp_ss2sp",
++      "SS2 One-button Specials",
++      NULL,
++      "Samurai Shodown! 2 only. Maps unused pad buttons to the current character's special moves. The core reads facing direction from RAM and mirrors the command automatically.",
++      NULL,
++      "input",
++      {
++         { "enabled",  "Enabled" },
++         { "disabled", "Disabled" },
++         { NULL, NULL},
++      },
++      "enabled",
++   },
++   {
++      "ngp_ss2sp_layout",
++      "SS2 One-button Layout",
++      NULL,
++      "buttons: X/Y/L/R/L2/R2 fire specials 1-6 directly. sp: X alone = neutral special, X + a direction picks the slot (same as the browser runner).",
++      NULL,
++      "input",
++      {
++         { "buttons", "Buttons (X=1 .. R2=6)" },
++         { "sp",      "SP + direction" },
++         { NULL, NULL},
++      },
++      "buttons",
++   },
+    { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
+ };
+ 
+@@ -72,6 +100,28 @@ struct retro_core_option_definition option_defs_us[] = {
+       },
+       "english",
+    },
++   {
++      "ngp_ss2sp",
++      "SS2 One-button Specials",
++      "Samurai Shodown! 2 only. Maps unused pad buttons to the current character's special moves.",
++      {
++         { "enabled",  NULL },
++         { "disabled", NULL },
++         { NULL, NULL},
++      },
++      "enabled",
++   },
++   {
++      "ngp_ss2sp_layout",
++      "SS2 One-button Layout",
++      "buttons: X/Y/L/R/L2/R2 = specials 1-6.  sp: X + direction picks the slot.",
++      {
++         { "buttons", NULL },
++         { "sp",      NULL },
++         { NULL, NULL},
++      },
++      "buttons",
++   },
+    { NULL, NULL, NULL, { NULL, NULL }, NULL },
+ };
+ 
