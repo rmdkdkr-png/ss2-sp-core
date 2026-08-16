@@ -1,0 +1,55 @@
+name: build cores
+
+# 안드로이드 코어는 NDK가 필요합니다. GitHub 러너에는 이미 깔려 있으므로
+# 이 워크플로를 돌리면 arm64 / armeabi-v7a 코어가 아티팩트로 나옵니다.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 소스 준비
+        run: |
+          git clone https://github.com/libretro/beetle-ngp-libretro.git build
+          git -C build checkout a50d5ac288a81f2104ddf43195a4efdd15c72227
+          git -C build apply --3way ../src/ss2sp.patch
+          cp src/ss2sp.c src/ss2sp_moves.h build/
+      - name: ndk-build
+        run: |
+          cd build
+          $ANDROID_NDK_ROOT/ndk-build -C jni -j$(nproc) APP_ABI="arm64-v8a armeabi-v7a"
+          mkdir -p ../out
+          cp libs/arm64-v8a/libretro.so   ../out/mednafen_ngp_libretro.android-arm64-v8a.so
+          cp libs/armeabi-v7a/libretro.so ../out/mednafen_ngp_libretro.android-armeabi-v7a.so
+      - uses: actions/upload-artifact@v4
+        with: { name: cores-android, path: out/* }
+
+  linux-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+      - run: ./build.sh host && ./build.sh linux-aarch64 && ./build.sh windows-x86_64
+      - uses: actions/upload-artifact@v4
+        with: { name: cores-desktop, path: cores/* }
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 빌드
+        run: |
+          git clone https://github.com/libretro/beetle-ngp-libretro.git build
+          git -C build checkout a50d5ac288a81f2104ddf43195a4efdd15c72227
+          git -C build apply --3way ../src/ss2sp.patch
+          cp src/ss2sp.c src/ss2sp_moves.h build/
+          make -C build -j3 platform=osx
+          mkdir -p out && cp build/mednafen_ngp_libretro.dylib out/
+      - uses: actions/upload-artifact@v4
+        with: { name: cores-macos, path: out/* }
