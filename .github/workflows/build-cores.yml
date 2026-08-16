@@ -2,6 +2,13 @@ name: build cores
 
 # 안드로이드 코어는 NDK가 필요합니다. GitHub 러너에는 이미 깔려 있으므로
 # 이 워크플로를 돌리면 arm64 / armeabi-v7a 코어가 아티팩트로 나옵니다.
+#
+# v2 — 웹 업로드 환경에서 걸리던 것들을 막았습니다.
+#   · 업로드하면 실행 권한(+x)이 사라지므로 build.sh를 bash로 직접 부릅니다
+#   · 패치 경로를 절대경로로 바꾸고, git apply가 실패하면 patch -p1로 한 번 더 시도합니다
+#   · 각 단계에 이름을 붙여, 실패했을 때 어디서 죽었는지 바로 보이게 했습니다
+#   · 데스크톱/맥 빌드는 실패해도 안드로이드 빌드를 막지 않습니다
+
 on:
   push:
     branches: [main]
@@ -9,47 +16,119 @@ on:
   release:
     types: [created]
 
+env:
+  UPSTREAM: https://github.com/libretro/beetle-ngp-libretro.git
+  COMMIT: a50d5ac288a81f2104ddf43195a4efdd15c72227
+
 jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 안드로이드 — 이게 핵심입니다
+  # ─────────────────────────────────────────────────────────────
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: 소스 준비
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 준비물 확인
         run: |
-          git clone https://github.com/libretro/beetle-ngp-libretro.git build
-          git -C build checkout a50d5ac288a81f2104ddf43195a4efdd15c72227
-          git -C build apply --3way ../src/ss2sp.patch
-          cp src/ss2sp.c src/ss2sp_moves.h build/
+          set -x
+          echo "NDK_ROOT=[$ANDROID_NDK_ROOT]  NDK_HOME=[$ANDROID_NDK_HOME]"
+          ls -la src/
+          test -f src/ss2sp.patch      || { echo "::error::src/ss2sp.patch 가 없습니다"; exit 1; }
+          test -f src/ss2sp.c          || { echo "::error::src/ss2sp.c 가 없습니다"; exit 1; }
+          test -f src/ss2sp_moves.h    || { echo "::error::src/ss2sp_moves.h 가 없습니다"; exit 1; }
+          head -3 src/ss2sp.patch
+
+      - name: upstream 코어 받기
+        run: |
+          set -x
+          git clone "$UPSTREAM" upstream
+          git -C upstream checkout "$COMMIT"
+
+      - name: 패치 적용
+        run: |
+          set -x
+          cd upstream
+          if ! git apply --3way -v "$GITHUB_WORKSPACE/src/ss2sp.patch"; then
+            echo "git apply 실패 — patch -p1 로 재시도"
+            patch -p1 --forward < "$GITHUB_WORKSPACE/src/ss2sp.patch"
+          fi
+          cp "$GITHUB_WORKSPACE/src/ss2sp.c" "$GITHUB_WORKSPACE/src/ss2sp_moves.h" .
+          grep -n ss2sp Makefile.common
+
       - name: ndk-build
         run: |
-          cd build
-          $ANDROID_NDK_ROOT/ndk-build -C jni -j$(nproc) APP_ABI="arm64-v8a armeabi-v7a"
-          mkdir -p ../out
-          cp libs/arm64-v8a/libretro.so   ../out/mednafen_ngp_libretro.android-arm64-v8a.so
-          cp libs/armeabi-v7a/libretro.so ../out/mednafen_ngp_libretro.android-armeabi-v7a.so
-      - uses: actions/upload-artifact@v4
-        with: { name: cores-android, path: out/* }
+          set -x
+          NDK="${ANDROID_NDK_ROOT:-${ANDROID_NDK_HOME:-$ANDROID_HOME/ndk-bundle}}"
+          test -x "$NDK/ndk-build" || { echo "::error::ndk-build 를 못 찾았습니다: $NDK"; ls "$ANDROID_HOME" || true; exit 1; }
+          cd upstream
+          "$NDK/ndk-build" -C jni -j"$(nproc)" APP_ABI="arm64-v8a armeabi-v7a"
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp libs/arm64-v8a/libretro.so   "$GITHUB_WORKSPACE/out/mednafen_ngp_libretro.android-arm64-v8a.so"
+          cp libs/armeabi-v7a/libretro.so "$GITHUB_WORKSPACE/out/mednafen_ngp_libretro.android-armeabi-v7a.so"
+          ls -la "$GITHUB_WORKSPACE/out"
 
+      - name: 결과 요약
+        run: |
+          {
+            echo "### 안드로이드 코어 빌드 완료"
+            echo ""
+            echo '아래 **Artifacts → cores-android** 에서 받으세요.'
+            echo '요즘 폰은 `arm64-v8a` 쪽입니다.'
+            echo ""
+            ls -la out/ | sed 's/^/    /'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cores-android
+          path: out/*
+
+  # ─────────────────────────────────────────────────────────────
+  # 리눅스 · 윈도우 (있으면 좋고, 실패해도 안드로이드와 무관)
+  # ─────────────────────────────────────────────────────────────
   linux-windows:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
-      - run: ./build.sh host && ./build.sh linux-aarch64 && ./build.sh windows-x86_64
+      - name: 크로스 컴파일러 설치
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+                                  gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+      - name: 빌드
+        # 웹 업로드로 올리면 실행 권한이 사라지므로 bash로 직접 부릅니다
+        run: |
+          set -x
+          bash build.sh host
+          bash build.sh linux-aarch64
+          bash build.sh windows-x86_64
+          ls -la cores/
       - uses: actions/upload-artifact@v4
-        with: { name: cores-desktop, path: cores/* }
+        with:
+          name: cores-desktop
+          path: cores/*
 
   macos:
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: 빌드
         run: |
-          git clone https://github.com/libretro/beetle-ngp-libretro.git build
-          git -C build checkout a50d5ac288a81f2104ddf43195a4efdd15c72227
-          git -C build apply --3way ../src/ss2sp.patch
-          cp src/ss2sp.c src/ss2sp_moves.h build/
-          make -C build -j3 platform=osx
-          mkdir -p out && cp build/mednafen_ngp_libretro.dylib out/
+          set -x
+          git clone "$UPSTREAM" upstream
+          git -C upstream checkout "$COMMIT"
+          cd upstream
+          git apply --3way -v "$GITHUB_WORKSPACE/src/ss2sp.patch" \
+            || patch -p1 --forward < "$GITHUB_WORKSPACE/src/ss2sp.patch"
+          cp "$GITHUB_WORKSPACE/src/ss2sp.c" "$GITHUB_WORKSPACE/src/ss2sp_moves.h" .
+          make -j3 platform=osx
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp mednafen_ngp_libretro.dylib "$GITHUB_WORKSPACE/out/"
       - uses: actions/upload-artifact@v4
-        with: { name: cores-macos, path: out/* }
+        with:
+          name: cores-macos
+          path: out/*
