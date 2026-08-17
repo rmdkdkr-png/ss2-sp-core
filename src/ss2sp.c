@@ -16,7 +16,19 @@
 static int ss2_dbg(void){ static int d=-1; if(d<0){const char*e=getenv("SS2SP_DEBUG"); d=(e&&*e=='1');} return d; }
 #include "ss2sp_moves.h"
 
+/* ── 램 접근 ──────────────────────────────────────────────────────
+   libretro(beetle-ngp)에서는 CPUExRAM 이 전역 C 심볼이라 그대로 extern 한다.
+   NGP.emu(emu-ex-plus-alpha)에서는 같은 배열이 C++ 네임스페이스(MDFN_IEN_NGP)
+   안에 있어 C에서 직접 못 본다. 그쪽은 SS2SP_RAM_POINTER 를 정의하고
+   부팅 때 ss2sp_set_ram(&CPUExRAM[0]) 을 한 번 불러 주면 된다.
+   본문 코드는 양쪽 모두 손대지 않는다. */
+#ifdef SS2SP_RAM_POINTER
+static uint8_t *ss2_ram_ptr;
+void ss2sp_set_ram(void *p) { ss2_ram_ptr = (uint8_t *)p; }
+#define CPUExRAM ss2_ram_ptr
+#else
 extern uint8_t CPUExRAM[16384];
+#endif
 
 /* ── RAM 맵 (리버싱 실측) ───────────────────────────────────────── */
 #define OFF_ACT        0x0E3E   /* P1 액션ID (16bit). 필살기 ≥ 0x180 */
@@ -38,13 +50,24 @@ extern uint8_t CPUExRAM[16384];
 /* ── 타이밍 (프레임) ────────────────────────────────────────────── */
 static int ss2_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_STEP"); v=e?atoi(e):3;} return v; }
 #define STEP_FRAMES   ss2_step_frames()   /* 방향 1개 유지 */
-#define HOLD_FRAMES   6         /* 마지막 방향 + 버튼 동시 유지 */
+#define HOLD_FRAMES   6         /* 마지막 방향 + 버튼 동시 유지 (약) */
+/* ── 강/약 ────────────────────────────────────────────────────────
+   게임은 버튼을 얼마나 오래 잡고 있었는지로 강·약을 가른다.
+   브라우저판은 사용자가 SP를 누르고 있는 동안 마지막 스텝을 늘려서
+   8프레임을 넘기면 강으로 확정한다. 코어판에는 그게 없어서 **항상 약**이었다
+   (실기 제보: "길게 눌러도 강이 안 나온다").
+   → 트리거를 계속 잡고 있으면 버튼 유지 프레임을 늘린다. */
+#define STRONG_FRAMES 9         /* 이 이상 유지되면 강 판정 */
+#define MAX_HOLD      26        /* 안전 상한 — 무한정 잡고 있어도 여기서 끊는다 */
 #define TAIL_FRAMES   2         /* 중립 복귀 */
 #define MAX_STEPS     24
 
-typedef struct { uint8_t pad; uint8_t frames; } ss2_step;
+typedef struct { uint8_t pad; uint8_t frames; uint8_t sustain; } ss2_step;
 
 static ss2_step  q[MAX_STEPS];
+static uint16_t  hold_bit;        /* 매크로를 시작시킨 트리거 비트 */
+int ss2sp_last_strong = 0;        /* 마지막 발동이 강이었는지 (표시용) */
+static int       hold_elapsed;    /* 버튼 유지 프레임 누적 */
 static int       q_n, q_i, q_left;
 static uint16_t  prev_trig;       /* 트리거 버튼 엣지 검출 */
 static int       started_act;     /* 발동 직전 액션ID — 결과 판정용 */
@@ -53,6 +76,12 @@ static const ss2_move *pending;   /* 공중에서 지상기를 눌렀을 때 착
 static int       pending_left;
 static uint32_t  frame_no;        /* 엔진 프레임 카운터 */
 static uint32_t  horiz_at;        /* 순수 좌/우(아래 없음)를 마지막으로 잡고 있던 프레임 */
+
+/* 비오의 — 유파를 가리지 않고 ←→↓+A 하나다. 그래서 기술표에 넣지 않고 여기 둔다.
+   분노 MAX 일 때만 나가는 기술이라 방향 조합에 끼워 두면 평소엔 죽은 자리가 된다.
+   모션 바이트는 패드 비트다: 4=LEFT(0x4) 6=RIGHT(0x8) 2=DOWN(0x2). */
+static const unsigned char mo_super[] = { 0x4, 0x8, 0x2 };
+static const ss2_move ss2_super = { "비오의", mo_super, 3, 16, 0 };
 
 /* 마지막 실행 결과 (프론트엔드 로그/디버그용) */
 const char *ss2sp_last_name = 0;
@@ -129,15 +158,17 @@ static void ss2_compile(const ss2_move *m)
       {
          q[q_n].pad = (uint8_t)(d | m->btn);
          q[q_n].frames = HOLD_FRAMES;
+         q[q_n].sustain = 1;         /* 트리거를 잡고 있으면 여기서 늘어난다 */
       }
       else
       {
          q[q_n].pad = d;
          q[q_n].frames = STEP_FRAMES;
+         q[q_n].sustain = 0;
       }
       q_n++;
    }
-   q[q_n].pad = 0; q[q_n].frames = TAIL_FRAMES; q_n++;
+   q[q_n].pad = 0; q[q_n].frames = TAIL_FRAMES; q[q_n].sustain = 0; q_n++;
 
    /* 실험용 스위치: SS2SP_NORESET=1 이면 리셋을 건너뛴다(대조군 측정용) */
    {
@@ -147,6 +178,8 @@ static void ss2_compile(const ss2_move *m)
    }
 
    q_left = q[0].frames;
+   hold_elapsed = 0;
+   ss2sp_last_strong = 0;
    started_act = CPUExRAM[OFF_ACT] | (CPUExRAM[OFF_ACT + 1] << 8);
    verify_left = 90;
    ss2sp_last_name = m->name;
@@ -157,9 +190,11 @@ static void ss2_compile(const ss2_move *m)
    브라우저판 resolveSpSlot과 같은 우선순위:
      실제 공중 > ↑(공중기 의도) > ↘/↙ > 아래 > 앞/뒤 > 중립
    앞/뒤는 캐릭터가 보는 방향 기준으로 계산한다(좌우 자동 반전). */
+static const signed char *ss2_slots_row(int style);
+
 static const ss2_move *ss2_resolve_sp(const ss2_style *st, unsigned idx, uint8_t held)
 {
-   const signed char *map = ss2_spmap[idx];
+   const signed char *map = ss2_slots_row((int)idx);
    int facing_left = (CPUExRAM[OFF_FACING] == 1);
    int airborne = (CPUExRAM[OFF_Y] != 128);
    int u = !!(held & PAD_UP),  d = !!(held & PAD_DOWN);
@@ -178,19 +213,32 @@ static const ss2_move *ss2_resolve_sp(const ss2_style *st, unsigned idx, uint8_t
    return &st->mv[map[slot]];
 }
 
-/* 큐에서 이번 프레임에 내보낼 패드 1개를 꺼낸다. */
-static uint8_t ss2_step_out(void)
+/* 큐에서 이번 프레임에 내보낼 패드 1개를 꺼낸다.
+   held = 매크로를 시작시킨 트리거가 아직 눌려 있는가. 눌려 있으면 버튼 스텝을 늘린다(=강). */
+static uint8_t ss2_step_out(int held)
 {
    uint8_t out = q[q_i].pad;
    /* 히트스톱 중에는 프레임이 소비되지 않는다 — 카운트를 멈춘다.
       (브라우저판이 ms 타이머로 근사하던 부분. 코어에선 정확히 맞출 수 있다) */
-   if (!CPUExRAM[OFF_HITSTOP] && --q_left <= 0)
+   if (!CPUExRAM[OFF_HITSTOP])
    {
-      if (++q_i < q_n) q_left = q[q_i].frames;
-      else { q_n = q_i = 0; q_left = 0; }
+      /* 손가락을 떼지 않았고 상한에 안 닿았으면 이 프레임은 소비하지 않는다 */
+      if (q[q_i].sustain && held && hold_elapsed < MAX_HOLD)
+      {
+         if (++hold_elapsed >= STRONG_FRAMES) ss2sp_last_strong = 1;
+         return out;
+      }
+      if (--q_left <= 0)
+      {
+         if (++q_i < q_n) q_left = q[q_i].frames;
+         else { q_n = q_i = 0; q_left = 0; }
+      }
    }
+   if (q[q_i].sustain && ++hold_elapsed >= STRONG_FRAMES) ss2sp_last_strong = 1;
    return out;                           /* 매크로 중 사용자 입력은 무시 */
 }
+
+
 
 /* 매 프레임 호출. pad는 libretro.c가 만든 input_buf.
    trig는 미사용 버튼 9개의 비트마스크(X,Y,L,R,L2,R2,L3,R3,SELECT 순).
@@ -220,7 +268,7 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
    }
 
    if (ss2_active())
-      return ss2_step_out();
+      return ss2_step_out(hold_bit && (trig & hold_bit));
 
    if (edge)
    {
@@ -232,14 +280,18 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
          const ss2_move *m = 0;
          int slot = -1, b;
          for (b = 0; b < 9; b++) if (edge & (1u << b)) { slot = b; break; }
+         hold_bit = (uint16_t)(slot >= 0 ? (1u << slot) : 0);   /* 이 버튼을 잡고 있으면 강 */
 
-         if (ss2_sp_layout() && slot == 0)
-            m = ss2_resolve_sp(st, ss2_cur_idx, pad);   /* X = SP 버튼 */
-         else
-         {
-            if (ss2_sp_layout()) slot--;                /* Y·L·R·L2·R2 = 1~5번 */
-            if (slot >= 0 && slot < st->n) m = &st->mv[slot];
-         }
+         /* 버튼 번호는 레이아웃과 무관하게 고정이다: SP1~SP7 = 기술 1~7번, SP8 = 비오의.
+            SP 레이아웃일 때만 SP1 이 방향을 함께 읽는데, 방향을 안 잡으면 중립 자리가
+            나오고 중립 자리는 항상 기술 1번이라 결과가 같다. 그래서 어긋나지 않는다.
+            (예전에는 SP 레이아웃에서 번호가 한 칸씩 밀려 SP2 가 기술 1번이었다) */
+         if (slot == 7)
+            m = &ss2_super;
+         else if (ss2_sp_layout() && slot == 0)
+            m = ss2_resolve_sp(st, ss2_cur_idx, pad);   /* SP1 = SP + 방향 */
+         else if (slot >= 0 && slot < st->n)
+            m = &st->mv[slot];
 
          if (m)
          {
@@ -262,9 +314,160 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
    /* ★ 트리거 프레임에도 매크로의 첫 스텝이 나가야 한다.
       예전엔 여기서 사용자 입력을 그대로 흘려서, ↑+SP를 누르면 점프가 먼저 튀어나갔다. */
    if (ss2_active())
-      return ss2_step_out();
+      return ss2_step_out(hold_bit && (trig & hold_bit));
 
    return pad;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   기술 배치 커스텀 API
+   ss2_spmap(자동 생성 기본값)을 통째로 복사해 두고, 사용자가 고친 값을 여기에 담는다.
+   프론트엔드(NGP.emu 메뉴)가 읽고 쓴다. 저장은 blob 210바이트.
+   ═══════════════════════════════════════════════════════════════════ */
+#define SS2_SLOTS 7
+static signed char ss2_slot_tbl[SS2_STYLE_COUNT][SS2_SLOTS];
+static int         ss2_slot_ready;
+
+static void ss2_slots_ensure(void)
+{
+   if (!ss2_slot_ready)
+   {
+      memcpy(ss2_slot_tbl, ss2_spmap, sizeof ss2_slot_tbl);
+      ss2_slot_ready = 1;
+   }
+}
+
+static const signed char *ss2_slots_row(int style)
+{
+   ss2_slots_ensure();
+   if (style < 0 || style >= SS2_STYLE_COUNT) style = 0;
+   return ss2_slot_tbl[style];
+}
+
+int ss2sp_style_count(void) { return SS2_STYLE_COUNT; }
+int ss2sp_slot_count(void)  { return SS2_SLOTS; }
+int ss2sp_slots_size(void)  { return SS2_STYLE_COUNT * SS2_SLOTS; }
+
+const char *ss2sp_style_id(int style)
+{
+   if (style < 0 || style >= SS2_STYLE_COUNT) return "";
+   return ss2_styles[style].id;
+}
+
+/* 현재 유파. 전투 중이 아니면 -1 */
+int ss2sp_cur_style(void)
+{
+   unsigned v;
+   if (!CPUExRAM) return -1;
+   v = CPUExRAM[OFF_CHARSTYLE];
+   if (v & 7) return -1;
+   v >>= 3;
+   return (v < SS2_STYLE_COUNT) ? (int)v : -1;
+}
+
+int ss2sp_move_count(int style)
+{
+   if (style < 0 || style >= SS2_STYLE_COUNT) return 0;
+   return ss2_styles[style].n;
+}
+
+const char *ss2sp_move_name(int style, int i)
+{
+   if (style < 0 || style >= SS2_STYLE_COUNT) return "";
+   if (i < 0 || i >= ss2_styles[style].n) return "";
+   return ss2_styles[style].mv[i].name;
+}
+
+int ss2sp_move_btn(int style, int i)
+{
+   if (style < 0 || style >= SS2_STYLE_COUNT) return 0;
+   if (i < 0 || i >= ss2_styles[style].n) return 0;
+   return ss2_styles[style].mv[i].btn;
+}
+
+int ss2sp_move_flags(int style, int i)
+{
+   if (style < 0 || style >= SS2_STYLE_COUNT) return 0;
+   if (i < 0 || i >= ss2_styles[style].n) return 0;
+   return ss2_styles[style].mv[i].flags;
+}
+
+/* 커맨드를 넘패드 표기(236 / 623 / 41236 …)로 써 준다. 반환값 = 쓴 글자 수 */
+int ss2sp_move_notation(int style, int i, char *out, int cap)
+{
+   static const struct { unsigned char pad; char ch; } tab[] = {
+      {PAD_UP,'8'}, {PAD_DOWN,'2'}, {PAD_LEFT,'4'}, {PAD_RIGHT,'6'},
+      {PAD_UP|PAD_RIGHT,'9'}, {PAD_UP|PAD_LEFT,'7'},
+      {PAD_DOWN|PAD_RIGHT,'3'}, {PAD_DOWN|PAD_LEFT,'1'},
+   };
+   int k, j, n = 0;
+   const ss2_move *m;
+   if (!out || cap <= 0) return 0;
+   out[0] = 0;
+   if (style < 0 || style >= SS2_STYLE_COUNT) return 0;
+   if (i < 0 || i >= ss2_styles[style].n) return 0;
+   m = &ss2_styles[style].mv[i];
+   for (k = 0; k < m->len && n < cap - 3; k++)
+   {
+      char c = '5';
+      for (j = 0; j < (int)(sizeof tab / sizeof tab[0]); j++)
+         if (tab[j].pad == m->motion[k]) { c = tab[j].ch; break; }
+      out[n++] = c;
+   }
+   if (n < cap - 2) { out[n++] = '+'; out[n++] = (m->btn == 32) ? 'B' : 'A'; }
+   out[n] = 0;
+   return n;
+}
+
+int ss2sp_get_slot(int style, int slot)
+{
+   ss2_slots_ensure();
+   if (style < 0 || style >= SS2_STYLE_COUNT) return -1;
+   if (slot  < 0 || slot  >= SS2_SLOTS)       return -1;
+   return ss2_slot_tbl[style][slot];
+}
+
+void ss2sp_set_slot(int style, int slot, int mv)
+{
+   ss2_slots_ensure();
+   if (style < 0 || style >= SS2_STYLE_COUNT) return;
+   if (slot  < 0 || slot  >= SS2_SLOTS)       return;
+   if (mv >= ss2_styles[style].n) mv = -1;
+   if (mv < 0) mv = -1;
+   ss2_slot_tbl[style][slot] = (signed char)mv;
+}
+
+void ss2sp_reset_slots(void)
+{
+   memcpy(ss2_slot_tbl, ss2_spmap, sizeof ss2_slot_tbl);
+   ss2_slot_ready = 1;
+}
+
+/* 저장/복원 — 0xFF = 없음(-1) */
+void ss2sp_slots_blob(unsigned char *out)
+{
+   int s, k;
+   ss2_slots_ensure();
+   if (!out) return;
+   for (s = 0; s < SS2_STYLE_COUNT; s++)
+      for (k = 0; k < SS2_SLOTS; k++)
+         *out++ = (unsigned char)(ss2_slot_tbl[s][k] < 0 ? 0xFF : ss2_slot_tbl[s][k]);
+}
+
+void ss2sp_load_slots(const unsigned char *in)
+{
+   int s, k;
+   if (!in) return;
+   ss2_slots_ensure();
+   for (s = 0; s < SS2_STYLE_COUNT; s++)
+      for (k = 0; k < SS2_SLOTS; k++)
+      {
+         unsigned char v = *in++;
+         int mv = (v == 0xFF) ? -1 : (int)v;
+         if (mv >= ss2_styles[s].n) mv = -1;
+         ss2_slot_tbl[s][k] = (signed char)mv;
+      }
 }
 
 void ss2sp_reset(void)
@@ -273,6 +476,7 @@ void ss2sp_reset(void)
    pending = 0; pending_left = 0;
    horiz_at = 0;
    prev_trig = 0;
+   hold_bit = 0; hold_elapsed = 0; ss2sp_last_strong = 0;
    verify_left = 0;
    ss2sp_last_ok = -1;
    ss2sp_last_name = 0;
