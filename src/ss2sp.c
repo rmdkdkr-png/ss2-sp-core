@@ -110,6 +110,31 @@ static const ss2_style *ss2_cur_style(void)
    return &ss2_styles[ss2_cur_idx];
 }
 
+/* ── 행동 가능 판정 ─────────────────────────────────────────────
+   증상(실측): 라운드 시작 연출이나 자기 기술 경직 중에 SP를 누르면 커맨드
+   앞부분(236의 2·3)이 통째로 버려지고 꼬리의 →+A만 살아남아 대쉬 베기가 나간다.
+   카즈키 수라 중립 SP 연타로 재현: 부동격(0x210) 대신 대쉬A 체인(0x74→0x13C~)이 나왔다.
+   판정은 브라우저판 waitGround와 같은 실측 규칙을 쓴다:
+     MODE(0x00A7) == 241 (라운드 활성. 240 = 메뉴·카드·시작 연출·컷씬)
+     액션ID < 0x50 (idle·앉기·걷기) 또는 0x10C (걷기 턴)
+   행동 불가면 착지 대기와 같은 보류(pending) 경로로 넘긴다 — 행동 가능해지는
+   프레임에 그대로 발동하므로 연타 시 오히려 선입력 버퍼처럼 동작한다.
+   SS2SP_NOGATE=1 로 끌 수 있다(대조 측정용). */
+static int ss2_mode_warm;   /* MODE==241 연속 프레임 수 — ss2sp_frame에서 매 프레임 갱신 */
+
+static int ss2_actable(void)
+{
+   unsigned act;
+   static int nogate = -1;
+   if (nogate < 0) { const char *e = getenv("SS2SP_NOGATE"); nogate = (e && *e == '1'); }
+   if (nogate) return 1;
+   /* GO 직후 0~1프레임은 게임이 입력 이력을 아직 안 받는다.
+      실측: GO+0 발동 시 기본기 오발(0x54), GO+2부터 정상. 여유를 두고 4프레임 예열. */
+   if (ss2_mode_warm < 4) return 0;
+   act = CPUExRAM[OFF_ACT] | (CPUExRAM[OFF_ACT + 1] << 8);
+   return (act < 0x50) || (act == 0x10C);
+}
+
 static uint8_t ss2_mirror(uint8_t pad)
 {
    uint8_t lr = pad & (PAD_LEFT | PAD_RIGHT);
@@ -250,6 +275,8 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
 
    /* 걷기 감지 — 순수 좌/우(아래 없음)만 오염원이다 */
    frame_no++;
+   if (CPUExRAM[OFF_MODE] == 241) { if (ss2_mode_warm < 1000) ss2_mode_warm++; }
+   else ss2_mode_warm = 0;
    if ((pad & (PAD_LEFT | PAD_RIGHT)) && !(pad & PAD_DOWN)) horiz_at = frame_no;
 
    /* 발동 결과 판정 — 코어 안이라 폴링 비용이 사실상 0 */
@@ -263,7 +290,7 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
    /* 착지 대기 — 공중에서 지상기를 누르면 씹힌다. 브라우저판과 동일하게 착지까지 들고 있다가 낸다. */
    if (pending && !ss2_active())
    {
-      if (CPUExRAM[OFF_Y] == 128) { ss2_compile(pending); pending = 0; }
+      if (CPUExRAM[OFF_Y] == 128 && ss2_actable()) { ss2_compile(pending); pending = 0; }
       else if (--pending_left <= 0) pending = 0;
    }
 
@@ -297,7 +324,7 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
          {
             /* 공중기가 아니면 착지까지 기다린다(지상기는 공중에서 씹힌다).
                브라우저판의 waitGround와 같은 판정. */
-            if (!(m->flags & 4) && CPUExRAM[OFF_Y] != 128)
+            if (!(m->flags & 4) && (CPUExRAM[OFF_Y] != 128 || !ss2_actable()))
             {
                pending = m; pending_left = 90;      /* 최대 1.5초 대기 */
             }
@@ -478,6 +505,7 @@ void ss2sp_reset(void)
    prev_trig = 0;
    hold_bit = 0; hold_elapsed = 0; ss2sp_last_strong = 0;
    verify_left = 0;
+   ss2_mode_warm = 0;
    ss2sp_last_ok = -1;
    ss2sp_last_name = 0;
 }
