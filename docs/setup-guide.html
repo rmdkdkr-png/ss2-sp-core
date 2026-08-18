@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SS2 원버튼 코어 — 레트로아크 설정 설명서</title>
+<style>
+  :root{--bg:#0d0a09;--panel:#161110;--panel2:#1c1614;--line:rgba(255,255,255,.09);
+    --ink:#f2ede1;--muted:#a79c8c;--gold:#d9b968;--red:#cf4638;--green:#78dca0;--blue:#7fb0e8;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,-apple-system,sans-serif;
+    line-height:1.75;-webkit-text-size-adjust:100%;}
+  .wrap{max-width:820px;margin:0 auto;padding:0 20px 100px;}
+  header{padding:56px 0 26px;border-bottom:1px solid var(--line);}
+  .eyebrow{margin:0 0 10px;font-size:11.5px;letter-spacing:.2em;color:var(--gold);font-weight:800;}
+  h1{margin:0;font-size:29px;line-height:1.3;letter-spacing:-.025em;font-weight:900;}
+  h1 span{display:block;font-size:15px;font-weight:700;color:var(--muted);margin-top:9px;letter-spacing:0;}
+  h2{margin:52px 0 4px;font-size:21px;font-weight:900;letter-spacing:-.02em;
+     padding-top:20px;border-top:1px solid var(--line);}
+  h2 .num{color:var(--gold);font-size:13px;display:block;margin-bottom:5px;letter-spacing:.14em;}
+  h3{margin:30px 0 8px;font-size:16px;font-weight:800;color:var(--gold);}
+  p{margin:12px 0;font-size:14.5px;}
+  ul{margin:12px 0;padding-left:20px;font-size:14.5px;} li{margin:6px 0;}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;
+    background:rgba(255,255,255,.07);border-radius:5px;padding:2px 7px;color:var(--gold);}
+  a{color:var(--gold);}
+  .steps{counter-reset:st;list-style:none;padding:0;margin:18px 0;}
+  .steps>li{counter-increment:st;position:relative;padding:15px 17px 15px 56px;margin:10px 0;
+    background:var(--panel);border:1px solid var(--line);border-radius:13px;font-size:14.5px;}
+  .steps>li::before{content:counter(st);position:absolute;left:15px;top:14px;width:27px;height:27px;
+    border-radius:50%;display:grid;place-items:center;background:var(--gold);color:#1a1408;
+    font-weight:900;font-size:13px;}
+  .steps>li b{color:var(--ink);}
+  .note{margin:16px 0;padding:14px 16px;border-radius:12px;font-size:13.5px;line-height:1.75;
+    background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--gold);color:var(--muted);}
+  .note b{color:var(--ink);}
+  .warn{border-left-color:var(--red);} .warn b{color:#ff9d8d;}
+  .ok{border-left-color:var(--green);} .ok b{color:var(--green);}
+  .path{display:block;margin:10px 0;padding:11px 14px;border-radius:10px;background:#100c0b;
+    border:1px solid var(--line);font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:12.5px;color:#d7e8c8;overflow-x:auto;white-space:nowrap;}
+  .ui{display:inline-block;background:#241c16;border:1px solid rgba(255,255,255,.16);
+    border-radius:7px;padding:2px 9px;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;}
+  .val{display:inline-block;background:rgba(217,185,104,.13);border:1px solid rgba(217,185,104,.4);
+    border-radius:7px;padding:2px 9px;font-size:12.5px;font-weight:800;color:var(--gold);white-space:nowrap;}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--gold);font-size:12px;font-weight:800;background:rgba(217,185,104,.05);white-space:nowrap;}
+  td:first-child{white-space:nowrap;font-weight:700;}
+  tbody tr:last-child td{border-bottom:none;}
+  .tbl{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);}
+  .key{display:inline-grid;place-items:center;min-width:30px;height:25px;padding:0 8px;border-radius:7px;
+    background:#2a221e;border:1px solid rgba(255,255,255,.18);font-size:12px;font-weight:800;
+    color:var(--ink);vertical-align:-5px;}
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Beetle NeoPop (SS2 One-button)</p>
+  <h1>레트로아크 코어 설정 설명서
+    <span>어디를 눌러야 뭐가 켜지는지, 항목 하나씩</span></h1>
+</header>
+
+<div class="note ok">
+  <b>이 코어는 삼스2에서만 동작합니다.</b> 다른 네오지오 포켓 게임을 넣으면
+  원버튼 기능이 그냥 잠자코 있고 <b>평범한 Beetle NeoPop</b> 으로 돌아갑니다.
+  기존 코어를 대체해 두셔도 손해가 없습니다.
+</div>
+
+
+<h2><span class="num">01</span>코어 설치 — 세 가지 길</h2>
+
+<h3>안드로이드 (가장 쉬움)</h3>
+
+<ol class="steps">
+  <li>받은 <code>.so</code> 파일을 폰의 <b>다운로드</b> 폴더에 둡니다.</li>
+  <li>레트로아크 → <span class="ui">Load Core</span> (코어 불러오기)</li>
+  <li>맨 아래 <span class="ui">Install or Restore a Core</span> (코어 설치 또는 복원)</li>
+  <li>파일 목록에서 그 <code>.so</code> 를 고릅니다. 끝입니다.</li>
+</ol>
+
+<p>요즘 폰은 <code>...android-arm64-v8a.so</code> 를 쓰시면 됩니다.
+아주 오래된 기기만 <code>armeabi-v7a</code> 입니다.</p>
+
+<h3>윈도우</h3>
+<span class="path">RetroArch\cores\mednafen_ngp_libretro.dll</span>
+<span class="path">RetroArch\info\mednafen_ngp_libretro.info</span>
+
+<h3>리눅스</h3>
+<span class="path">~/.config/retroarch/cores/</span>
+<span class="path">~/.var/app/org.libretro.RetroArch/config/retroarch/cores/   ← 플랫팩이면 이쪽</span>
+
+<div class="note">
+  <b>파일 이름을 바꿔야 할 수 있습니다.</b> 받은 파일명(<code>...linux-x86_64.so</code>)은
+  어느 기기용인지 구분하려고 붙인 것입니다. 넣을 때는 <code>mednafen_ngp_libretro.so</code>
+  (윈도우면 <code>.dll</code>)로 바꾸면 기존 코어를 대체합니다.
+  기존 것을 남기고 싶으시면 <code>mednafen_ngp_ss2sp_libretro.so</code> 처럼 다른 이름도 됩니다.
+</div>
+
+
+<h2><span class="num">02</span>롬이 목록에 안 보일 때</h2>
+
+<p>코어를 먼저 불러오면 <b>레트로아크가 그 코어의 확장자만 걸러서</b> 보여줍니다.
+이 코어가 받는 건 <code>.ngp</code> <code>.ngc</code> <code>.ngpc</code> <code>.npc</code> 네 가지입니다.</p>
+
+<p><b>먼저 이 토글부터 꺼 보세요.</b></p>
+
+<span class="path">설정(⚙) → 파일 브라우저 → 알 수 없는 확장자 필터  =  끔</span>
+<span class="path">Settings → File Browser → Filter Unknown Extensions = OFF</span>
+
+<p>그러면 폴더 안 모든 파일이 보입니다. 그래도 비어 있으면 아래를 확인하세요.</p>
+
+<div class="tbl"><table>
+<thead><tr><th>확인</th><th>내용</th></tr></thead>
+<tbody>
+<tr><td>파일 이름</td><td>확장자가 <code>.bin</code> 이거나 없으면 안 보입니다.
+    <code>samsho2.ngc</code> 로 바꾸면 됩니다. <code>.zip</code> 이면 풀어서 넣어 보세요.</td></tr>
+<tr><td>저장소 권한</td><td>안드로이드 설정 → 애플리케이션 → RetroArch → 권한 →
+    <b>모든 파일에 접근 허용</b>. 폴더엔 들어가지는데 내용물만 안 보이면 이쪽입니다.</td></tr>
+<tr><td>경로</td><td><span class="ui">상위 폴더</span> 로 한 칸 올라가 롬이 실제로 어디 있는지 보세요.</td></tr>
+</tbody></table></div>
+
+
+<h2><span class="num">03</span>코어 옵션 — 이 두 개만 보면 됩니다</h2>
+
+<p>롬을 실행한 다음, 화면을 열어 <b>퀵 메뉴</b>로 들어갑니다.</p>
+
+<span class="path">게임 실행 중 → 퀵 메뉴(Quick Menu) → 옵션(Core Options)</span>
+
+<p>안드로이드에서는 화면의 <b>레트로아크 메뉴 버튼</b>(보통 좌하단 톱니 또는 뒤로가기)을
+누르면 퀵 메뉴가 나옵니다.</p>
+
+<div class="tbl"><table>
+<thead><tr><th>항목</th><th>값</th><th>설명</th></tr></thead>
+<tbody>
+<tr><td>SS2 One-button Specials</td>
+    <td><span class="val">Enabled</span></td>
+    <td><b>기본값. 이게 원버튼 기능 자체입니다.</b> 끄면 순정 코어처럼 됩니다.
+        다른 게임 할 때 굳이 끌 필요는 없습니다 — 알아서 잠자코 있습니다.</td></tr>
+<tr><td>SS2 One-button Layout</td>
+    <td><span class="val">Buttons</span> / <span class="val">SP + direction</span></td>
+    <td>버튼을 어떻게 쓸지. <b>04</b>에서 자세히 설명합니다.</td></tr>
+<tr><td>Language</td>
+    <td><span class="val">japanese</span></td>
+    <td>원래 있던 항목입니다. <b>한글 패치본은 일본어로 두세요.</b>
+        바꾸면 코어를 다시 불러와야 적용됩니다.</td></tr>
+</tbody></table></div>
+
+<div class="note">
+  <b>옵션이 안 보이면</b> 코어가 제대로 안 바뀐 것입니다.
+  퀵 메뉴 위쪽이나 메인 화면 상단에 <b>Beetle NeoPop (SS2 One-button)</b> 이라고
+  적혀 있는지 확인하세요. 그냥 <b>Beetle NeoPop</b> 이면 순정 코어입니다.
+</div>
+
+<div class="note">
+  <b>설정은 게임별로 저장할 수 있습니다.</b>
+  퀵 메뉴 → <span class="ui">Overrides</span> → <b>Save Game Overrides</b>.
+  삼스2에서만 이 설정이 뜨게 하고 싶을 때 쓰세요.
+</div>
+
+
+<h2><span class="num">04</span>버튼 배치 — 두 가지 방식</h2>
+
+<p>NGPC는 버튼이 <b>A · B · Option</b> 셋뿐입니다. 패드의 나머지가 통째로 놀고 있어서,
+거기에 필살기를 답니다.</p>
+
+<h3>방식 ① <span class="val">Buttons</span> — 필살기를 버튼에 직결 (기본값)</h3>
+
+<div class="tbl"><table>
+<thead><tr><th>패드</th><th>게임</th></tr></thead>
+<tbody>
+<tr><td><span class="key">B</span> (아래쪽)</td><td>A — 베기</td></tr>
+<tr><td><span class="key">A</span> (오른쪽)</td><td>B — 발차기</td></tr>
+<tr><td><span class="key">Start</span></td><td>Option</td></tr>
+<tr><td><span class="key">X</span></td><td><b>필살기 1번</b></td></tr>
+<tr><td><span class="key">Y</span></td><td>필살기 2번</td></tr>
+<tr><td><span class="key">L</span></td><td>필살기 3번</td></tr>
+<tr><td><span class="key">R</span></td><td>필살기 4번</td></tr>
+<tr><td><span class="key">L2</span></td><td>필살기 5번</td></tr>
+<tr><td><span class="key">R2</span></td><td>필살기 6번</td></tr>
+</tbody></table></div>
+
+<p>기술이 6개보다 적은 캐릭터는 남는 버튼이 아무 일도 하지 않습니다.
+번호는 기술표 순서이고, 캐릭터·유파는 <b>코어가 게임 메모리에서 자동으로 읽습니다.</b>
+캐릭터를 바꿔도 따로 설정할 게 없습니다.</p>
+
+<h3>방식 ② <span class="val">SP + direction</span> — 브라우저 실행기와 같은 감각</h3>
+
+<p><span class="key">X</span> <b>하나</b>로 다 씁니다. 십자키를 어느 쪽으로 누르고 있느냐로 갈립니다.</p>
+
+<div class="tbl"><table>
+<thead><tr><th>입력</th><th>나가는 것</th></tr></thead>
+<tbody>
+<tr><td><span class="key">X</span> 만</td><td>중립 필살기</td></tr>
+<tr><td>→ + <span class="key">X</span></td><td>앞</td></tr>
+<tr><td>← + <span class="key">X</span></td><td>뒤</td></tr>
+<tr><td>↓ + <span class="key">X</span></td><td>아래</td></tr>
+<tr><td>↓→ / ↓← + <span class="key">X</span></td><td>대각 자리 (기술이 많은 캐릭터)</td></tr>
+<tr><td>점프 중 <span class="key">X</span></td><td>공중기</td></tr>
+</tbody></table></div>
+
+<p>버튼이 적은 기기나, 실행기 쓰던 감각 그대로 가고 싶을 때 편합니다.
+이 방식에서는 <span class="key">Y</span> <span class="key">L</span> <span class="key">R</span>
+<span class="key">L2</span> <span class="key">R2</span> 가 기술 1~5번으로 한 칸씩 밀립니다.</p>
+
+<h3>「앞 / 뒤」는 신경 쓰지 않으셔도 됩니다</h3>
+
+<p>캐릭터가 어느 쪽을 보고 있는지 <b>코어가 게임 메모리에서 직접 읽어</b> 커맨드를 좌우 반전합니다.
+왼쪽에 있든 오른쪽에 있든 같은 버튼입니다.</p>
+
+<h3>버튼을 다른 데로 옮기고 싶으면</h3>
+
+<span class="path">퀵 메뉴 → 컨트롤(Controls) → Port 1 Controls</span>
+
+<p>여기서 <b>SP 1 ~ SP 6</b> 이라는 이름으로 보입니다. 원하는 물리 버튼에 다시 매핑하세요.
+화면 터치 버튼 위치는 <span class="ui">설정 → 온스크린 디스플레이 → 온스크린 오버레이</span> 에서 조절합니다.</p>
+
+
+<h2><span class="num">05</span>강하게 내려면 — 길게 누릅니다</h2>
+
+<div class="note ok">
+  <b>이번 판에서 새로 넣었습니다.</b> 이전 코어는 항상 약으로만 나갔습니다
+  (실기 제보로 확인). 지금은 <b>필살기 버튼을 잡고 있는 만큼</b> 게임에 버튼이 계속 들어갑니다.
+</div>
+
+<div class="tbl"><table>
+<thead><tr><th>누르는 법</th><th>게임에 들어가는 버튼 유지</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>톡 친다 (1~3프레임)</td><td>6프레임</td><td>약</td></tr>
+<tr><td>조금 잡는다 (8프레임)</td><td>8프레임</td><td>약</td></tr>
+<tr><td><b>지그시 잡는다 (15프레임)</b></td><td><b>15프레임</b></td><td><b>강</b></td></tr>
+<tr><td>계속 잡고 있는다</td><td>26프레임에서 자동으로 끊음</td><td>강</td></tr>
+</tbody></table></div>
+
+<p>기준은 <b>9프레임(약 0.15초)</b> 입니다. 그 이상 잡으면 강입니다.
+끝없이 잡고 있어도 26프레임에서 알아서 놓아 줍니다 — 안 그러면 다음 입력이 막힙니다.</p>
+
+<div class="note">
+  <b>일반 공격(A·B)의 강약은 원래대로 동작합니다.</b> 코어가 손대지 않고 그대로 흘려보내므로
+  실기와 완전히 같습니다. 이 항목은 <b>필살기 버튼</b>에만 해당됩니다.
+</div>
+
+<div class="note warn">
+  <b>기술이 나가는 중에는 다른 입력이 무시됩니다.</b> 코어가 커맨드를 프레임 단위로
+  밀어 넣는 동안 십자키·버튼을 눌러도 반영되지 않습니다. 커맨드가 섞이면 기술이 어긋나기 때문입니다.
+  길어야 0.3초 정도입니다.
+</div>
+
+
+<h2><span class="num">06</span>잘 안 될 때</h2>
+
+<div class="tbl"><table>
+<thead><tr><th>증상</th><th>확인할 것</th></tr></thead>
+<tbody>
+<tr><td>필살기가 아예 안 나감</td>
+    <td>① <b>전투 중</b>인가요? 메뉴·데모에서는 동작하지 않습니다.<br>
+        ② 옵션의 <b>SS2 One-button Specials = Enabled</b><br>
+        ③ 상단에 <b>(SS2 One-button)</b> 이 붙은 코어가 맞나요?<br>
+        ④ 롬이 <b>한글 패치본</b>인가요? 기술표가 그 기준으로 만들어져 있습니다.</td></tr>
+<tr><td>맞고 있을 때 안 나감</td>
+    <td>피격 경직 동안은 게임이 방향 입력을 받지 않습니다. <b>게임 쪽 사양</b>이고
+        실기와 같습니다. 코어는 경직이 풀릴 때까지 기다렸다가 넣습니다.</td></tr>
+<tr><td>점프 중에 지상기가 안 나감</td>
+    <td>일부러 그렇게 했습니다. 공중에서 지상기를 쏘면 씹히므로
+        <b>착지까지 기다렸다가</b> 냅니다(최대 1.5초).</td></tr>
+<tr><td>강이 안 나옴</td>
+    <td>0.15초 이상 잡아 보세요. 그리고 <b>이 기능이 들어간 최신 코어</b>인지 확인하세요.</td></tr>
+<tr><td>다른 기술이 나옴</td>
+    <td>게임의 커맨드 판정이 관대해서 짧은 커맨드가 긴 커맨드를 가로챌 수 있습니다.
+        코어가 램에 1바이트를 써서 입력 기록을 정리하는 방식으로 대부분 막았지만
+        (실측 0/42 → 41/42) 완전하지는 않습니다.</td></tr>
+<tr><td>세이브 후 이상해짐</td>
+    <td>스테이트를 불러오면 코어가 진행 중이던 커맨드를 자동으로 버립니다.
+        그래도 이상하면 <b>코어 리셋</b> 한 번 해 보세요.</td></tr>
+</tbody></table></div>
+
+
+<h2><span class="num">07</span>알아 두면 좋은 것</h2>
+
+<ul>
+  <li>이 코어는 <b>게임을 고치지 않습니다.</b> 없는 기술을 만들거나 데이터를 바꾸지 않고,
+      <b>커맨드를 대신 눌러 줄 뿐</b>입니다. 경직·공중 판정 같은 원작 규칙은 그대로 지킵니다.</li>
+  <li>캐릭터·유파(수라/나찰)는 <b>자동 인식</b>입니다. 전투가 시작되면 알아서 그 캐릭터 기술표로 바뀝니다.</li>
+  <li>카드가 필요한 기술은 전투 전 <b>'능력 추가'</b> 에서 지정해 두어야 나갑니다.</li>
+  <li>세이브 스테이트, 되감기, 치트 등 레트로아크 기능은 전부 평소대로 씁니다.</li>
+</ul>
+
+<footer>
+  Beetle NeoPop (SS2 One-button) · Mednafen 기반 · GPLv2<br>
+  게임 롬은 포함하지 않습니다. SAMURAI SPIRITS™ 저작권은 SNK CORPORATION에 있으며 본 도구는 SNK와 무관합니다.
+</footer>
+
+</div>
+</body>
+</html>
