@@ -24,12 +24,20 @@
 | 리눅스 PC · 스팀덱 | `mednafen_ngp_libretro.linux-x86_64.so` |
 | ARM 리눅스 휴대기기 (Anbernic 등) | `mednafen_ngp_libretro.linux-aarch64.so` |
 
-> ⚠️ **안드로이드용은 이 저장소에 미리 넣어 두지 못했습니다.**
-> 빌드에 안드로이드 NDK가 필요한데 작업 환경에서 받을 수 없었습니다.
-> 대신 **GitHub Actions 워크플로**를 넣어 두었습니다 — 이 저장소를 올리고
-> **Actions 탭 → build cores → Run workflow** 를 누르시면
-> 몇 분 뒤 arm64 / armeabi-v7a 코어가 아티팩트로 나옵니다. 무료입니다.
-> 직접 빌드하시려면 `./build.sh android-arm64` (NDK 필요).
+> ⚠️ **안드로이드 코어는 여기 미리 넣어 두지 못했습니다.**
+> 빌드에 안드로이드 NDK가 필요한데 작업 환경에서 내려받을 수 없습니다(구글 배포처가 막혀 있습니다).
+> 대신 **GitHub Actions 워크플로**가 들어 있습니다. 러너에는 NDK가 이미 깔려 있어 그냥 됩니다.
+>
+> 1. 이 저장소를 올린다(덮어쓰기)
+> 2. **Actions** 탭 → 왼쪽에서 **build cores** → 오른쪽 **Run workflow** → 초록 버튼
+> 3. 몇 분 뒤 그 실행 화면 아래 **Artifacts → cores-android** 를 받는다
+> 4. 압축을 풀면 `mednafen_ngp_libretro.android-arm64-v8a.so` 가 들어 있다 (요즘 폰은 이것)
+>
+> 무료이고, 워크플로는 여기 소스(해설 엔진 포함)를 그대로 써서 빌드합니다.
+> 직접 빌드하시려면 `bash build.sh android-arm64` (ANDROID_NDK_ROOT 필요).
+
+> 리눅스 x86_64 · 리눅스 aarch64 · 윈도우 코어는 **이 저장소에 최신으로 들어 있습니다**
+> (해설 v0.4.12 반영, `cores/` 폴더).
 
 ---
 
@@ -85,8 +93,48 @@ RetroArch\info\mednafen_ngp_libretro.info
 |---|---|
 | **SS2 One-button Specials** | `Enabled` (기본값) |
 | **SS2 One-button Layout** | `Buttons` 또는 `SP + direction` |
+| **SS2 Character Commentary** | `Enabled` (기본값) — 캐릭터가 경기를 해설합니다 |
+| **SS2 Commentary Speaker** | `Haohmaru` / `Nakoruru` / `Hanzo` / `Galford` |
+| **SS2 Commentary Display** | `Outside the screen, below` (기본값) / `above` / `Inside the screen, bottom` / `top` / `Frontend notification only` |
 
 `Language` 는 원래 있던 항목입니다. 한글 패치본은 일본어로 두시면 됩니다.
+
+### 해설이란
+
+브라우저 실행기에 있던 **캐릭터 해설**을 코어에 그대로 옮겨 놓은 것입니다.
+KO·완승·역전·속공·연승·스토리 진행, 그리고 메뉴에서 노는 동안의 잡담까지
+골라 낸 화자가 한 줄씩 던집니다. 기술명은 롬 버전을 타기 때문에 코어판에서는 다루지 않습니다 —
+정보보다 분위기 쪽입니다.
+
+**표시 자리**를 고를 수 있습니다.
+
+- `Outside the screen` (기본값, 아래/위) — 게임 화면 **밖에 30픽셀 띠**를 붙이고 거기에 그립니다.
+  게임 화면을 한 픽셀도 가리지 않습니다. 글꼴은 코어가 들고 있는 **갈무리 11px**(큰 글씨)이고
+  화자의 얼굴도 함께 나옵니다. 대신 그림 세로가 152 → 182로 늘어납니다(비율도 맞춰 보고합니다).
+- `Inside the screen` (아래/위) — 화면 크기·비율을 **원래대로(160×152) 두고** 게임 화면 안에
+  말풍선을 그립니다. 대사가 뜨는 2.5초 동안만 화면 일부가 가려집니다.
+  화면비가 바뀌는 게 싫을 때 쓰십시오.
+- `Frontend notification only` — 코어는 그리지 않고 레트로아크 알림으로 넘깁니다.
+  프론트엔드 글꼴에 한글이 없으면 깨질 수 있습니다.
+
+해설이 필요 없으면 **SS2 Character Commentary** 를 `Disabled` 로 두십시오.
+
+### 얼굴 · 글자 · 연출
+
+코어가 직접 그리는 모드에서는 브라우저 실행기와 같은 연출이 붙습니다.
+
+- **얼굴** — 화자의 초상이 띠(또는 말풍선) 왼쪽에 16×16으로 나옵니다.
+  그림은 **배포물에 들어 있지 않습니다.** 코어가 **당신의 롬에서 그 자리에서 그립니다**
+  (전투 HUD 초상 타일의 롬 오프셋만 숫자로 들고 있습니다. 64바이트 검사합이 안 맞는
+  다른 버전 롬이면 얼굴은 조용히 생략되고 글자만 나옵니다).
+- **표정** — 이벤트에 따라 얼굴빛이 바뀝니다. 이겼을 때는 밝아지며 까딱이고,
+  몰렸을 때는 어두워지며 떨립니다.
+- **글자** — 갈무리 11px 로 크게, 한 글자씩 찍혀 나옵니다(프레임당 두 자, 0.2초면 다 뜹니다).
+  게임 화면 위에서도 읽히도록 글자마다 그림자를 한 겹 깔았습니다.
+  KO·완승·역전·속공·연승·엔딩 같은 **한 방짜리 대사는 굵은 금색**으로 나오고,
+  상자가 한 번 붉게 번쩍입니다. 긴 대사는 두세 줄로 접힙니다.
+- 띠는 높이가 30픽셀 고정이라 큰 글씨 두 줄까지입니다. 아주 긴 대사는 자동으로
+  작은 글씨(8px) 두 줄로 접혀 잘리지 않습니다. 화면 안 말풍선은 세 줄까지 늘어납니다.
 
 ---
 
@@ -107,8 +155,10 @@ NGPC는 버튼이 A·B·Option 셋뿐이라, 패드의 나머지 버튼이 통�
 | **R** | 필살기 4 |
 | **L2** | 필살기 5 |
 | **R2** | 필살기 6 |
+| **L3** | 필살기 7 |
+| **R3** | **비오의** (유파 불문 ←→↓+A) |
 
-기술이 6개보다 적은 캐릭터는 남는 버튼이 아무 일도 하지 않습니다.
+기술이 버튼 수보다 적은 캐릭터는 남는 버튼이 아무 일도 하지 않습니다.
 
 ### 강하게 내려면 — 길게 누릅니다
 
@@ -203,10 +253,12 @@ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
 
 | 파일 | 내용 |
 |---|---|
-| `ss2sp.c` | 엔진 본체 — 프레임 큐, 커맨드 컴파일, 히트스톱·착지 게이트 |
+| `ss2sp.c` | 원버튼 엔진 본체 — 프레임 큐, 커맨드 컴파일, 히트스톱·착지 게이트 |
 | `ss2sp_moves.h` | 기술표 — 15캐릭터 / 30유파 / 171기술, SP+방향 기본 배치 157자리 포함 |
-| `libretro.c` | `update_input()` 끝에 엔진 호출 한 줄 + 코어 옵션 2개 + 입력 설명 |
-| `Makefile.common` | `ss2sp.c` 한 줄 추가 |
+| `ss2comm.c` · `ss2comm.h` | 해설 엔진 — 램만 읽어 이벤트를 잡고 대사를 고른다. 표시까지 여기서 한다 |
+| `ss2comm_font.h` | 대사에 쓰이는 글자만 뽑은 8×8 갈무리 글리프 323자 (OFL) |
+| `libretro.c` | `update_input()` 끝에 엔진 호출 + `retro_run()` 에 해설 호출 + 코어 옵션 5개 |
+| `Makefile.common` | `ss2sp.c` · `ss2comm.c` 두 줄 추가 |
 
 `ss2sp_moves.h` 를 다시 만드셨다면 **`ss2sp.o` 를 직접 지우셔야 합니다.**
 make 가 헤더 의존성을 추적하지 않습니다.
@@ -223,8 +275,13 @@ upstream `libretro/beetle-ngp-libretro` 커밋 `a50d5ac288a81f2104ddf43195a4efdd
 이 저장소의 `src/ss2sp.patch` 를 적용하고 `src/ss2sp.c` · `src/ss2sp_moves.h` 를 얹어 빌드한 것입니다.
 즉 이 저장소 자체가 완전한 대응 소스입니다. `build.sh` 로 동일 바이너리를 재현할 수 있습니다.
 
-변경 내용(GPL 고지): 2026년, SS2 원버튼 필살기 엔진 추가 —
-`ss2sp.c` · `ss2sp_moves.h` 신규, `libretro.c` 에 엔진 호출·코어 옵션 추가, `Makefile.common` 1줄.
+변경 내용(GPL 고지): 2026년, SS2 원버튼 필살기 엔진 및 캐릭터 해설 엔진 추가 —
+`ss2sp.c` · `ss2sp_moves.h` · `ss2comm.c` · `ss2comm.h` · `ss2comm_font.h` 신규,
+`libretro.c` 에 엔진 호출·코어 옵션 추가, `Makefile.common` 2줄.
+
+`ss2comm_font.h` 의 글리프는 **갈무리(Galmuri) 글꼴**(SIL Open Font License 1.1)에서
+이 코어의 대사에 실제로 쓰이는 글자만 뽑아 8×8 비트맵으로 옮긴 것입니다.
+OFL 고지는 해당 파일 머리말에 있습니다.
 
 게임 롬은 포함하지 않으며, 본인이 소유한 파일을 사용하십시오.
 SAMURAI SPIRITS™ / SAMURAI SHODOWN™ 저작권은 SNK CORPORATION에 있으며

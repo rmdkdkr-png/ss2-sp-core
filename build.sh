@@ -24,7 +24,9 @@ if [ ! -d "$WORK" ]; then
 fi
 git -C "$WORK" checkout -- . 2>/dev/null || true
 git -C "$WORK" apply --3way "$HERE/src/ss2sp.patch"
-cp "$HERE/src/ss2sp.c" "$HERE/src/ss2sp_moves.h" "$WORK/"
+cp "$HERE/src/ss2sp.c" "$HERE/src/ss2sp.h" "$HERE/src/ss2sp_moves.h" \
+   "$HERE/src/ss2comm.c" "$HERE/src/ss2comm.h" \
+   "$HERE/src/ss2comm_font.h" "$HERE/src/ss2comm_font11.h" "$WORK/"
 
 cd "$WORK"; make clean >/dev/null 2>&1 || true
 case "$TARGET" in

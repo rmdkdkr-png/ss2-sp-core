@@ -132,7 +132,11 @@ static int ss2_actable(void)
       실측: GO+0 발동 시 기본기 오발(0x54), GO+2부터 정상. 여유를 두고 4프레임 예열. */
    if (ss2_mode_warm < 4) return 0;
    act = CPUExRAM[OFF_ACT] | (CPUExRAM[OFF_ACT + 1] << 8);
-   return (act < 0x50) || (act == 0x10C);
+   /* v14: 자기 기본기(0x50~0xFF) 중에는 즉시 주입한다 — 게임의 킬캔슬 창을 살리기 위해.
+      실측: 약베기 명중 후 SP를 게이트로 미루면 캔슬이 +22f → +46f로 늦어져 콤보가 끊긴다.
+      보류가 필요한 건 피격·다운·잡힘(0x100~0x17F)과 필살기 중(0x180+), 라운드 연출뿐이다.
+      (0x10C 걷기 턴은 행동 가능 취급 — 플레이판과 동일) */
+   return (act < 0x100) || (act == 0x10C);
 }
 
 static uint8_t ss2_mirror(uint8_t pad)
