@@ -15,6 +15,9 @@ void        ss2comm_set_enabled(int on);     /* 코어 옵션 */
 void        ss2comm_set_rom(const void *rom, unsigned len); /* 초상(얼굴)을 사용자 롬에서 그린다 */
 void        ss2comm_set_speaker(int idx);    /* 0 하오마루 1 나코루루 2 한조 3 갈포드 */
 void        ss2comm_reset(void);             /* 롬 로드/리셋 시 */
+void        ss2comm_notify(const char *text);/* 해설 자리에 안내 한 줄 */
+/* 카드가 없어 SP 발동을 거른 경우의 안내. 글리프 추출이 이 파일도 훑으므로 여기에 둔다. */
+#define SS2COMM_MSG_NOCARD "카드가 없다 \xe2\x80\x94 그 기술은 못 낸다"
 const char *ss2comm_frame(void);             /* 매 프레임 1회. 새 대사면 문자열, 아니면 NULL */
 const char *ss2comm_current(int *age_frames);/* 현재 표시 중인 대사(자체 렌더용) */
 void        ss2comm_draw_enable(int mode);   /* 0 끔 1 확장띠 2 상단겹침 3 하단겹침 */

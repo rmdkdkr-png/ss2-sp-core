@@ -14,6 +14,7 @@ extern "C" {
 /* 매 프레임 한 번. pad = 현재 NGP 패드 바이트, trig = SP1~SP6 눌림 비트.
    반환값을 그대로 0x6F82 에 쓰면 된다. */
 uint8_t ss2sp_frame(uint8_t pad, uint16_t trig);
+extern int ss2sp_card_block;   /* 카드가 없어 SP 발동을 거른 순간 1 (프런트엔드가 읽고 0으로) */
 
 /* 롬 로드·리셋·스테이트 로드 시 호출. 진행 중이던 커맨드를 버린다. */
 void ss2sp_reset(void);

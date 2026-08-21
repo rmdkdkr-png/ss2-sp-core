@@ -38,6 +38,8 @@ extern uint8_t CPUExRAM[16384];
 #define OFF_HITSTOP    0x1DC7
 #define OFF_CMDRESET   0x1DCD   /* ★ 여기에 1을 쓰면 게임이 입력이력을 스스로 비운다 */
 #define OFF_MODE       0x00A7   /* 메뉴/전투 판별 */
+#define OFF_HP1        0x1A46
+#define OFF_HP2        0x1C46
 
 /* ── 패드 비트 (libretro.c의 input_buf 인코딩과 동일) ────────────── */
 #define PAD_UP    0x01
@@ -50,7 +52,9 @@ extern uint8_t CPUExRAM[16384];
 /* ── 타이밍 (프레임) ────────────────────────────────────────────── */
 static int ss2_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_STEP"); v=e?atoi(e):3;} return v; }
 #define STEP_FRAMES   ss2_step_frames()   /* 방향 1개 유지 */
-#define HOLD_FRAMES   6         /* 마지막 방향 + 버튼 동시 유지 (약) */
+/* 버튼 유지 프레임 — 실험용으로 SS2SP_HOLD 로 바꿔 볼 수 있다(브라우저 최속은 3) */
+static int ss2_hold_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_HOLD"); v=e?atoi(e):6;} return v; }
+#define HOLD_FRAMES   ss2_hold_frames()
 /* ── 강/약 ────────────────────────────────────────────────────────
    게임은 버튼을 얼마나 오래 잡고 있었는지로 강·약을 가른다.
    브라우저판은 사용자가 SP를 누르고 있는 동안 마지막 스텝을 늘려서
@@ -66,6 +70,8 @@ typedef struct { uint8_t pad; uint8_t frames; uint8_t sustain; } ss2_step;
 
 static ss2_step  q[MAX_STEPS];
 static uint16_t  hold_bit;        /* 매크로를 시작시킨 트리거 비트 */
+#define PAD_DIR_MASK (PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT)
+static uint16_t  prev_pad_dir;    /* 방향 변화 감지 — 새 입력이면 선입력을 버린다 */
 int ss2sp_last_strong = 0;        /* 마지막 발동이 강이었는지 (표시용) */
 static int       hold_elapsed;    /* 버튼 유지 프레임 누적 */
 static int       q_n, q_i, q_left;
@@ -90,7 +96,8 @@ int         ss2sp_last_ok   = -1;   /* -1 미판정 · 0 불발 · 1 발동 */
 static int ss2_active(void) { return q_left > 0 || q_i < q_n; }
 
 /* 배치 방식: 0 = 직결(9버튼 = 기술 1~9번) · 1 = SP(X = 방향으로 슬롯, 나머지 = 1~8번) */
-static int ss2_layout_sp = 0;
+static int ss2_layout_sp = 1;   /* v0.5: SP+방향이 유일한 배치다 */
+static uint8_t prev_ab;         /* 뒤+A+B 엣지 검출용 */
 void ss2sp_set_layout(int sp) { ss2_layout_sp = sp; }   /* 코어 옵션에서 호출 */
 static int ss2_sp_layout(void)
 {
@@ -221,6 +228,49 @@ static void ss2_compile(const ss2_move *m)
    앞/뒤는 캐릭터가 보는 방향 기준으로 계산한다(좌우 자동 반전). */
 static const signed char *ss2_slots_row(int style);
 
+/* ── 카드 필요 기술(flags 비트2) — 카드가 안 꽂혀 있으면 내지 않는다 ──
+   안 막으면 커맨드만 게임에 들어가서 **엉뚱한 약/강베기(헛손질)** 가 나간다.
+   실기 램: 0x1B56·0x1B57 이 장착 카드 슬롯(값 <=3 이 유효), 필살기 카드는 2·3 번이다.
+   코어 기술표에는 브라우저판의 ci(어느 카드인지)가 없어 "필살기 카드가 하나라도 꽂혔나"
+   까지만 본다 — 브라우저판의 완화 판정과 같은 수준이다. */
+#define OFF_CARD1 0x1B56
+#define OFF_CARD2 0x1B57
+int ss2sp_card_block;          /* 발동을 거른 이유: 1=카드 없음, 2=그 자리에 기술 없음.
+                                  프런트엔드가 읽고 0으로 지운다. */
+
+static int ss2_card_ok(void)
+{
+   int a = CPUExRAM[OFF_CARD1], b = CPUExRAM[OFF_CARD2];
+   if (a > 3 && b > 3) return 1;          /* 카드 상태를 못 읽으면 막지 않는다 */
+   return (a == 2 || a == 3 || b == 2 || b == 3);
+}
+
+/* ── SP 자리 고르기 ─────────────────────────────────────────────────
+   ① 방향을 잡았으면: 그 자리부터 **가까운 자리 순서**로 훑어 쓸 수 있는 기술을 낸다.
+      (대각은 아래·앞뒤로, 앞뒤는 중립으로 흐른다. 표는 아래 SLOT_ORDER.)
+   ② 중립(방향 없음)을 눌렀는데 중립 자리가 비었으면: 다른 자리를 끌어오지 않고 **그냥 베기(A)**.
+      의도가 "중립 기술"이라 엉뚱한 기술이 튀어나가면 안 된다.
+   ③ 방향 쪽도 끝까지 없으면 역시 베기.
+   "쓸 수 있는"은 카드 기술인데 카드가 꽂혀 있는지까지 본다. */
+static const unsigned char SLOT_ORDER[7][7] = {
+  /* N   */ {SS2_SLOT_N,  SS2_SLOT_N,  SS2_SLOT_N,  SS2_SLOT_N,  SS2_SLOT_N,  SS2_SLOT_N,  SS2_SLOT_N},
+  /* F   */ {SS2_SLOT_F,  SS2_SLOT_DF, SS2_SLOT_N,  SS2_SLOT_D,  SS2_SLOT_B,  SS2_SLOT_DB, SS2_SLOT_AIR},
+  /* B   */ {SS2_SLOT_B,  SS2_SLOT_DB, SS2_SLOT_N,  SS2_SLOT_D,  SS2_SLOT_F,  SS2_SLOT_DF, SS2_SLOT_AIR},
+  /* D   */ {SS2_SLOT_D,  SS2_SLOT_DF, SS2_SLOT_DB, SS2_SLOT_N,  SS2_SLOT_F,  SS2_SLOT_B,  SS2_SLOT_AIR},
+  /* DF  */ {SS2_SLOT_DF, SS2_SLOT_D,  SS2_SLOT_F,  SS2_SLOT_N,  SS2_SLOT_DB, SS2_SLOT_B,  SS2_SLOT_AIR},
+  /* DB  */ {SS2_SLOT_DB, SS2_SLOT_D,  SS2_SLOT_B,  SS2_SLOT_N,  SS2_SLOT_DF, SS2_SLOT_F,  SS2_SLOT_AIR},
+  /* AIR */ {SS2_SLOT_AIR,SS2_SLOT_N,  SS2_SLOT_F,  SS2_SLOT_D,  SS2_SLOT_B,  SS2_SLOT_DF, SS2_SLOT_DB}
+};
+
+static int ss2_skipped_card;      /* 이번 고르기에서 카드 때문에 건너뛴 기술이 있었나 */
+
+static int ss2_move_usable(const ss2_move *m)
+{
+   if (!m) return 0;
+   if ((m->flags & 2) && !ss2_card_ok()) { ss2_skipped_card = 1; return 0; }
+   return 1;
+}
+
 static const ss2_move *ss2_resolve_sp(const ss2_style *st, unsigned idx, uint8_t held)
 {
    const signed char *map = ss2_slots_row((int)idx);
@@ -229,18 +279,31 @@ static const ss2_move *ss2_resolve_sp(const ss2_style *st, unsigned idx, uint8_t
    int u = !!(held & PAD_UP),  d = !!(held & PAD_DOWN);
    int l = !!(held & PAD_LEFT), r = !!(held & PAD_RIGHT);
    int fwd = facing_left ? l : r, back = facing_left ? r : l;
-   int slot = SS2_SLOT_N;
+   int want = SS2_SLOT_N, k;
 
-   if      ((airborne || u) && map[SS2_SLOT_AIR] >= 0) slot = SS2_SLOT_AIR;
-   else if (d && fwd  && map[SS2_SLOT_DF] >= 0)        slot = SS2_SLOT_DF;
-   else if (d && back && map[SS2_SLOT_DB] >= 0)        slot = SS2_SLOT_DB;
-   else if (d         && map[SS2_SLOT_D]  >= 0)        slot = SS2_SLOT_D;
-   else if (fwd       && map[SS2_SLOT_F]  >= 0)        slot = SS2_SLOT_F;
-   else if (back      && map[SS2_SLOT_B]  >= 0)        slot = SS2_SLOT_B;
-   if (map[slot] < 0) slot = SS2_SLOT_N;
-   if (map[slot] < 0 || map[slot] >= st->n) return 0;
-   return &st->mv[map[slot]];
+   ss2_skipped_card = 0;
+   if      (airborne || u) want = SS2_SLOT_AIR;
+   else if (d && fwd)      want = SS2_SLOT_DF;
+   else if (d && back)     want = SS2_SLOT_DB;
+   else if (d)             want = SS2_SLOT_D;
+   else if (fwd)           want = SS2_SLOT_F;
+   else if (back)          want = SS2_SLOT_B;
+
+   for (k = 0; k < 7; k++)
+   {
+      int slot = SLOT_ORDER[want][k];
+      int mi = map[slot];
+      if (mi < 0 || mi >= st->n) continue;
+      if (!ss2_move_usable(&st->mv[mi])) continue;
+      return &st->mv[mi];
+   }
+   return 0;                       /* 낼 게 없다 → 호출부가 그냥 베기로 받는다 */
 }
+
+/* 낼 기술이 없을 때 나가는 것 — 그냥 베기(A) 한 번.
+   커맨드가 없으니 스텝 하나뿐이고, SP 를 잡고 있으면 홀드가 늘어 강베기가 된다. */
+static const unsigned char mo_basic[] = {0x0};
+static const ss2_move ss2_basic = { "베기", mo_basic, 1, PAD_A, 4 };
 
 /* 큐에서 이번 프레임에 내보낼 패드 1개를 꺼낸다.
    held = 매크로를 시작시킨 트리거가 아직 눌려 있는가. 눌려 있으면 버튼 스텝을 늘린다(=강). */
@@ -281,6 +344,20 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
    frame_no++;
    if (CPUExRAM[OFF_MODE] == 241) { if (ss2_mode_warm < 1000) ss2_mode_warm++; }
    else ss2_mode_warm = 0;
+   /* v0.5.4: 전투가 끝났는데 보류(pending)가 남아 있으면 버린다.
+      라운드가 끝나는 순간 누른 입력이 다음 라운드에서 뒤늦게 터지는 것을 막는다
+      (브라우저판 사용자 제보: "SP가 귀신터치마냥 눌린다"). */
+   if (pending)
+   {
+      int hp1 = CPUExRAM[OFF_HP1], hp2 = CPUExRAM[OFF_HP2];
+      /* 전투가 아니거나 승부가 났다 → 버린다 */
+      if (CPUExRAM[OFF_MODE] != 241 || hp1 == 0 || hp2 == 0) { pending = 0; pending_left = 0; }
+      /* v0.5.4: **새 입력이 들어오면 지난 선입력은 무효.** 버튼 에지든 방향 바뀜이든.
+         (브라우저판 사용자 제보: "라운드 중에도 1초쯤 뒤에 SP가 저절로 눌린다") */
+      else if (edge || ((pad & ~prev_pad_dir) & PAD_DIR_MASK))   /* 새로 **누른** 방향만 (뗀 것은 무시) */
+      { pending = 0; pending_left = 0; }
+   }
+   prev_pad_dir = (uint16_t)(pad & PAD_DIR_MASK);
    if ((pad & (PAD_LEFT | PAD_RIGHT)) && !(pad & PAD_DOWN)) horiz_at = frame_no;
 
    /* 발동 결과 판정 — 코어 안이라 폴링 비용이 사실상 0 */
@@ -298,6 +375,22 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
       else if (--pending_left <= 0) pending = 0;
    }
 
+   /* ── 뒤 + A + B = 비오의 ────────────────────────────────────────
+      v0.5: 버튼을 A·B·AB·SP 넷으로 줄이면서, 별도 버튼(SP8)에 있던 비오의를 여기로 옮겼다.
+      뒤를 잡지 않은 순수 A+B 는 게임 원래 입력이므로 손대지 않는다. */
+   {
+      int ab   = ((pad & PAD_A) && (pad & PAD_B));
+      int left = (CPUExRAM[OFF_FACING] == 1);
+      int back = left ? (pad & PAD_RIGHT) : (pad & PAD_LEFT);
+      if (ab && !prev_ab && back && !ss2_active() && !pending)
+      {
+         hold_bit = 0;                       /* 비오의는 강약이 없다 */
+         if (CPUExRAM[OFF_Y] == 128 && ss2_actable()) ss2_compile(&ss2_super);
+         else { pending = &ss2_super; pending_left = 40;   /* v0.5.4: 90f(1.5초) → 40f(0.67초) */ }
+      }
+      prev_ab = (uint8_t)ab;
+   }
+
    if (ss2_active())
       return ss2_step_out(hold_bit && (trig & hold_bit));
 
@@ -313,16 +406,19 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
          for (b = 0; b < 9; b++) if (edge & (1u << b)) { slot = b; break; }
          hold_bit = (uint16_t)(slot >= 0 ? (1u << slot) : 0);   /* 이 버튼을 잡고 있으면 강 */
 
-         /* 버튼 번호는 레이아웃과 무관하게 고정이다: SP1~SP7 = 기술 1~7번, SP8 = 비오의.
-            SP 레이아웃일 때만 SP1 이 방향을 함께 읽는데, 방향을 안 잡으면 중립 자리가
-            나오고 중립 자리는 항상 기술 1번이라 결과가 같다. 그래서 어긋나지 않는다.
-            (예전에는 SP 레이아웃에서 번호가 한 칸씩 밀려 SP2 가 기술 1번이었다) */
-         if (slot == 7)
-            m = &ss2_super;
-         else if (ss2_sp_layout() && slot == 0)
-            m = ss2_resolve_sp(st, ss2_cur_idx, pad);   /* SP1 = SP + 방향 */
-         else if (slot >= 0 && slot < st->n)
-            m = &st->mv[slot];
+         /* v0.5: 버튼은 SP 하나뿐이다. 기술은 전부 **SP + 방향**(기술 배치)으로 나가고,
+            비오의는 뒤+A+B 로 옮겼다. SP2~SP8 은 눌러도 아무 일도 하지 않는다
+            (옛 설정이 남아 있는 기기에서 엉뚱한 기술이 튀어나오지 않게 무시한다). */
+         if (slot == 0)
+            m = ss2_resolve_sp(st, ss2_cur_idx, pad);   /* SP + 방향 */
+
+         /* 자리 고르기가 이미 "쓸 수 있는 것"만 골라 온다(카드 검사 포함).
+            그래도 없으면 — 중립을 눌렀든 방향을 잡았든 — 그냥 베기가 나간다. */
+         if (!m && slot == 0)
+         {
+            m = &ss2_basic;
+            if (ss2_skipped_card) ss2sp_card_block = 1;  /* 카드 때문이면 이유도 알려 준다 */
+         }
 
          if (m)
          {
@@ -330,7 +426,7 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
                브라우저판의 waitGround와 같은 판정. */
             if (!(m->flags & 4) && (CPUExRAM[OFF_Y] != 128 || !ss2_actable()))
             {
-               pending = m; pending_left = 90;      /* 최대 1.5초 대기 */
+               pending = m; pending_left = 40;   /* v0.5.4: 90f(1.5초) → 40f(0.67초) */
             }
             else
             {
@@ -504,7 +600,7 @@ void ss2sp_load_slots(const unsigned char *in)
 void ss2sp_reset(void)
 {
    q_n = q_i = q_left = 0;
-   pending = 0; pending_left = 0;
+   pending = 0; pending_left = 0; prev_pad_dir = 0;
    horiz_at = 0;
    prev_trig = 0;
    hold_bit = 0; hold_elapsed = 0; ss2sp_last_strong = 0;

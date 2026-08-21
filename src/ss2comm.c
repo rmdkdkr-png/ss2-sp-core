@@ -35,152 +35,142 @@ void ss2comm_set_ram(void *p) { (void)p; }
 #define OFF_BLK2   0x1D51
 #define OFF_SURV   0x180B
 #define OFF_STAGE  0x17FE
+#define OFF_PAD    0x2F82   /* 패드 레지스터 — 자동 전환(무입력 화면 넘김) 판별용 */
 #define MD_BATTLE  241
 #define MD_MENU    240
 #define MD_QUOTE   197
 #define MD_ENDING  199
 
-enum {
-  EV_START=0, EV_ROUND, EV_KO, EV_KOED, EV_DKO, EV_PERFECT, EV_COMEBACK, EV_QUICK,
-  EV_LOW1, EV_LOW2, EV_REVERSAL, EV_WINTALK, EV_LOSETALK, EV_SURV, EV_SURVEND,
-  EV_STAGE, EV_QUOTE, EV_ENDING, EV_CHARSEL, EV_STYLESEL, EV_CARDSEL, EV_TITLE,
-  EV_MUSE_B, EV_MUSE_M, EV_IDLE, EV_N
-};
 
-/* ── 대사표: [화자][이벤트] 최대 3변형. %s = 매치업, %d = 숫자 ── */
-#define V3(a,b,c) {a,b,c}
-static const char *LINES[4][EV_N][3] = {
- { /* 0 하오마루 — 호쾌한 술꾼 검객 */
-  V3("%s… 좋은 승부다!",0,0), V3("간다!!","자, 다시!",0),
-  V3("핫핫하!! 승부 났다!!","훌륭한 마무리다!!",0), V3("…좋은 승부였다. 한잔 하러 가지",0,0),
-  V3("둘 다 뻗었나! 하하!!",0,0), V3("완승이다!! 흠집 하나 없군, 핫핫하!!",0,0),
-  V3("빈사에서 뒤집었다!! 이게 승부다!!",0,0), V3("순살이다!! 눈 깜짝할 새군!",0,0),
-  V3("위험하다… 술이 확 깨는군!",0,0), V3("끝장을 내라!!",0,0),
-  V3("오오, 판이 뒤집혔다!!",0,0),
-  V3("좋은 검이었다. 다음 상대가 기다린다","이런 승부라면 몇 번이고 좋다","술이 달겠군. 자, 계속 가자!"),
-  V3("진 판에서 배우는 게 더 많은 법이다","검이 무뎠나… 다시 잡아라","한 잔 걸치고 다시 하자"),
-  V3("%d연승! 오늘 검이 좋군!","%d연승!! 대적할 자가 없느냐!!",0),
-  V3("%d명 베고 여기까지… 훌륭한 기록이다!",0,0),
-  V3("%d연전째다. 계속 가자!","%d연전째. 손이 완전히 풀렸겠군",0),
-  V3("무슨 말을 하는 거냐, 저 녀석","한마디 하는군. 말보다 검이다",0),
-  V3("끝까지 베고 올라갔군!! 오늘은 내가 술을 사마!!",0,0),
-  V3("누구와 겨루려느냐!",0,0), V3("수라냐 나찰이냐… 고민되는군",0,0),
-  V3("카드라… 나는 힘만 있으면 된다만",0,0), V3("사무라이의 혼이 부른다… 한판 하지!",0,0),
-  V3("…검이 근질거리는군","호흡을 고르는 것도 검술이다",0),
-  V3("…술이 떨어졌군","좋은 승부가 그립군","심심하면 한판 더 하자!"),
-  V3("서로 노려보는군… 술이 식겠다","먼저 가라! 사양할 것 없다!",0),
- },
- { /* 1 나코루루 — 상냥한 자연의 수호자 */
-  V3("%s… 좋은 시합이 되길",0,0), V3("힘내세요!","다시 한 번요!",0),
-  V3("…승부가 났네요. 수고하셨어요",0,0), V3("아… 다음엔 꼭 이겨요",0,0),
-  V3("둘 다…!? 이런 일도 있네요",0,0), V3("완승이에요! 하나도 안 다쳤어요!",0,0),
-  V3("포기하지 않아서… 이겼어요!! 감동이에요!",0,0), V3("벌써 끝났어요…! 굉장해요!",0,0),
-  V3("위험해요… 조심하세요!",0,0), V3("조금만 더예요!",0,0),
-  V3("흐름이 바뀌었어요!",0,0),
-  V3("다치지 않아서 다행이에요","좋은 승부였어요. 숨 좀 고르세요",0),
-  V3("괜찮아요, 다음이 있잖아요","조금 쉬었다 해요…",0),
-  V3("%d연승이에요! …무리는 하지 마세요?",0,0),
-  V3("%d연승에서 멈췄어요… 정말 수고했어요!",0,0),
-  V3("%d연전째예요! 힘내요","%d연전째예요. 지치진 않으셨어요?",0),
-  V3("인사를 나누고 있어요","무슨 말을 할까요…?",0),
-  V3("끝까지 해내셨어요…! 정말 축하해요!!",0,0),
-  V3("누구랑 싸우실 건가요?",0,0), V3("수라와 나찰… 어느 쪽이든 응원할게요",0,0),
-  V3("카드는 신중하게 고르세요",0,0), V3("어서 오세요! 오늘도 힘내요",0,0),
-  V3("…바람이 조용해요","다치지 않게, 천천히요",0),
-  V3("…오늘 날씨가 좋네요","리무루루는 잘 있을까요","자연의 소리가 들려요…"),
-  V3("숨을 고르는 중이네요…","서로 거리를 재고 있어요",0),
- },
- { /* 2 한조 — 과묵한 닌자 두목 */
-  V3("%s. 시작하지",0,0), V3("…간다","…다시",0),
-  V3("…승부가 났다",0,0), V3("…패배도 수행이다",0,0),
-  V3("동귀어진인가",0,0), V3("…완승. 흠잡을 데가 없다",0,0),
-  V3("…사지에서 살아 돌아왔군. 훌륭하다",0,0), V3("…일섬. 이상적인 승부다",0,0),
-  V3("물러설 곳은 없다",0,0), V3("끝내라",0,0),
-  V3("…형세 역전",0,0),
-  V3("…이겼다고 멈추지 마라","…다음 적은 더 강하다",0),
-  V3("…패인을 새겨라. 그것이 수행이다","…다시 서라. 그뿐이다",0),
-  V3("…%d연승. 인정하마",0,0),
-  V3("…%d명 격파. 새겨 둘 기록이다",0,0),
-  V3("…%d연전째. 간다","…%d연전. 몸이 익었을 때다",0),
-  V3("…말은 검으로 하는 것이다","…각오를 말하는군",0),
-  V3("…완주. 수행의 끝을 보았군. 훌륭하다",0,0),
-  V3("상대를 골라라",0,0), V3("수라인가, 나찰인가",0,0),
-  V3("…쓸 만한 카드인가",0,0), V3("…왔는가. 시작하지",0,0),
-  V3("……","…호흡을 죽여라",0),
-  V3("……","…그림자는 서두르지 않는다","…밤이 길다"),
-  V3("…정적. 나쁘지 않다","기다리는 것도 병법이다",0),
- },
- { /* 3 갈포드 — 열혈 정의의 닌자 */
-  V3("%s! 파이트다!",0,0), V3("고고!!","다시 가자!",0),
-  V3("저스티스 이즈 윈!!",0,0), V3("이럴 수가…! 다음엔 이긴다!",0,0),
-  V3("둘 다 쓰러졌다!?",0,0), V3("퍼펙트다!! 파피, 봤냐!!",0,0),
-  V3("대역전!! 이게 히어로의 각본이다!!",0,0), V3("초스피드 피니시!! 번개 같았다!",0,0),
-  V3("위기다! 하지만 포기는 없다!",0,0), V3("마무리다!!",0,0),
-  V3("대역전이다아!!",0,0),
-  V3("나이스 파이트! 파피도 꼬리 흔든다!","이게 정의의 승리다!",0),
-  V3("히어로는 넘어져도 다시 선다!","다음 판에서 갚아주자!",0),
-  V3("%d연승!! 연승 가도다!!",0,0),
-  V3("%d연승 스트릭 종료…! 멋진 도전이었다!",0,0),
-  V3("%d연전째다! 다음 도전자, 어서 와라!","벌써 %d연전! 엔진 다 데워졌다!",0),
-  V3("명대사 타임이다!","뭐라고 하는 거냐! 두근두근!",0),
-  V3("클리어다!! 오늘의 히어로는 너다!!",0,0),
-  V3("누굴 고를 거냐! 두근두근이다!",0,0), V3("수라냐 나찰이냐!",0,0),
-  V3("카드 타임! 뭐가 나올까!",0,0), V3("타이틀이다! 버튼을 눌러 시작이다!",0,0),
-  V3("파피, 대기다!","슬슬 한 방 가자!",0),
-  V3("파피, 앉아! …좋아, 착하지","심심한데 한판 더 어때!","오늘도 평화롭군!"),
-  V3("정적이다… 폭풍 전의 고요인가!","파피도 하품하고 있다!",0),
- },
-};
+
+#include "ss2comm_lines.h"
 
 static const char *CHARNAME[15] = {
   "카즈키","소게츠","하오마루","겐주로","나코루루","리무루루","한조","갈포드",
   "아수라","샤를로트","모로즈미","우쿄","쥬베이","시키","유가"
 };
 
+/* ── 쿨다운 키 — 브라우저판 commEmit 의 키를 그대로 옮겼다.
+      같은 키를 쓰는 이벤트는 쿨다운을 나눠 쓴다(예: ko/koed/dko/moveKo = "ko"). */
+enum { CK_ROUND, CK_ROUNDCTX, CK_KO, CK_MV, CK_HIT, CK_TK, CK_DN, CK_DN2, CK_OSP,
+       CK_LOW, CK_LOW2X, CK_REV, CK_PFT, CK_CBK, CK_QKO, CK_RVG, CK_STK,
+       CK_SURV, CK_SURV2, CK_STG, CK_QUOTE, CK_ENDING, CK_RES, CK_RES2, CK_REC,
+       CK_VSQ, CK_STORY, CK_SCR0, CK_SCR2, CK_SCR4, CK_SCR6, CK_SELCHAT, CK_MIDLE,
+       CK_FB, CK_IDLE, CK_LONG, CK_MUSE, CK_LORE, CK_N };
+
+/* {쿨다운 키, 쿨다운(프레임 · 60fps 기준)} — 브라우저판의 ms 값을 프레임으로 옮긴 것 */
+static const struct { unsigned char key; unsigned short cool; } EVCD[EV_N] = {
+  {CK_ROUND,150},{CK_ROUND,150},{CK_KO,240},{CK_KO,240},{CK_KO,240},
+  {CK_PFT,900},{CK_CBK,900},{CK_QKO,900},
+  {CK_LOW,90},{CK_LOW,90},{CK_REV,360},
+  {CK_RES2,420},{CK_RES2,420},
+  {CK_SURV,480},{CK_SURV2,600},{CK_STG,480},
+  {CK_QUOTE,540},{CK_ENDING,5400},
+  {CK_SCR2,900},{CK_SCR4,720},{CK_SCR6,1200},{CK_SCR0,1800},
+  {CK_MUSE,0},{CK_MUSE,0},{CK_MUSE,0},{CK_IDLE,1500},
+  {CK_VSQ,900},{CK_STORY,900},{CK_SELCHAT,300},{CK_MIDLE,2100},
+  {CK_FB,1800},{CK_ROUNDCTX,150},{CK_ROUNDCTX,150},{CK_ROUNDCTX,150},
+  {CK_LOW2X,480},{CK_LONG,3600},
+  {CK_HIT,48},{CK_TK,54},{CK_DN,120},{CK_DN2,120},{CK_OSP,132},
+  {CK_MV,66},{CK_MV,66},{CK_MV,66},{CK_KO,240},
+  {CK_RVG,900},{CK_STK,300},{CK_REC,360},
+  {CK_RES,480},{CK_RES,480},
+  {CK_LORE,300},{CK_LORE,300}
+};
+
 /* ── 상태 ── */
-static int  cm_on = 1, cm_spk = 0, cm_ready = 0;
+static int  cm_on = 1, cm_spk = 0;
 static unsigned cm_f = 0;                 /* 프레임 카운터 */
-static unsigned cd[EV_N];                 /* 이벤트별 쿨다운 만료 프레임 */
-static int p_mode=-1, p_scr=-1, p_hp1=-1, p_hp2=-1, p_surv=-1, p_stage=-1;
-static int st_ko=0, st_low1=0, st_low2=0, st_lead=0, st_rev=0;
-static int st_lastStage=-1, st_roundStart=0, st_won=0;
+static unsigned cd[CK_N];                 /* 쿨다운 만료 프레임 */
+static int p_mode=-1, p_scr=-1, p_hp1=-1, p_hp2=-1, p_a1=0, p_a2=0, p_surv=0, p_stage=0;
+static int st_ko, st_low1, st_low2, st_lead, st_rev;
+static int st_won, st_lost, st_resultDone;
+static int st_myR, st_opR, st_roundN, st_fb, st_longSaid, st_dblLow;
+static int st_lastStage = -1;
+static unsigned st_roundStart, st_offAt, st_actAt, st_menuAt, st_selChatAt, st_hitAt;
+static int st_selChatN;
+static int st_myChar = -1, st_oppChar = -1;
 static unsigned last_line_f = 0;          /* 마지막 발화 프레임 */
+static unsigned last_input_f = 0;
+static unsigned hush_until = 0;           /* 결과 멘트 뒤 잡담을 잠그는 시점 */         /* 마지막 패드 입력 프레임 (자동 전환 판별용) */
+/* 세션 기록 — 코어가 살아 있는 동안만 (저장 안 함) */
+static int sess_wins, sess_games, sess_streak, sess_survBest, sess_lastLossChar = -1;
+/* 기술 결합창 — 필살기가 나가면 450ms(27프레임) 기다렸다가 결과와 묶는다 */
+static const char *pend_name; static int pend_sup, pend_left;
+
 static char  outbuf[160];
 static char  curline[160];
 static unsigned cur_f = 0;
-static int cur_ev = -1;            /* 표정·강조를 고르려고 마지막 이벤트를 남긴다 */
+static int cur_ev = -1;
 static unsigned rng = 2463534242u;
 
+/* 발화 대기열 — 한 프레임에 두세 마디가 겹치면 순서대로 내보낸다(브라우저판 ANN 큐와 같은 역할) */
+#define QN 4
+static struct { char text[160]; short ev; } q[QN];
+static int q_head, q_cnt;
+static unsigned q_next;
+
 static unsigned rnd(void){ rng ^= rng<<13; rng ^= rng>>17; rng ^= rng<<5; return rng; }
-static int rd(int off){ return RAM ? RAM[off] : 0; }
-static int rd16(int off){ return RAM ? (RAM[off] | (RAM[off+1]<<8)) : 0; }
+static int rd(int off){ return RAM[off]; }
+static int rd16(int off){ return RAM[off] | (RAM[off+1]<<8); }
 
 void ss2comm_set_enabled(int on){ cm_on = on ? 1 : 0; }
 void ss2comm_set_speaker(int idx){ if(idx>=0 && idx<4) cm_spk = idx; }
 void ss2comm_reset(void){
-  int i; for(i=0;i<EV_N;i++) cd[i]=0;
-  p_mode=p_scr=p_hp1=p_hp2=p_surv=p_stage=-1;
-  st_ko=st_low1=st_low2=st_lead=st_rev=0; st_lastStage=-1; st_won=0;
-  cm_ready=0; curline[0]=0; cur_f=0; cur_ev=-1; last_line_f=0;
+  int i; for(i=0;i<CK_N;i++) cd[i]=0;
+  p_mode=p_scr=-1; p_hp1=p_hp2=-1; p_a1=p_a2=0; p_surv=p_stage=0;
+  st_ko=st_low1=st_low2=st_lead=st_rev=0;
+  st_won=st_lost=st_resultDone=0;
+  st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
+  st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
+  st_selChatN=0; st_myChar=st_oppChar=-1;
+  curline[0]=0; cur_f=0; cur_ev=-1; last_line_f=0; last_input_f=0; hush_until=0;
+  pend_name=0; pend_sup=0; pend_left=0;
+  q_head=q_cnt=0; q_next=0;
 }
 
-/* 대사 한 줄 뽑기. n1/n2 는 %d, who 는 %s 자리에 들어간다. */
-static const char *emit(int ev, unsigned cool, int num, const char *who){
-  const char *cand[3]; int n=0, i; const char *fmt;
+/* 대사 한 줄 만들어 대기열에 넣는다.
+   vsel < 0 이면 변형 중 무작위, 0 이상이면 그 변형을 고른다.
+   돌려주는 값: 1 = 받아들임(쿨다운 통과), 0 = 무시됨 → 호출부의 || 사슬이 다음 후보로 넘어간다 */
+static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
+  const char *cand[EVMAXV]; int n=0, i, key;
+  const char *fmt;
   if(!cm_on || ev<0 || ev>=EV_N) return 0;
-  if(cd[ev] > cm_f) return 0;
-  for(i=0;i<3;i++) if(LINES[cm_spk][ev][i]) cand[n++]=LINES[cm_spk][ev][i];
+  key = EVCD[ev].key;
+  if(cd[key] > cm_f) return 0;
+  for(i=0;i<EVMAXV;i++) if(LINES[cm_spk][ev][i]) cand[n++]=LINES[cm_spk][ev][i];
   if(!n) return 0;
-  fmt = cand[rnd()%(unsigned)n];
-  if(strstr(fmt,"%s") && who)      snprintf(outbuf,sizeof(outbuf),fmt,who);
-  else if(strstr(fmt,"%d"))        snprintf(outbuf,sizeof(outbuf),fmt,num);
-  else                             snprintf(outbuf,sizeof(outbuf),"%s",fmt);
-  cd[ev] = cm_f + cool;
-  last_line_f = cm_f;
-  cur_ev = ev;
-  snprintf(curline,sizeof(curline),"%s",outbuf);
-  cur_f = cm_f;
-  return outbuf;
+  if(vsel >= 0) fmt = cand[vsel < n ? vsel : n-1];
+  else          fmt = cand[rnd()%(unsigned)n];
+  if(strstr(fmt,"%s"))                 snprintf(outbuf,sizeof(outbuf),fmt,who?who:"");
+  else if(strstr(fmt,"%d")){
+    const char *p = strstr(fmt,"%d");
+    if(strstr(p+2,"%d"))               snprintf(outbuf,sizeof(outbuf),fmt,n1,n2);
+    else                               snprintf(outbuf,sizeof(outbuf),fmt,n1);
+  }
+  else                                 snprintf(outbuf,sizeof(outbuf),"%s",fmt);
+  cd[key] = cm_f + EVCD[ev].cool;
+  { int slot;
+    if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
+    else { slot = q_head; q_head = (q_head+1)%QN; }   /* 꽉 차면 가장 오래된 것을 민다 */
+    snprintf(q[slot].text,sizeof(q[slot].text),"%s",outbuf);
+    q[slot].ev = (short)ev;
+  }
+  return 1;
+}
+static int emit(int ev){ return emit_ex(ev,-1,0,0,0); }
+static int emitn(int ev,int n){ return emit_ex(ev,-1,n,0,0); }
+static int emits(int ev,const char *s){ return emit_ex(ev,-1,0,0,s); }
+
+/* 엔진 밖에서 한 줄 띄우기 — 지금은 "카드가 없다" 안내에 쓴다.
+   해설과 같은 자리에 같은 글꼴로 뜬다(해설을 꺼 두면 조용히 넘어간다). */
+void ss2comm_notify(const char *text){
+  int slot;
+  if(!cm_on || !text || !*text) return;
+  if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
+  else { slot = q_head; q_head = (q_head+1)%QN; }
+  snprintf(q[slot].text,sizeof(q[slot].text),"%s",text);
+  q[slot].ev = -1;                       /* 표정·강조 없음 */
 }
 
 const char *ss2comm_current(int *age){
@@ -188,92 +178,269 @@ const char *ss2comm_current(int *age){
   return curline[0] ? curline : 0;
 }
 
+/* 블록값 → 캐릭터 번호. 0x98 은 쿠로코 수라와 샤를로트 나찰이 겹치는데,
+   브라우저판과 같이 샤를로트로 해석한다(실기 제보 반영). */
+static int blk_char(int blk){ int c = blk>>4; return (c>=0 && c<15) ? c : -1; }
+
+/* 필살기 이름 — SP 엔진이 방금 낸 기술만 안다(손 커맨드는 이름 없음).
+   기술표는 코어에 내장이라 롬 버전과 무관하다. */
+extern const char *ss2sp_last_name;
+extern int ss2sp_last_ok;
+
+static const char *pend_take(int *sup){
+  const char *n = pend_name;
+  if(sup) *sup = pend_sup;
+  pend_name = 0; pend_left = 0; pend_sup = 0;
+  return n;
+}
+
 const char *ss2comm_frame(void){
-  int mode, scr, hp1, hp2, a1, a2, surv, stage;
-  const char *out = 0;
+  int mode, scr, hp1, hp2, a1, a2, surv, stage, pad;
+  int hit1, hit2, down2, downed1;
+  if(!cm_on) return 0;
   cm_f++;
-  if(!cm_on || !RAM) return 0;
 
   mode  = rd(OFF_MODE);  scr  = rd(OFF_SCR);
   hp1   = rd(OFF_HP1);   hp2  = rd(OFF_HP2);
   a1    = rd16(OFF_ACT1);a2   = rd16(OFF_ACT2);
   surv  = rd(OFF_SURV);  stage= rd(OFF_STAGE);
-  (void)a2;
-
-  if(!cm_ready){ /* 첫 프레임은 기준만 잡는다 */
-    p_mode=mode; p_scr=scr; p_hp1=hp1; p_hp2=hp2; p_surv=surv; p_stage=stage;
-    cm_ready=1; return 0;
+  pad   = rd(OFF_PAD);
+  if(pad) last_input_f = cm_f;
+  if(pend_left > 0 && --pend_left == 0){        /* 결합창이 그냥 닫혔다 — 비오의면 한 마디 */
+    int sup; const char *nm = pend_take(&sup);
+    (void)nm; if(sup) emit(EV_MOVE);
   }
 
-  /* ── 화면 전환 ── */
-  if(mode==MD_QUOTE && p_mode!=MD_QUOTE)      out = emit(EV_QUOTE, 540, 0, 0);
-  else if(mode==MD_ENDING && p_mode!=MD_ENDING) out = emit(EV_ENDING, 5400, 0, 0);
-  else if(mode!=MD_BATTLE && scr!=p_scr){
-    if(scr==2)      out = emit(EV_CHARSEL, 900, 0, 0);
-    else if(scr==4) out = emit(EV_STYLESEL, 720, 0, 0);
-    else if(scr==6) out = emit(EV_CARDSEL, 1200, 0, 0);
-    else if(scr==0 && p_scr>=0) out = emit(EV_TITLE, 1800, 0, 0);
+  if(p_mode < 0){                                /* 첫 프레임: 기준만 잡는다 */
+    p_mode=mode; p_scr=scr; p_hp1=hp1; p_hp2=hp2; p_a1=a1; p_a2=a2;
+    p_surv=surv; p_stage=stage; goto out;
+  }
+  if(mode!=MD_BATTLE && p_mode==MD_BATTLE)
+  {
+    st_offAt = cm_f;
+    /* v0.5.4b: 전투를 벗어나는 순간 메뉴 잡담 타이머를 다시 센다.
+       결과 화면은 아직 MD_BATTLE 이라 화면 전환 리셋이 안 걸리고, 그 뒤 mode만 바뀌면서
+       전투 전에 세워 둔 낡은 타이머가 이미 만료돼 있어 준비 화면마다 잡담이 터졌다. */
+    st_menuAt = cm_f; st_selChatAt = cm_f; st_selChatN = 0;
+  }
+
+  if(mode==MD_QUOTE  && p_mode!=MD_QUOTE)  emit(EV_QUOTE);
+  if(mode==MD_ENDING && p_mode!=MD_ENDING) emit(EV_ENDING);
+
+  /* ── 전투측 화면 전환: 문구(VS) 화면 · 승패 결과 이름 화면 · 스토리 사담 ── */
+  if(mode==MD_BATTLE && scr!=p_scr){
+    if(p_scr>=8 && (scr==0 || scr==2)){
+      /* 매치가 실제로 끝났을 때만 결과 멘트를 낸다(2선승). 라운드 하나 이긴 것으로는 말하지 않는다.
+         승패 화면에서는 **두 줄까지** — 결과 한 마디 + 한마디 더. 그 뒤 잡담은 잠시 잠근다.
+         (제보: "대전 사이 승부 난 뒤 대사가 어색하다" — 여러 줄이 몰리고 잡담이 끼어들었다) */
+      int done = (st_myR>=2 || st_opR>=2);
+      if(!st_resultDone && done && (st_won || st_lost)){
+        st_resultDone = 1;
+        emit(st_won ? EV_WINSCR  : EV_LOSESCR);
+        emit(st_won ? EV_WINTALK : EV_LOSETALK);
+        /* 오늘 전적은 세 판에 한 번만 — 매번 붙으면 결과가 늘어진다 */
+        if(sess_games>=3 && sess_games%3==0)
+          emit_ex(EV_RECORD, sess_wins*2>=sess_games?0:1, sess_games, sess_wins, 0);
+        hush_until = cm_f + 600;                 /* 10초간 혼잣말·스토리 사담 금지 */
+      }
+    }
+    else if(scr==0 && p_mode!=MD_BATTLE) emit(EV_VSQ);
+    else if((scr==0||scr==2) && p_mode==MD_BATTLE && cm_f > hush_until) emit(EV_STORYCHAT);
   }
 
   /* ── 전투 진입 ── */
-  if(!out && mode==MD_BATTLE && p_mode!=MD_BATTLE && hp1>0 && hp2>0){
-    st_ko=0; st_low1=st_low2=0; st_lead=0; st_rev=0; st_roundStart=(int)cm_f; st_won=0;
-    if(surv>=1) out = emit(EV_SURV, 480, surv, 0);
-    else if(stage>=1 && stage<=14 && stage>st_lastStage){
-      st_lastStage = stage;
-      out = emit(EV_STAGE, 480, stage+1, 0);
-    }else{
-      int b1=rd(OFF_BLK1), b2=rd(OFF_BLK2);
-      if(!(b1&7) && !(b2&7) && (b1>>4)<15 && (b2>>4)<15){
-        static char who[64];
-        snprintf(who,sizeof(who),"%s 대 %s", CHARNAME[b1>>4], CHARNAME[b2>>4]);
-        out = emit(EV_START, 150, 0, who);
-      }else out = emit(EV_ROUND, 150, 0, 0);
+  if(mode==MD_BATTLE && p_mode!=MD_BATTLE && hp1>0 && hp2>0){
+    st_ko=0; st_low1=st_low2=0; st_lead=0; st_rev=0;
+    st_won=st_lost=st_resultDone=0;
+    st_actAt=cm_f; st_roundStart=cm_f;
+    cd[CK_KO]=0; cd[CK_REV]=0;
+    if(!st_offAt || cm_f-st_offAt > 180){        /* 새 매치 (3초 넘게 전투를 벗어나 있었다) */
+      const char *rel;
+      st_myR=st_opR=0; st_roundN=1;
+      st_fb=st_longSaid=st_dblLow=0;
+      st_myChar  = blk_char(rd(OFF_BLK1));
+      st_oppChar = blk_char(rd(OFF_BLK2));
+      if(st_myChar>=0 && st_oppChar>=0){
+        char who[64];
+        snprintf(who,sizeof(who),"%s 대 %s",CHARNAME[st_myChar],CHARNAME[st_oppChar]);
+        emits(EV_START, who);
+      }else emits(EV_START, "한판");
+      /* 2절 — 화자와 상대의 관계 대사 우선, 없으면 캐릭터 설정 한 줄 */
+      rel = (st_oppChar>=0 ? RELLINE[cm_spk][st_oppChar] : 0);
+      if(!rel && st_myChar>=0) rel = RELLINE[cm_spk][st_myChar];
+      if(rel) emits(EV_REL, rel);
+      else if(st_oppChar>=0 && LORE[st_oppChar]){
+        char t[160];
+        snprintf(t,sizeof(t),"%s — %s",CHARNAME[st_oppChar],LORE[st_oppChar]);
+        emits(EV_LORE, t);
+      }
+    }else{                                        /* 라운드 재개 */
+      st_roundN++; st_fb=st_longSaid=st_dblLow=0;
+      if(st_myR==1 && st_opR==1)      emit(EV_MATCHPOINT);
+      else if(st_myR==1 && st_opR==0) emit(EV_ROUNDLEAD);
+      else if(st_myR==0 && st_opR==1) emit(EV_ROUNDBEHIND);
+      else                            emit(EV_ROUND);
     }
-    if(stage < st_lastStage) st_lastStage = stage;   /* 새 코스 */
+    if(stage < st_lastStage) st_lastStage = -1;   /* 새 주행 */
+    if(surv >= 1){
+      int rec = (surv > sess_survBest && surv >= 3);
+      if(surv > sess_survBest) sess_survBest = surv;
+      emit_ex(EV_SURV, rec?0:(surv>=10?1:(surv>=7?2:(surv>=3?3:-1))), surv, 0, 0);
+    }else if(stage>=1 && stage<=14 && stage > st_lastStage){
+      st_lastStage = stage;
+      emit_ex(EV_STAGE, (stage+1)>=8?0:((stage+1)>=5?1:-1), stage+1, 0, 0);
+    }else if(stage > st_lastStage) st_lastStage = stage;
+    goto store;
+  }
+
+  /* ── 전투가 아니거나 체력이 회복된 틱(=메뉴/연출) ── */
+  if(mode!=MD_BATTLE || hp1>p_hp1 || hp2>p_hp2){
+    if(scr!=p_scr && mode!=MD_BATTLE){
+      int byClick = (cm_f - last_input_f) < 54;   /* 0.9초 안에 입력이 있었나 */
+      st_menuAt = cm_f; st_selChatAt = cm_f; st_selChatN = 0;
+      if(!byClick)               emit(EV_STORYCHAT);
+      else if(scr==2)            emit(EV_CHARSEL);
+      else if(scr==4)            emit(EV_STYLESEL);
+      else if(scr==0)            emit(EV_TITLE);
+      else if(scr==6)            emit(EV_CARDSEL);
+    }
+    if(mode!=MD_BATTLE){
+      if(scr==2){                                 /* 캐릭터 고르는 동안 사담 (한 방문에 3마디) */
+        if(!st_selChatAt) st_selChatAt=cm_f;
+        if(cm_f > hush_until && cm_f-st_selChatAt > 420 && st_selChatN < 3){
+          st_selChatAt=cm_f; st_selChatN++; emit(EV_CHARSELCHAT);
+        }
+      }
+      if(!st_menuAt) st_menuAt=cm_f;
+      if(scr!=2 && cm_f > hush_until && cm_f-st_menuAt > 900){ st_menuAt=cm_f; emit(EV_MENUIDLE); }
+    }
+    if(hp1>32) st_low1=0;
+    if(hp2>32) st_low2=0;
+    if(hp1>0 && hp2>0) st_ko=0;
+    goto store;
   }
 
   /* ── 전투 중 ── */
-  if(mode==MD_BATTLE && p_mode==MD_BATTLE && hp1<=p_hp1 && hp2<=p_hp2){
-    int hit1 = hp1 < p_hp1, hit2 = hp2 < p_hp2;
-    if(!st_ko && hit1 && hit2 && hp1<=0 && hp2<=0){ st_ko=1; if(!out) out=emit(EV_DKO,240,0,0); }
-    else if(!st_ko && hit2 && hp2<=0){
-      st_ko=1; st_won=1;
-      if(!out) out = emit(EV_KO, 240, 0, 0);
-      /* 후속 한마디 — 역전승 > 완승 > 순살 (하나만) */
-      if(st_low1)                                    emit(EV_COMEBACK, 900, 0, 0);
-      else if(hp1>=128)                              emit(EV_PERFECT, 900, 0, 0);
-      else if((int)cm_f - st_roundStart < 600)       emit(EV_QUICK, 900, 0, 0);
-    }
-    else if(!st_ko && hit1 && hp1<=0){
-      st_ko=1; st_won=0;
-      if(!out) out = emit(EV_KOED, 240, 0, 0);
-      if(surv>0) emit(EV_SURVEND, 600, surv, 0);
-    }
-    if(!st_ko){
-      int lead = (hp1>hp2) - (hp1<hp2);
-      if(lead && st_lead && lead!=st_lead && (hp1-hp2>=8 || hp2-hp1>=8) && st_rev<2){
-        if(emit(EV_REVERSAL, 360, 0, 0)) st_rev++;
+  /* v0.5.6: 승부가 난 뒤의 승리 포즈도 액션ID가 0x180을 넘는다.
+     그걸 필살기로 읽어 "온다! 비오의!" 를 뜬금없이 외치던 버그를 여기서 막는다.
+     둘 다 살아 있고 KO 상태가 아닐 때만 기술 발동으로 본다. */
+  if(hp1>=100 && hp2>=100) st_ko=0;   /* 라운드 재개 = KO 표식 해제 */
+  { int live = (hp1>0 && hp2>0 && !st_ko);
+  if(live && a1>=0x180 && p_a1<0x180){            /* 내 필살기 발동 → 결합창 열기 */
+    pend_name = (ss2sp_last_name && ss2sp_last_ok!=0) ? ss2sp_last_name : 0;
+    pend_sup  = (pend_name && !strcmp(pend_name,"비오의"));
+    pend_left = 27;
+    /* 비오의는 **나가는 순간 바로** 호들갑을 떤다. 결합창을 기다리면 적중 멘트에 먹힌다. */
+    if(pend_sup) emit(EV_MOVE);
+  }
+  if(live && a2>=0x180 && p_a2<0x180) emit(EV_OPPSP);
+  }
+
+  hit2 = hp2 < p_hp2; hit1 = hp1 < p_hp1;
+  down2   = (a2>=0x13C && a2<=0x154) && !(p_a2>=0x13C && p_a2<=0x154);
+  downed1 = (a1>=0x13C && a1<=0x154) && !(p_a1>=0x13C && p_a1<=0x154);
+
+  if(!st_fb && (hit1||hit2)){
+    st_fb = 1;
+    if(hit2 && !hit1 && st_roundN==1 && hp2>0 && !pend_name && (p_hp2-hp2)>=4) emit(EV_FIRSTBLOOD);
+  }
+
+  if(hit1 && hit2 && hp1<=0 && hp2<=0 && !st_ko){ st_ko=1; pend_take(0); emit(EV_DKO); }
+  else{
+    if(hit2 && hp2<=0 && !st_ko){
+      int sup; const char *nm = pend_take(&sup);
+      st_ko=1; st_won=1; st_lost=0;
+      if(nm) emit_ex(EV_MOVEKO,0,0,0,nm); else emit(EV_KO);
+      st_myR++;
+      { int mw = (st_myR>=2); int said;
+        if(mw){ sess_streak++; sess_wins++; sess_games++; }
+        said =
+        (st_low1 && emit(EV_COMEBACK)) ||
+        (hp1>=128 && emit(EV_PERFECT)) ||
+        ((cm_f-st_roundStart) < 600 && emit(EV_QUICK)) ||
+        (mw && st_oppChar>=0 && st_oppChar==sess_lastLossChar && emit(EV_REVENGE)) ||
+        (mw && (sess_streak==2||sess_streak==3||sess_streak==5||sess_streak==7||
+                (sess_streak>=10 && sess_streak%5==0)) &&
+              emit_ex(EV_STREAK, sess_streak>=5?0:-1, sess_streak,0,0));
+        (void)said;
+        if(mw && st_oppChar>=0 && st_oppChar==sess_lastLossChar) sess_lastLossChar=-1;
       }
-      if(lead) st_lead = lead;
-      if(hp1>0 && hp1<=32 && !st_low1){ st_low1=1; if(!out) out=emit(EV_LOW1,90,0,0); }
-      if(hp2>0 && hp2<=32 && !st_low2){ st_low2=1; if(!out) out=emit(EV_LOW2,90,0,0); }
+    }
+    else if(down2){
+      int sup; const char *nm = pend_take(&sup);
+      if(nm) emit_ex(EV_MOVEDOWN,0,0,0,nm);
+      else if(pend_left>0) emit_ex(EV_MOVEDOWN,1,0,0,0);
+      else if(cm_f - st_hitAt > 42) emit(EV_DOWN);
+    }
+    else if(hit2){
+      int d = p_hp2 - hp2;
+      if(d>=4){
+        int sup; const char *nm = pend_take(&sup);
+        if(nm){ emit_ex(EV_MOVEHIT, d>=12?0:2, 0,0, nm); st_hitAt=cm_f; }
+        else if(d>=12){ emit(EV_HIT); st_hitAt=cm_f; }
+      }
+    }
+    if(hit1){
+      int d = p_hp1 - hp1;
+      if(hp1<=0 && !st_ko){
+        st_ko=1; st_lost=1; st_won=0;
+        emit(EV_KOED);
+        if(surv>0) emitn(EV_SURVEND, surv);
+        st_opR++;
+        if(st_opR>=2){ sess_streak=0; sess_lastLossChar=st_oppChar; sess_games++; }
+      }
+      else if(d>=12) emit(EV_TAKEN);
+    }
+  }
+  if(downed1) emit(EV_DOWNED);
+
+  if(!st_ko){
+    int lead = (hp1>hp2) - (hp1<hp2);
+    int diff = hp1-hp2; if(diff<0) diff=-diff;
+    if(lead!=0 && st_lead!=0 && lead!=st_lead && diff>=8 && st_rev<2){
+      if(emit(EV_REVERSAL)) st_rev++;
+    }
+    if(lead!=0) st_lead=lead;
+    if(hp1>0 && hp1<=32 && !st_low1){ st_low1=1; emit(EV_LOW1); }
+    if(hp2>0 && hp2<=32 && !st_low2){ st_low2=1; emit(EV_LOW2); }
+    if(st_low1 && st_low2 && !st_dblLow){ st_dblLow=1; emit(EV_DOUBLELOW); }
+  }
+
+  /* 공방이 끊기면 — 전투 잡담 12초, 장기전 60초 */
+  if(hit1||hit2||down2||downed1||
+     (hp1>0&&hp2>0&&!st_ko&&((a1>=0x180&&p_a1<0x180)||(a2>=0x180&&p_a2<0x180)))) st_actAt=cm_f;
+  else if(!st_ko && hp1>0 && hp2>0 && scr>=8){
+    if(!st_actAt) st_actAt=cm_f;
+    if(cm_f-st_actAt > 720){ st_actAt=cm_f; emit(EV_IDLE); }
+    if(!st_longSaid && st_roundStart && cm_f-st_roundStart > 3600){
+      st_longSaid=1; emit(EV_LONGFIGHT);
     }
   }
 
-  /* ── 승패 연출로 넘어간 뒤 한마디 더 ── */
-  if(mode==MD_BATTLE && st_ko && scr<8 && p_scr>=8)
-    emit(st_won ? EV_WINTALK : EV_LOSETALK, 420, 0, 0);
+store:
+  p_mode=mode; p_scr=scr; p_hp1=hp1; p_hp2=hp2; p_a1=a1; p_a2=a2;
+  p_surv=surv; p_stage=stage;
 
-  /* ── 쉼 채우기: 조용하면 화자다운 혼잣말 (전투 6초 / 그 외 3초) ── */
-  if(!out){
-    unsigned quiet = cm_f - last_line_f;
-    unsigned need  = (mode==MD_BATTLE) ? 360u : 180u;
-    if(quiet > need) out = emit(mode==MD_BATTLE ? EV_MUSE_B : EV_MUSE_M, need, 0, 0);
+out:
+  /* 아무도 말하지 않고 조용하면 화자가 혼잣말 — 전투 6초 / 그 밖 3초 */
+  if(!q_cnt && cm_f >= q_next){
+    unsigned quiet = cm_f - (last_line_f > cur_f ? last_line_f : cur_f);
+    unsigned need  = (mode==MD_BATTLE) ? 360 : 180;
+    if(cm_f > 300 && quiet > need && cm_f > hush_until && !st_ko)   /* KO 연출 중엔 잡담 금지 */
+      emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M));
   }
-
-  p_mode=mode; p_scr=scr; p_hp1=hp1; p_hp2=hp2; p_surv=surv; p_stage=stage;
-  return out;
+  /* 대기열에서 한 줄 꺼내 보여준다 — 겹칠 때도 순서대로 읽히게 1.6초 간격 */
+  if(q_cnt && cm_f >= q_next){
+    int slot = q_head;
+    q_head = (q_head+1)%QN; q_cnt--;
+    snprintf(curline,sizeof(curline),"%s",q[slot].text);
+    cur_ev = q[slot].ev; cur_f = cm_f; last_line_f = cm_f;
+    /* 결과 계열(승패 화면·한마디 더·전적)은 한 박자 더 벌려야 자연스럽다 */
+    q_next = cm_f + ((cur_ev==EV_WINSCR||cur_ev==EV_LOSESCR||cur_ev==EV_WINTALK||
+                      cur_ev==EV_LOSETALK||cur_ev==EV_RECORD) ? 150 : 100);
+    return curline;
+  }
+  return 0;
 }
 
 /* ══ 자체 렌더 (D) ══════════════════════════════════════════════════
@@ -304,10 +471,22 @@ static const char *utf8_next(const char *s, unsigned *cp){
 /* ── 표정·강조 표 (브라우저판 MOOD 맵과 같은 결) ──
    0 담담 / 1 신남 / 2 걱정.  강조(impact)는 굵게 + 금색 + 띠 번쩍. */
 static const unsigned char EVMOOD[EV_N] = {
-  0,0,1,2,0,1,1,1, 2,1,1,1,2,1,2, 1,0,1,0,0,0,0, 0,0,0
+  /* START ROUND KO KOED DKO PERFECT COMEBACK QUICK */      0,0,1,2,0,1,1,1,
+  /* LOW1 LOW2 REVERSAL WINTALK LOSETALK */                 2,1,1,1,2,
+  /* SURV SURVEND STAGE QUOTE ENDING */                     1,2,1,0,1,
+  /* CHARSEL STYLESEL CARDSEL TITLE */                      0,0,0,0,
+  /* MUSE_B MUSE_Q MUSE_M IDLE */                           0,0,0,0,
+  /* VSQ STORYCHAT CHARSELCHAT MENUIDLE */                  0,0,0,0,
+  /* FIRSTBLOOD ROUNDLEAD ROUNDBEHIND MATCHPOINT */         1,1,2,1,
+  /* DOUBLELOW LONGFIGHT */                                 1,0,
+  /* HIT TAKEN DOWN DOWNED OPPSP */                         1,2,1,2,2,
+  /* MOVE MOVEHIT MOVEDOWN MOVEKO */                        1,1,1,1,
+  /* REVENGE STREAK RECORD WINSCR LOSESCR REL LORE */       1,1,0,1,2,0,0
 };
 static const unsigned char EVHIT[EV_N] = {
-  0,0,1,0,1,1,1,1, 0,0,1,0,0,1,0, 0,0,1,0,0,0,0, 0,0,0
+  0,0,1,0,1,1,1,1,   0,0,1,0,0,   1,0,1,0,1,   0,0,0,0,
+  0,0,0,0,           0,0,0,0,     0,0,0,1,     1,0,
+  0,0,0,0,0,         1,0,0,1,     1,1,0,0,0,0,0
 };
 
 /* ── 초상 (얼굴) ──────────────────────────────────────────────────
@@ -539,7 +718,7 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
 
   tx0  = face_ok[spk] ? 21 : 4;
   x1   = w - 3;
-  maxw = x1 - tx0 - (hit ? 2 : 0);
+  maxw = x1 - tx0;
 
   /* 줄 나누기 — 띠는 높이가 고정이라 두 줄까지. 큰 글씨로 안 들어가면 작은 글씨로 접는다. */
   small = 0;
@@ -588,7 +767,7 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   for(i=0;i<nl && show>0;i++){
     int drawn = small
       ? draw_line  (fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh + 1, top, bot, show, col, hit)
-      : draw_line11(fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh,     top, bot, show, col, hit);
+      : draw_line11(fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh,     top, bot, show, col, 0);
     show -= drawn;
   }
 }

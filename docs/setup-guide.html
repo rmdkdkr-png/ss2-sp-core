@@ -141,9 +141,9 @@
     <td><span class="val">Enabled</span></td>
     <td><b>기본값. 이게 원버튼 기능 자체입니다.</b> 끄면 순정 코어처럼 됩니다.
         다른 게임 할 때 굳이 끌 필요는 없습니다 — 알아서 잠자코 있습니다.</td></tr>
-<tr><td>SS2 One-button Layout</td>
-    <td><span class="val">Buttons</span> / <span class="val">SP + direction</span></td>
-    <td>버튼을 어떻게 쓸지. <b>04</b>에서 자세히 설명합니다.</td></tr>
+<tr><td>SS2 Character Commentary</td>
+    <td><span class="val">Enabled</span></td>
+    <td>캐릭터가 경기를 해설합니다. 화자와 표시 자리도 아래 항목에서 고릅니다.</td></tr>
 <tr><td>Language</td>
     <td><span class="val">japanese</span></td>
     <td>원래 있던 항목입니다. <b>한글 패치본은 일본어로 두세요.</b>
@@ -168,27 +168,17 @@
 <p>NGPC는 버튼이 <b>A · B · Option</b> 셋뿐입니다. 패드의 나머지가 통째로 놀고 있어서,
 거기에 필살기를 답니다.</p>
 
-<h3>방식 ① <span class="val">Buttons</span> — 필살기를 버튼에 직결 (기본값)</h3>
-
 <div class="tbl"><table>
 <thead><tr><th>패드</th><th>게임</th></tr></thead>
 <tbody>
 <tr><td><span class="key">B</span> (아래쪽)</td><td>A — 베기</td></tr>
 <tr><td><span class="key">A</span> (오른쪽)</td><td>B — 발차기</td></tr>
+<tr><td><span class="key">Y</span> (또는 <span class="key">L</span>)</td><td><b>A+B 동시</b></td></tr>
+<tr><td><span class="key">X</span> (또는 <span class="key">R</span>)</td><td><b>SP</b> — 필살기</td></tr>
 <tr><td><span class="key">Start</span></td><td>Option</td></tr>
-<tr><td><span class="key">X</span></td><td><b>필살기 1번</b></td></tr>
-<tr><td><span class="key">Y</span></td><td>필살기 2번</td></tr>
-<tr><td><span class="key">L</span></td><td>필살기 3번</td></tr>
-<tr><td><span class="key">R</span></td><td>필살기 4번</td></tr>
-<tr><td><span class="key">L2</span></td><td>필살기 5번</td></tr>
-<tr><td><span class="key">R2</span></td><td>필살기 6번</td></tr>
 </tbody></table></div>
 
-<p>기술이 6개보다 적은 캐릭터는 남는 버튼이 아무 일도 하지 않습니다.
-번호는 기술표 순서이고, 캐릭터·유파는 <b>코어가 게임 메모리에서 자동으로 읽습니다.</b>
-캐릭터를 바꿔도 따로 설정할 게 없습니다.</p>
-
-<h3>방식 ② <span class="val">SP + direction</span> — 브라우저 실행기와 같은 감각</h3>
+<h3>필살기 = <span class="key">SP</span> + 방향</h3>
 
 <p><span class="key">X</span> <b>하나</b>로 다 씁니다. 십자키를 어느 쪽으로 누르고 있느냐로 갈립니다.</p>
 
@@ -203,9 +193,18 @@
 <tr><td>점프 중 <span class="key">X</span></td><td>공중기</td></tr>
 </tbody></table></div>
 
-<p>버튼이 적은 기기나, 실행기 쓰던 감각 그대로 가고 싶을 때 편합니다.
-이 방식에서는 <span class="key">Y</span> <span class="key">L</span> <span class="key">R</span>
-<span class="key">L2</span> <span class="key">R2</span> 가 기술 1~5번으로 한 칸씩 밀립니다.</p>
+<p>캐릭터·유파는 <b>코어가 게임 메모리에서 자동으로 읽습니다.</b> 캐릭터를 바꿔도 설정할 게 없습니다.</p>
+
+<h3>비오의 = 뒤 + A+B</h3>
+
+<p>유파를 가리지 않고 <b>뒤를 잡은 채 A+B</b> 입니다.
+뒤를 잡지 않은 A+B 는 게임 원래 입력 그대로입니다.
+(비오의는 분노 게이지가 차 있어야 나갑니다 — 원래 게임 규칙입니다.)</p>
+
+<div class="note">
+  <b>버튼은 넷뿐입니다.</b> 예전 판의 SP2~SP8 은 없앴습니다.
+  기술은 전부 <b>SP + 방향</b>으로 나가고, 어느 자리에 무엇을 둘지는 기술 배치에서 바꿉니다.
+</div>
 
 <h3>「앞 / 뒤」는 신경 쓰지 않으셔도 됩니다</h3>
 
@@ -216,7 +215,7 @@
 
 <span class="path">퀵 메뉴 → 컨트롤(Controls) → Port 1 Controls</span>
 
-<p>여기서 <b>SP 1 ~ SP 6</b> 이라는 이름으로 보입니다. 원하는 물리 버튼에 다시 매핑하세요.
+<p>여기서 <b>SP</b> 와 <b>A + B</b> 두 개가 보입니다. 원하는 물리 버튼에 다시 매핑하세요.
 화면 터치 버튼 위치는 <span class="ui">설정 → 온스크린 디스플레이 → 온스크린 오버레이</span> 에서 조절합니다.</p>
 
 

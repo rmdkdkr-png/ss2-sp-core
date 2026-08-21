@@ -24,9 +24,7 @@ if [ ! -d "$WORK" ]; then
 fi
 git -C "$WORK" checkout -- . 2>/dev/null || true
 git -C "$WORK" apply --3way "$HERE/src/ss2sp.patch"
-cp "$HERE/src/ss2sp.c" "$HERE/src/ss2sp.h" "$HERE/src/ss2sp_moves.h" \
-   "$HERE/src/ss2comm.c" "$HERE/src/ss2comm.h" \
-   "$HERE/src/ss2comm_font.h" "$HERE/src/ss2comm_font11.h" "$WORK/"
+cp "$HERE"/src/*.c "$HERE"/src/*.h "$WORK/"    # 소스는 통째로 (파일이 늘어도 그대로 돈다)
 
 cd "$WORK"; make clean >/dev/null 2>&1 || true
 case "$TARGET" in
