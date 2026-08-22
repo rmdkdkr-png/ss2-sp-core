@@ -6,7 +6,7 @@ corename = "Beetle NeoPop (SS2 One-button)"
 categories = "Emulator"
 license = "GPLv2"
 permissions = ""
-display_version = "v1.29.0.0-ss2sp"
+display_version = "v1.29.0.0 · SS2 v0.6"
 supports_no_game = "false"
 
 # Hardware Information

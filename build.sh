@@ -22,7 +22,9 @@ if [ ! -d "$WORK" ]; then
   git clone "$UPSTREAM" "$WORK"
   git -C "$WORK" checkout "$COMMIT"
 fi
-git -C "$WORK" checkout -- . 2>/dev/null || true
+# 지난 빌드의 패치가 **인덱스에 남아** checkout -- . 로는 안 지워진다 (0.5.4 → 0.6 판올림 때 충돌).
+git -C "$WORK" reset --hard "$COMMIT" >/dev/null 2>&1 || git -C "$WORK" checkout -- . 2>/dev/null || true
+git -C "$WORK" clean -fd -e cores >/dev/null 2>&1 || true
 git -C "$WORK" apply --3way "$HERE/src/ss2sp.patch"
 cp "$HERE"/src/*.c "$HERE"/src/*.h "$WORK/"    # 소스는 통째로 (파일이 늘어도 그대로 돈다)
 
