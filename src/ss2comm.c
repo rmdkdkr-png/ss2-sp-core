@@ -197,6 +197,12 @@ static ss2q q[QN];
 static int q_head, q_cnt;
 static unsigned q_next;
 
+/* 심판 전용 칸 — 해설 대기열과 따로 선다 */
+static char     ref_text[160];
+static unsigned ref_at;
+static int      ref_has;
+
+
 /* 최근에 한 말은 다시 안 한다. 예전에는 44초 안에 같은 줄이 세 번 나왔다. */
 #define RECENT_N   12
 #define RECENT_F 1800     /* 30초 */
@@ -230,6 +236,7 @@ static void mark_said(const char *s){
      1  흐름·기록
      0  잔반응        — 맞았다/때렸다. 없어도 아쉽지 않다 */
 static unsigned char ev_prio(int ev){
+  if(ev == -3) return 3;    /* 심판 구호 — 무엇보다 먼저 */
   if(ev == -2) return 0;    /* 짝꿍이 받는 말 — 있으면 좋고 없어도 그만 */
   if(ev == -1) return 3;    /* ss2comm_notify — 사용자에게 꼭 보여야 하는 안내 */
   switch(ev){
@@ -257,7 +264,21 @@ static int rd(int off){ return RAM[off]; }
 static int rd16(int off){ return RAM[off] | (RAM[off+1]<<8); }
 
 void ss2comm_set_enabled(int on){ cm_on = on ? 1 : 0; }
-void ss2comm_set_speaker(int idx){ if(idx>=0 && idx<SS2COMM_SPK_N) cm_spk = idx; }
+/* 해설자를 바꾸면 **앞 사람 말을 지운다.**
+   예전에는 cur_spk 만 새 사람으로 바꿔서, 얼굴은 바뀌었는데 글은 앞 사람 것이
+   그대로 남았다 — 새 화자가 남의 말을 하는 것처럼 보인다.
+   대기 중인 앞 사람 말도 같이 버린다. 바로 뒤에 소개 대사가 들어온다. */
+static void speaker_switched(void){
+  curline[0] = 0; cur_ev = -1; cur_f = cm_f;
+  cur_spk = cm_spk;
+  q_head = q_cnt = 0; q_next = 0; ref_has = 0;
+  duo_at = duo_big_at = 0;
+}
+void ss2comm_set_speaker(int idx){
+  if(idx < 0 || idx >= SS2COMM_SPK_N || idx == cm_spk) return;
+  cm_spk = idx;
+  speaker_switched();
+}
 /* v0.7: 해설자가 15명이 되면서 프런트엔드가 이름·수를 알아야 한다.
    버튼 하나로 교대하는 길도 여기서 연다 — 코어·앱이 같은 순서를 쓴다. */
 int ss2comm_speaker_count(void){ return SS2COMM_SPK_N; }
@@ -270,7 +291,7 @@ void ss2comm_set_duo(int on){ cm_duo = on ? 1 : 0; }
 int ss2comm_next_speaker(int step){
   int n = SS2COMM_SPK_N;
   cm_spk = ((cm_spk + (step?step:1)) % n + n) % n;
-  cur_spk = cm_spk; duo_at = duo_big_at = 0;
+  speaker_switched();
   return cm_spk;
 }
 const char *ss2comm_speaker_hello(int idx){
@@ -289,7 +310,7 @@ void ss2comm_reset(void){
   pend_name=0; pend_sup=0; pend_left=0;
   { int k; fl_hit=fl_tak=fl_alt=fl_lastBy=fl_oppSp=0; fl_said=0; fl_nr=0; fl_rounds[0]=0;
     for(k=0;k<FLMV;k++){ fl_mv[k].name=0; fl_mv[k].n=0; } }
-  q_head=q_cnt=0; q_next=0;
+  q_head=q_cnt=0; q_next=0; ref_has=0;
   memset(recent_h,0,sizeof recent_h); memset(recent_f,0,sizeof recent_f); recent_i=0;
 }
 
@@ -316,6 +337,43 @@ static int duo_cat(int ev){
     default:                                              return -1;
   }
 }
+
+/* ── 심판 (쿠로코) ─────────────────────────────────────────────
+   해설자와 **별개 목소리**다. 누구를 해설자로 골라도 심판은 늘 거기 있다 —
+   그래서 「전통」이 된다. 라운드 시작과 승부가 갈리는 순간은 원래 아무도
+   말하지 않는 자리라 해설 예산을 뺏지도 않는다.
+
+   이 표는 실행기에서 나온 것이 아니라 C 쪽에서 새로 쓴 것이라
+   생성기(ss2comm_lines.h)와 얽히지 않게 여기 둔다.
+
+   본명은 이 게임이 음성도 없고 화면에 띄우지도 않는다. 그래서 여기서만 부른다. */
+#define SS2_SPK_REF (-2)          /* 얼굴 없이, 심판 색으로 */
+
+static const char *const REF_ROUND[3] = {
+  "일 본째 — 진조니, 쇼부!",
+  "이 본째 — 진조니, 쇼부!",
+  "삼 본째 — 진조니, 쇼부!",
+};
+
+/* 승부가 갈리면 승자의 **본명**을 부른다. 갈포드는 성이 없다. */
+static const char *const CHARFULL[15] = {
+  "카자마 카즈키", "카자마 소게츠", "하오마루", "키바가미 겐주로",
+  "나코루루", "리무루루", "핫토리 한조", "갈포드",
+  "아수라", "샤를로트 크리스틴 드 콜데", "모로즈미 타무리키", "타치바나 우쿄",
+  "야규 쥬베이", "시키", "유가",
+};
+
+/* 심판은 **해설 대기열을 쓰지 않는다.** 다른 목소리니 줄도 따로 선다.
+   같은 칸을 쓰게 했더니 승부가 갈리는 순간 구호가 총평을 밀어냈다 —
+   둘 다 나와야 하는 자리다. 구호가 먼저, 해설이 그 뒤. */
+static void ref_say(const char *text){
+  if(!cm_on || !text || !*text) return;
+  if(said_recently(text)) return;
+  snprintf(ref_text, sizeof ref_text, "%s", text);
+  ref_at  = cm_f;
+  ref_has = 1;
+}
+
 static void duo_after(int ev){
   const char *cand[DUOMAXV];
   int cat, p, n = 0, i, big, slot;
@@ -523,7 +581,15 @@ const char *ss2comm_frame(void){
          (제보: "대전 사이 승부 난 뒤 대사가 어색하다" — 여러 줄이 몰리고 잡담이 끼어들었다) */
       int done = (st_myR>=2 || st_opR>=2);
       if(!st_resultDone && done && (st_won || st_lost)){
+        int wc = st_won ? st_myChar : st_oppChar;   /* 이긴 쪽 */
         st_resultDone = 1;
+        /* 승자의 본명을 부른다. 이 게임은 음성도 없고 본명을 띄우지도 않아서
+           여기서만 불리는 이름이 된다. */
+        if(wc >= 0 && wc < 15){
+          char t[160];
+          snprintf(t, sizeof t, "%s — 오미고토!", CHARFULL[wc]);
+          ref_say(t);
+        }
         emit(st_won ? EV_WINSCR  : EV_LOSESCR);
         /* v0.7: 판의 **모양**이 잡히면 승패 한마디 대신 총평을 낸다.
            "이겼다/졌다"를 두 번 말하지 않기 위해서다. */
@@ -569,6 +635,8 @@ const char *ss2comm_frame(void){
     }else{                                        /* 라운드 재개 */
       st_roundN++; st_fb=st_longSaid=st_dblLow=0;
       flow_reset(0);                              /* v0.7 라운드 단위 관찰만 */
+      /* 심판이 먼저 판을 연다 — 해설은 그 뒤에 붙는다 */
+      { int rn = st_myR + st_opR; if(rn > 2) rn = 2; ref_say(REF_ROUND[rn]); }
       if(st_myR==1 && st_opR==1)      emit(EV_MATCHPOINT);
       else if(st_myR==1 && st_opR==0) emit(EV_ROUNDLEAD);
       else if(st_myR==0 && st_opR==1) emit(EV_ROUNDBEHIND);
@@ -736,6 +804,19 @@ out:
     unsigned lim = pr >= 2 ? Q_STALE_BIG : pr >= 1 ? Q_STALE_MID : Q_STALE;
     if(cm_f - q[q_head].at <= lim) break;
     q_head = (q_head+1)%QN; q_cnt--;
+  }
+
+  /* 심판 구호가 먼저 나간다. 해설 대기열은 건드리지 않으므로 바로 뒤에 총평이 붙는다. */
+  if(ref_has && cm_f >= q_next){
+    if(cm_f - ref_at > Q_STALE_BIG){ ref_has = 0; }
+    else{
+      ref_has = 0;
+      snprintf(curline, sizeof curline, "%s", ref_text);
+      cur_ev = -3; cur_spk = SS2_SPK_REF; cur_f = cm_f; last_line_f = cm_f;
+      mark_said(curline);
+      q_next = cm_f + GAP_OTHER;
+      return curline;
+    }
   }
 
   if(q_cnt && cm_f >= q_next){
@@ -997,6 +1078,7 @@ static uint16_t tint(uint16_t c, int mood){
 #define CM_TTL     150
 #define COL_WHITE  0xFFFF
 #define COL_GOLD   0xFEA0
+#define COL_REF    0x9E7F   /* 심판 — 해설자와 구분되는 찬 색 */
 #define BOX_LINE_H 13
 #define BOX_MAXL   3
 int ss2comm_band_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_BAND_H : 0; }
@@ -1136,7 +1218,7 @@ int ss2comm_impact(void){ return (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev] : 0;
 void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   const char *line, *end, *seg[BOX_MAXL+1];
   int age=0, x, y, top, bot, mood, hit, spk, tx0, x1, maxw, show, i, nl, boxh, ty, lh;
-  int band, bandTop, small;
+  int band, bandTop, small, ref_line;
   uint16_t col;
   if(!cm_on || !cm_draw || !fb) return;
   band    = (cm_draw==1 || cm_draw==4);
@@ -1155,11 +1237,14 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   mood = (cur_ev>=0 && cur_ev<EV_N) ? EVMOOD[cur_ev] : 0;
   hit  = (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev]  : 0;
   col  = hit ? COL_GOLD : COL_WHITE;
-  spk  = (cur_spk >= 0 && cur_spk < SS2COMM_SPK_N) ? cur_spk : cm_spk;
+  { int isRef = (cur_spk == SS2_SPK_REF);
+    spk = (cur_spk >= 0 && cur_spk < SS2COMM_SPK_N) ? cur_spk : cm_spk;
+    if(isRef){ col = COL_REF; mood = 0; hit = 0; }   /* 심판은 담담하게, 제 색으로 */
+    ref_line = isRef; }
   if(!face_built) build_faces();
   show = 2 + (int)age*2;                       /* 타자 연출: 프레임당 두 글자 */
 
-  tx0  = face_ok[spk] ? 21 : 4;
+  tx0  = (face_ok[spk] && !ref_line) ? 21 : 4;
   x1   = w - 3;
   maxw = x1 - tx0;
   { int shx = (hit && age < 6) ? SS2_SHAKE[age] : 0;   /* 강조면 좌우로 튄다 */
@@ -1202,7 +1287,7 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
     for(x=0; x<w; x++) fb[by*pitch_px+x] = bc;
   }
   /* 얼굴 */
-  if(face_ok[spk]){
+  if(face_ok[spk] && !ref_line){
     int fx=3, fy=top + (boxh-16)/2, a, b;
     if(hit && age < 6) fx += SS2_SHAKE[age];          /* 얼굴도 같이 흔든다 */
     if(age < 4) fy -= 1;
