@@ -1309,24 +1309,16 @@ static void build_ref_face(void){
   ref_ok = 1;
 }
 
-/* 선택 화면 아이콘(32x32)을 화자 초상으로 쓰는 자리.
-   **지금은 아무도 안 굽는다.** 밑겹(392395+256k)은 깔끔한 배열이라 확실한데,
-   윗겹은 캐릭터마다 **타일 자리가 달라서** 순서대로 얹으면 얼굴이 어긋난다
-   (옆방 조사문: 「정확히 하려면 화면 타일맵이 필요합니다」).
-   쿠로코만 16칸 배치표가 있어서 build_ref_face() 로 따로 굽는다.
-   나머지 14명 배치표가 오면 ICON_PLACE 를 채우고 이 함수를 열면 된다 —
-   주소·팔레트는 ss2comm_icon.h 에 이미 다 들어와 있다. */
-static const signed char ICON_PLACE[SS2COMM_SPK_N] = {0};   /* 1 = 배치표 있음 */
+/* 아이콘 굽기 — 밑겹 16타일을 깔고, 배치표대로 윗겹을 얹는다(색0 은 투명).
+   배치는 추측이 아니라 실기 렌더와 롬을 맞춰 240칸을 전부 풀어낸 것이다. */
 static void build_icons(void){
-  int i, k, ty, tx, nfg;
+  int i, k, ty, tx;
   memset(icon_ok, 0, sizeof icon_ok);
   if(!cm_rom) return;
   for(i=0;i<SS2COMM_SPK_N;i++){
-    unsigned bg = ICON[i].bg, fg = ICON[i].fg;
-    if(!ICON_PLACE[i]) continue;              /* 배치표 없는 캐릭터는 안 굽는다 */
+    unsigned bg = ICON[i].bg;
     if(!bg || bg + 256 > cm_romlen) continue;
-    nfg = ICON[i].fgLen / 16;  if(nfg > 16) nfg = 16;
-    if(fg && fg + (unsigned)nfg*16 > cm_romlen) nfg = 0;
+
     for(k=0;k<16;k++){
       unsigned ob = bg + k*16;
       int ox = (k & 3)*8, oy = (k >> 2)*8;
@@ -1341,9 +1333,10 @@ static void build_icons(void){
         }
       }
     }
-    for(k=0;k<nfg;k++){
-      unsigned of = fg + k*16;
+    for(k=0;k<16;k++){
+      unsigned of = ICON[i].fg[k];
       int ox = (k & 3)*8, oy = (k >> 2)*8;
+      if(!of || of + 16 > cm_romlen) continue;   /* 이 칸은 윗겹이 없다 */
       for(ty=0; ty<8; ty++){
         unsigned wf = cm_rom[of+ty*2] | (cm_rom[of+ty*2+1]<<8);
         for(tx=0; tx<8; tx++){
@@ -1612,7 +1605,9 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
     for(y=b0; y<b1; y++)
       for(x=0; x<w; x++) fb[y*pitch_px+x] = 0x0000;
   }
-  if(band) draw_ref_strip(fb, pitch_px, w, h);   /* 아래 심판 칸은 대사 유무와 무관하게 매 프레임 */
+  /* 초상 굽기가 먼저다. 심판 칸을 먼저 그리면 **첫 프레임에 쿠로코 얼굴이 빈다** */
+  if(!face_built) build_faces();
+  if(band) draw_ref_strip(fb, pitch_px, w, h);   /* 심판 칸은 대사 유무와 무관하게 매 프레임 */
   if(!line || age > CM_TTL) return;            /* 2.5초만 표시 */
 
   end  = line + strlen(line);

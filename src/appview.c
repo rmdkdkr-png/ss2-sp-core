@@ -16,6 +16,8 @@ extern void ss2comm_draw_enable(int); extern void ss2comm_draw(uint16_t*,int,int
 extern int  ss2comm_band_h(void); extern int ss2comm_ref_h(void);
 extern const char *ss2comm_test_ref_take(void);
 extern void ss2comm_test_ref_face(const uint16_t*,const unsigned char*);
+extern void ss2comm_set_rom(const void*, unsigned);
+#include <stdlib.h>
 const char *ss2sp_last_name=0; int ss2sp_last_ok=0;
 #include "/tmp/ktest2.h"
 
@@ -77,7 +79,13 @@ int main(int argc,char**argv){
   dir = argc>1?argv[1]:"/tmp/av";
   ss2comm_set_ram(ram); ss2comm_set_enabled(1); ss2comm_draw_enable(4);
   ss2comm_set_speaker(0); ss2comm_reset(); memset(ram,0,sizeof ram);
-  ss2comm_test_ref_face(KTEST2_PX,KTEST2_A);
+  /* 진짜 롬을 물린다 — 초상이 롬에서 나온다 */
+  { const char *rp = getenv("SS2_ROM");
+    if(rp){ FILE *f=fopen(rp,"rb"); if(f){ static unsigned char *rb; long n;
+      fseek(f,0,SEEK_END); n=ftell(f); fseek(f,0,SEEK_SET);
+      rb=(unsigned char*)malloc(n); fread(rb,1,n,f); fclose(f);
+      ss2comm_set_rom(rb,(unsigned)n); printf("롬 %ld바이트 물림\n", n); } }
+    else ss2comm_test_ref_face(KTEST2_PX,KTEST2_A); }
   printf("band_h=%d ref_h=%d  버퍼 %dx%d\n", ss2comm_band_h(), ss2comm_ref_h(), W, TOT);
 
   ram[BLK1]=16*2; ram[BLK2]=16*3;
@@ -91,6 +99,15 @@ int main(int argc,char**argv){
   hold(60,0xF1,8,128,128);   shot("2판 60프레임 뒤");
   hold(300,0xF1,8,128,0);
   hold(30,0xF1,8,0,0); hold(40,0xF1,0,0,0);  shot("매치 종료 — 승자 호명");
+  /* 화자 15명 초상을 차례로 */
+  for(i=0;i<15;i++){
+    char b[64];
+    ss2comm_reset(); memset(ram,0,sizeof ram);
+    ram[BLK1]=16*2; ram[BLK2]=16*3;
+    ss2comm_set_speaker(i);
+    hold(60,0xF0,2,128,128); hold(90,0xF1,8,128,128); hold(60,0xF1,8,128,100);
+    snprintf(b,sizeof b,"화자 %d", i); shot(b);
+  }
   printf("\n마지막 구호: %s\n", lastref);
   (void)i;
   return 0;
