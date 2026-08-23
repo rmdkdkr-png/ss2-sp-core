@@ -544,6 +544,10 @@ static int say_anec(int ch){
 static int say_weap(int ch){
   int i, n = 0;
   if(ch < 0 || ch >= 15) return 0;
+  /* 화자 목소리로 쓴 줄이 먼저다. 사실은 같아도 느낌이 달라야 한다 —
+     같은 「피 밴 검」이 겐주로에겐 당연하고, 나코루루에겐 무섭고, 유가에겐 취향이다.
+     (예전에는 WEAP[상대] 하나뿐이라 누가 해설하든 같은 문장이 나왔다) */
+  if(WEAPV[cm_spk][ch]) return emits(EV_LORE, WEAPV[cm_spk][ch]);
   for(i = 0; i < SS2COMM_WEAP_N; i++) if(WEAP[ch][i]) n++;
   if(!n) return 0;
   { const char *t = WEAP[ch][weap_at[ch] % n];
@@ -1299,8 +1303,8 @@ static void build_ref_face(void){
         int cf = (wf >> ((7-tx)*2)) & 3;
         int p  = (oy+ty)*32 + (ox+tx);
         if(cf){ ref_px[p] = pal12_to565(KUROKO_PAL_FG[cf]); ref_a[p] = 1; }
-        /* 밑겹의 흰색(색3)은 선택 화면 카드의 **바탕**이다. 띠에 그대로 옮기면
-           검은 띠 위에 흰 사각형이 앉는다. 그건 비우고 쿠로코만 띄운다. */
+        /* 심판만은 흰 바탕을 뺀다(사용자 확정). 15명 초상은 일러라 카드째가 맞지만,
+           쿠로코는 검은 심판 칸에 실루엣으로 앉는 쪽이 어울린다. */
         else if(cb && cb != 3){ ref_px[p] = pal12_to565(KUROKO_PAL_BG[cb]); ref_a[p] = 1; }
         else ref_a[p] = 0;
       }
@@ -1327,8 +1331,9 @@ static void build_icons(void){
         for(tx=0; tx<8; tx++){
           int cb = (wb >> ((7-tx)*2)) & 3;
           int p  = (oy+ty)*32 + (ox+tx);
-          /* 밑겹의 흰색(색3)은 카드 바탕이다. 띠에 그대로 옮기면 흰 사각형이 앉는다. */
-          if(cb && cb != 3){ icon_px[i][p] = pal12_to565(ICON[i].palB[cb]); icon_a[i][p] = 1; }
+          /* 흰 바탕(색3)도 그대로 둔다. 원본 일러가 흰 카드 위에 그려진 그림이라,
+             흰색을 빼면 얼굴 주변이 뻥 뚫려 어색하다(실사용 제보). 카드째 네모로 얹는다. */
+          if(cb){ icon_px[i][p] = pal12_to565(ICON[i].palB[cb]); icon_a[i][p] = 1; }
           else icon_a[i][p] = 0;
         }
       }
