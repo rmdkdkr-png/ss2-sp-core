@@ -57,7 +57,7 @@ enum { CK_ROUND, CK_ROUNDCTX, CK_KO, CK_MV, CK_HIT, CK_TK, CK_DN, CK_DN2, CK_OSP
        CK_LOW, CK_LOW2X, CK_REV, CK_PFT, CK_CBK, CK_QKO, CK_RVG, CK_STK,
        CK_SURV, CK_SURV2, CK_STG, CK_QUOTE, CK_ENDING, CK_RES, CK_RES2, CK_REC,
        CK_VSQ, CK_STORY, CK_SCR0, CK_SCR2, CK_SCR4, CK_SCR6, CK_SELCHAT, CK_MIDLE,
-       CK_FB, CK_IDLE, CK_LONG, CK_MUSE, CK_LORE,
+       CK_FB, CK_IDLE, CK_LONG, CK_MUSE, CK_LORE, CK_REL,
        CK_FLOW, CK_ARC, CK_N };
 
 /* {쿨다운 키, 쿨다운(프레임 · 60fps 기준)} — 브라우저판의 ms 값을 프레임으로 옮긴 것 */
@@ -114,7 +114,9 @@ static const struct { unsigned char key; unsigned short cool; } EVCD[EV_N] = {
   [EV_RECORD     ] = { CK_REC, 360 },
   [EV_WINSCR     ] = { CK_RES, 480 },
   [EV_LOSESCR    ] = { CK_RES, 480 },
-  [EV_REL        ] = { CK_LORE, 300 },
+  /* 관계는 **썰과 열쇠를 나눠 쓰면 안 된다.** 같이 쓰면 매치 시작 직전에 나간
+     썰 한 줄이 관계 대사를 통째로 막는다 (미러전·간다라 대사가 안 나오던 원인). */
+  [EV_REL        ] = { CK_REL,  300 },
   [EV_LORE       ] = { CK_LORE, 300 },
   [EV_FLOWSAME   ] = { CK_FLOW, 720 },
   [EV_FLOWTRADE  ] = { CK_FLOW, 720 },
@@ -715,7 +717,17 @@ const char *ss2comm_frame(void){
         hush_until = cm_f + 600;                 /* 10초간 혼잣말·스토리 사담 금지 */
       }
     }
-    else if(scr==0 && p_mode!=MD_BATTLE) emit(EV_VSQ);
+    else if(scr==0 && p_mode!=MD_BATTLE){
+      /* 문구(VS) 화면 — **대진 소개는 여기가 제 자리다.** 예전에는 전투가 시작되는
+         순간에 심판 구호와 함께 나가서 서로 겹쳤다(제보: 「시작 메시지랑 캐릭터 첫
+         메시지가 겹친다」). 여기로 옮기니 겹치지도 않고, EV_START 60줄이 살아난다. */
+      int me = blk_char(rd(OFF_BLK1)), op = blk_char(rd(OFF_BLK2));
+      if(me>=0 && op>=0){
+        char who[64];
+        snprintf(who,sizeof(who),"%s 대 %s",CHARNAME[me],CHARNAME[op]);
+        if(!emits(EV_START, who)) emit(EV_VSQ);
+      }else if(!emits(EV_START, "한판")) emit(EV_VSQ);
+    }
     else if((scr==0||scr==2) && p_mode==MD_BATTLE && cm_f > hush_until) emit(EV_STORYCHAT);
   }
 
@@ -738,8 +750,13 @@ const char *ss2comm_frame(void){
          「시작 메시지랑 캐릭터 첫 메시지랑 겹친다」.
          그래서 심판이 열고, 해설은 **관계 한 줄**로 받는다. 대진 소개는 심판이 이미 했다. */
       ref_round();
-      /* 2절 — 화자와 상대의 관계 대사 우선, 없으면 캐릭터 설정 한 줄 */
-      rel = (st_oppChar>=0 ? RELLINE[cm_spk][st_oppChar] : 0);
+      /* 2절 — 관계 대사. 순서가 중요하다:
+           같은 캐릭터끼리면 미러 전용 (제보: 「본인이 상대인데도 대사가 좆같음」)
+           상대를 못 알아보면 표 밖 개체 = 간다라 (제보: 「간다라 못 알아보는 유가」)
+           그 밖에는 화자→상대, 없으면 화자→내 편 */
+      if(st_myChar>=0 && st_myChar==st_oppChar) rel = RELSELF[cm_spk];
+      else if(st_oppChar<0)                     rel = RELGAND[cm_spk];
+      else rel = RELLINE[cm_spk][st_oppChar];
       if(!rel && st_myChar>=0) rel = RELLINE[cm_spk][st_myChar];
       if(rel) emits(EV_REL, rel);
       else if(st_oppChar>=0 && LORE[st_oppChar]){
@@ -780,14 +797,28 @@ const char *ss2comm_frame(void){
       else if(scr==6)            emit(EV_CARDSEL);
     }
     if(mode!=MD_BATTLE){
-      if(scr==2){                                 /* 캐릭터 고르는 동안 사담 (한 방문에 3마디) */
-        if(!st_selChatAt) st_selChatAt=cm_f;
-        if(cm_f > hush_until && cm_f-st_selChatAt > 420 && st_selChatN < 3){
-          st_selChatAt=cm_f; st_selChatN++; emit(EV_CHARSELCHAT);
+      /* 메뉴에서 **7초마다** 한 마디. 예전에는 캐릭터 선택(scr 2)만 사담이 있었고
+         나머지 화면은 15초짜리 「고민이 길구나」 하나뿐이었다. 그래서 카드 그림을
+         한참 들여다보는 동안 통째로 조용했다 — 제보: 「카드 고를 때 왜 닥치고 있노」.
+         고르는 화면(2 캐릭터 · 4 검질 · 6 카드)에서는 사담과 **썰**을 번갈아 낸다.
+         카드 그림을 보고 있을 때 제 캐릭터 이야기를 듣는 게 제일 어울린다. */
+      int picking = (scr==2 || scr==4 || scr==6);
+      if(!st_selChatAt) st_selChatAt=cm_f;
+      if(!st_menuAt)    st_menuAt=cm_f;
+      if(picking){
+        if(cm_f > hush_until && cm_f - st_selChatAt > 420){
+          int said;
+          st_selChatAt = cm_f; st_selChatN++;
+          said = (st_selChatN & 1) ? emit(EV_CHARSELCHAT) : 0;
+          if(!said){
+            int me = blk_char(rd(OFF_BLK1));
+            if(!say_anec(me)) emit(EV_CHARSELCHAT);
+          }
         }
+      }else if(cm_f > hush_until && cm_f - st_menuAt > 420){
+        st_menuAt = cm_f;
+        if(!emit(EV_MENUIDLE)) emit(EV_MUSE_M);
       }
-      if(!st_menuAt) st_menuAt=cm_f;
-      if(scr!=2 && cm_f > hush_until && cm_f-st_menuAt > 900){ st_menuAt=cm_f; emit(EV_MENUIDLE); }
     }
     if(hp1>32) st_low1=0;
     if(hp2>32) st_low2=0;
@@ -923,7 +954,10 @@ out:
     if(cm_f > 300 && quiet > anecN && cm_f > hush_until && !st_ko){ /* KO 연출 중엔 잡담 금지 */
       /* 상대 이야기를 한 번 풀고, 다음 차례엔 내 편 이야기. 번갈아 간다. */
       static unsigned char turn;
-      int a1c = st_oppChar, a2c = st_myChar;
+      /* 메뉴에서는 아직 매치가 안 잡혀 st_myChar 가 비어 있다. 램에서 바로 읽는다 —
+         안 그러면 메뉴에선 썰이 한 줄도 안 나가고 「…지루하구나」만 돈다. */
+      int a1c = (mode==MD_BATTLE) ? st_oppChar : blk_char(rd(OFF_BLK2));
+      int a2c = (mode==MD_BATTLE) ? st_myChar  : blk_char(rd(OFF_BLK1));
       int said;
       if(turn & 1){ int t = a1c; a1c = a2c; a2c = t; }
       said = say_anec(a1c) || say_anec(a2c);

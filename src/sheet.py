@@ -18,7 +18,7 @@ def png(path,w,h,rgb):
 src=sys.argv[1]; out=sys.argv[2]
 idx=[int(x) for x in sys.argv[3].split(',')] if len(sys.argv)>3 else None
 files=sorted(f for f in os.listdir(src) if f.endswith('.ppm'))
-if idx is not None: files=[ '%03d.ppm'%i for i in idx ]
+if idx is not None: files=[ '%04d.ppm'%i for i in idx ]
 GAP=4
 W=None; rows=[]
 for f in files:
