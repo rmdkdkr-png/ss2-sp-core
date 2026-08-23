@@ -44,6 +44,7 @@ void ss2comm_set_ram(void *p) { (void)p; }
 
 
 #include "ss2comm_lines.h"
+#include "ss2comm_icon.h"
 
 static const char *CHARNAME[15] = {
   "카즈키","소게츠","하오마루","겐주로","나코루루","리무루루","한조","갈포드",
@@ -776,8 +777,8 @@ const char *ss2comm_frame(void){
            그 밖에는 화자→상대, 없으면 화자→내 편 */
       if(st_myChar>=0 && st_myChar==st_oppChar) rel = RELSELF[cm_spk];
       else if(st_oppChar<0)                     rel = RELGAND[cm_spk];
-      else rel = RELLINE[cm_spk][st_oppChar];
-      if(!rel && st_myChar>=0) rel = RELLINE[cm_spk][st_myChar];
+      else rel = RELOPP[cm_spk][st_oppChar];          /* 225칸 — 빈칸 없음 */
+      if(!rel && st_myChar>=0) rel = RELME[cm_spk][st_myChar];
       if(rel) emits(EV_REL, rel);
       else if(st_oppChar>=0 && LORE[st_oppChar]){
         char t[160];
@@ -788,6 +789,18 @@ const char *ss2comm_frame(void){
       st_roundN++; st_fb=st_longSaid=st_dblLow=0;
       flow_reset(0);                              /* v0.7 라운드 단위 관찰만 */
       ref_round();                                /* 심판이 먼저 판을 연다 */
+      /* 판이 설 때마다 관계를 한 줄씩 돌린다 — 맞은편 → 내 편 → 사람.
+         제보: 「관계를 전혀 안 보여주노, 넘치게 넣어라」.
+         예전에는 매치 진입 한 번뿐이라 한 판에 한 줄이 전부였다. */
+      { static unsigned char rturn;
+        const char *r2 = 0;
+        switch(rturn++ % 3){
+          case 0: if(st_oppChar>=0) r2 = RELOPP[cm_spk][st_oppChar]; break;
+          case 1: if(st_myChar>=0)  r2 = RELME [cm_spk][st_myChar];  break;
+          default:{ int n=0,i2; for(i2=0;i2<SS2COMM_RELYOU_N;i2++) if(RELYOU[cm_spk][i2]) n++;
+                    if(n) r2 = RELYOU[cm_spk][rnd()%(unsigned)n]; } break;
+        }
+        if(r2) emits(EV_REL, r2); }
       if(st_myR==1 && st_opR==1)      emit(EV_MATCHPOINT);
       else if(st_myR==1 && st_opR==0) emit(EV_ROUNDLEAD);
       else if(st_myR==0 && st_opR==1) emit(EV_ROUNDBEHIND);
@@ -982,10 +995,20 @@ out:
       if(turn & 1){ int t = a1c; a1c = a2c; a2c = t; }
       /* 세 번에 한 번은 **혼잣말** 차례로 둔다. 안 그러면 썰이 빈 자리를 전부 먹어
          MUSE 계열 60줄이 통째로 죽는다(시뮬레이터가 「한 번도 안 나옴」으로 잡았다). */
-      said = ((turn % 3) == 2) ? 0 : (say_anec(a1c) || say_anec(a2c));
+      /* 빈 자리 차례: 썰 → 썰 → 관계 → 혼잣말 순으로 돈다.
+         관계가 「매치 시작 한 번」에서 빠져나와 빈 자리에도 들어간다. */
+      said = 0;
+      if((turn % 4) == 2){
+        const char *r3 = 0;
+        if(a1c >= 0)      r3 = RELOPP[cm_spk][a1c];
+        if(!r3 && a2c>=0) r3 = RELME [cm_spk][a2c];
+        if(r3) said = emits(EV_REL, r3);
+      }
+      if(!said && (turn % 4) != 3) said = (say_anec(a1c) || say_anec(a2c));
       if(said) turn++;
       else if(quiet > need)
         { turn++; emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M)); }
+      else if((turn % 4) == 3) turn++;
     }
   }
   /* 묵은 반응은 보여 주지 않고 버린다 — 그 순간이 지난 말은 없는 것만 못하다.
@@ -1234,6 +1257,13 @@ REFSTATIC uint16_t      ref_px[32*32];
 REFSTATIC unsigned char ref_a[32*32];
 REFSTATIC unsigned char ref_ok;
 
+/* 화자 초상을 **32x32 선택화면 아이콘**으로 올린다. HUD 얼굴(16x16)보다 훨씬 잘 보인다.
+   띠 높이가 32라 딱 맞는다. 못 그리면(다른 롬·주소 안 맞음) 예전 16x16 으로 떨어진다. */
+static const ss2icon ICON[SS2COMM_SPK_N] = SS2COMM_ICON_INIT;
+static uint16_t      icon_px[SS2COMM_SPK_N][32*32];
+static unsigned char icon_a[SS2COMM_SPK_N][32*32];
+static unsigned char icon_ok[SS2COMM_SPK_N];
+
 static uint16_t face_px[SS2COMM_SPK_N][256];
 static unsigned char face_a[SS2COMM_SPK_N][256];   /* 0 = 투명(색인 0) */
 static unsigned char face_ok[SS2COMM_SPK_N];
@@ -1279,6 +1309,54 @@ static void build_ref_face(void){
   ref_ok = 1;
 }
 
+/* 선택 화면 아이콘(32x32)을 화자 초상으로 쓰는 자리.
+   **지금은 아무도 안 굽는다.** 밑겹(392395+256k)은 깔끔한 배열이라 확실한데,
+   윗겹은 캐릭터마다 **타일 자리가 달라서** 순서대로 얹으면 얼굴이 어긋난다
+   (옆방 조사문: 「정확히 하려면 화면 타일맵이 필요합니다」).
+   쿠로코만 16칸 배치표가 있어서 build_ref_face() 로 따로 굽는다.
+   나머지 14명 배치표가 오면 ICON_PLACE 를 채우고 이 함수를 열면 된다 —
+   주소·팔레트는 ss2comm_icon.h 에 이미 다 들어와 있다. */
+static const signed char ICON_PLACE[SS2COMM_SPK_N] = {0};   /* 1 = 배치표 있음 */
+static void build_icons(void){
+  int i, k, ty, tx, nfg;
+  memset(icon_ok, 0, sizeof icon_ok);
+  if(!cm_rom) return;
+  for(i=0;i<SS2COMM_SPK_N;i++){
+    unsigned bg = ICON[i].bg, fg = ICON[i].fg;
+    if(!ICON_PLACE[i]) continue;              /* 배치표 없는 캐릭터는 안 굽는다 */
+    if(!bg || bg + 256 > cm_romlen) continue;
+    nfg = ICON[i].fgLen / 16;  if(nfg > 16) nfg = 16;
+    if(fg && fg + (unsigned)nfg*16 > cm_romlen) nfg = 0;
+    for(k=0;k<16;k++){
+      unsigned ob = bg + k*16;
+      int ox = (k & 3)*8, oy = (k >> 2)*8;
+      for(ty=0; ty<8; ty++){
+        unsigned wb = cm_rom[ob+ty*2] | (cm_rom[ob+ty*2+1]<<8);
+        for(tx=0; tx<8; tx++){
+          int cb = (wb >> ((7-tx)*2)) & 3;
+          int p  = (oy+ty)*32 + (ox+tx);
+          /* 밑겹의 흰색(색3)은 카드 바탕이다. 띠에 그대로 옮기면 흰 사각형이 앉는다. */
+          if(cb && cb != 3){ icon_px[i][p] = pal12_to565(ICON[i].palB[cb]); icon_a[i][p] = 1; }
+          else icon_a[i][p] = 0;
+        }
+      }
+    }
+    for(k=0;k<nfg;k++){
+      unsigned of = fg + k*16;
+      int ox = (k & 3)*8, oy = (k >> 2)*8;
+      for(ty=0; ty<8; ty++){
+        unsigned wf = cm_rom[of+ty*2] | (cm_rom[of+ty*2+1]<<8);
+        for(tx=0; tx<8; tx++){
+          int cf = (wf >> ((7-tx)*2)) & 3;
+          int p  = (oy+ty)*32 + (ox+tx);
+          if(cf){ icon_px[i][p] = pal12_to565(ICON[i].palF[cf]); icon_a[i][p] = 1; }
+        }
+      }
+    }
+    icon_ok[i] = 1;
+  }
+}
+
 static void build_faces(void){
   int i, k, ty, tx;
   face_built = 1;
@@ -1305,6 +1383,7 @@ static void build_faces(void){
     face_ok[i] = 1;
   }
   build_ref_face();
+  build_icons();
 }
 /* 표정: 신남이면 밝게, 걱정이면 어둡고 푸르게 */
 static uint16_t tint(uint16_t c, int mood){
@@ -1472,14 +1551,16 @@ static const signed char SS2_SHAKE[6] = { 2, -2, 1, -1, 1, 0 };
 /* 지금 보여 주는 줄이 강조인가 — 진동처럼 그리기 밖에서 쓰려고 열어 둔다 */
 int ss2comm_impact(void){ return (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev] : 0; }
 
-/* ── 심판 칸 (화면 아래 레터박스) ────────────────────────────────
-   해설창은 위, 심판은 아래. 자리를 나누니 서로 밀어낼 일이 없고,
-   구호가 떠 있는 동안에도 위에서는 해설이 제 말을 이어 간다.
-   버퍼는 위 띠(SS2_BAND_H) + 게임(h) + 이 칸(SS2_REF_H) 순으로 쌓여 있다. */
+/* ── 심판 칸 ─────────────────────────────────────────────────────
+   **해설창 바로 아래**에 붙는다. 둘 다 게임 화면 위쪽이다.
+   버퍼는 위에서부터 [해설 SS2_BAND_H][심판 SS2_REF_H][게임 h] 순으로 쌓인다.
+   자리를 나눠 두니 서로 밀어낼 일이 없고, 구호가 떠 있는 동안에도
+   바로 위에서는 해설이 제 말을 이어 간다. */
 static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h){
   const char *seg[BOX_MAXL+1], *t, *end;
   int x, y, top, bot, tx0, x1, maxw, nl, i, lh, ty, show;
-  top = SS2_BAND_H + h;
+  (void)h;
+  top = SS2_BAND_H;                 /* 해설창 바로 아래 */
   bot = top + SS2_REF_H;
   for(y=top; y<bot; y++) for(x=0; x<w; x++) fb[y*pitch_px+x] = 0x0000;
   if(!ref_has && !ref_shown) return;
@@ -1542,7 +1623,7 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   if(!face_built) build_faces();
   show = 2 + (int)age*2;                       /* 타자 연출: 프레임당 두 글자 */
 
-  tx0  = face_ok[spk] ? 21 : 4;
+  tx0  = icon_ok[spk] ? 37 : (face_ok[spk] ? 21 : 4);
   x1   = w - 3;
   /* 글자 상자는 12px 인데 자간(adv11)은 8px 다. 그래서 마지막 글자는 자기 자간보다
      **4px 더 오른쪽까지 그린다.** 폭을 자간으로만 재서 딱 맞추면 그 4px 이 잘려
@@ -1587,8 +1668,18 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
     int by = (cm_draw==2 || cm_draw==4) ? (bot-1) : top;
     for(x=0; x<w; x++) fb[by*pitch_px+x] = bc;
   }
-  /* 얼굴 */
-  if(face_ok[spk]){
+  /* 얼굴 — 32x32 아이콘이 구워졌으면 그걸, 아니면 예전 16x16 */
+  if(icon_ok[spk]){
+    int fx=2, fy=top, a, b;
+    if(hit && age < 6) fx += SS2_SHAKE[age];
+    for(b=0;b<32;b++) for(a=0;a<32;a++){
+      int px=fx+a, py=fy+b;
+      if(!icon_a[spk][b*32+a]) continue;
+      if(px<0||px>=w||py<top||py>=bot) continue;
+      fb[py*pitch_px+px] = tint(icon_px[spk][b*32+a], mood);
+    }
+  }
+  else if(face_ok[spk]){
     int fx=3, fy=top + (boxh-16)/2, a, b;
     if(hit && age < 6) fx += SS2_SHAKE[age];          /* 얼굴도 같이 흔든다 */
     if(age < 4) fy -= 1;
