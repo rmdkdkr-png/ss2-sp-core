@@ -83,13 +83,15 @@ int main(void){
         int prev = 0, gap, big = 0;
         for(i = 0; i < said_n; i++){
             gap = said_at[i] - prev;
-            if(gap >= 180) { printf("  %6.1fs  ── 조용 %4.1f초 ──\n", prev/60.0, gap/60.0); big++; }
+            if(gap >= 420) { printf("  %6.1fs  ── 조용 %4.1f초 ──\n", prev/60.0, gap/60.0); big++; }
             printf("  %6.1fs  %s\n", said_at[i]/60.0, said_tx[i]);
             prev = said_at[i];
         }
         gap = frame - prev;
-        if(gap >= 180){ printf("  %6.1fs  ── 조용 %4.1f초 ──\n", prev/60.0, gap/60.0); big++; }
-        printf("\n3초 이상 빈 자리 %d군데\n", big);
+        if(gap >= 420){ printf("  %6.1fs  ── 조용 %4.1f초 ──\n", prev/60.0, gap/60.0); big++; }
+        /* 4.5초는 **일부러 둔 최소 간격**이다(GAP_BATTLE). 그건 침묵이 아니다.
+           진짜 빈 자리는 그보다 확실히 긴 7초 이상을 센다. */
+        printf("\n7초 이상 빈 자리 %d군데\n", big);
         printf("말한 비율: %d줄 / %.0f초 = %.1f초에 한 줄\n",
                said_n, frame/60.0, said_n ? (frame/60.0)/said_n : 0.0);
     }

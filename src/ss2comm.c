@@ -398,6 +398,61 @@ static void duo_after(int ev){
   q[slot].at  = cm_f;
 }
 
+/* ── 조사 보정 ────────────────────────────────────────────────────
+   대사표에는 「%s로 눕혔군」처럼 조사가 **박혀** 있다. 생성기가 받침 없는
+   가짜 이름으로 훑어서 「로」가 굳은 것이다. 그러면 「부동격로」가 된다.
+   그래서 이름을 끼워 넣을 때 뒤따르는 조사를 마지막 글자 받침에 맞춰 고친다.
+   실행기(index.html)의 RO()/은는/이가 처리와 같은 규칙이다. */
+static int kr_batchim(const char *s){
+  /* 문자열 마지막 한글 음절의 종성 유무. 한글이 아니면 -1 */
+  const unsigned char *p = (const unsigned char*)s;
+  int last = -1;
+  while(*p){
+    if((p[0] & 0xF0) == 0xE0 && p[1] && p[2]){
+      unsigned cp = ((p[0]&0x0F)<<12) | ((p[1]&0x3F)<<6) | (p[2]&0x3F);
+      if(cp >= 0xAC00 && cp <= 0xD7A3) last = (int)((cp - 0xAC00) % 28);
+      else last = -1;
+      p += 3;
+    }else if((p[0] & 0xE0) == 0xC0 && p[1]){ last = -1; p += 2; }
+    else if((p[0] & 0xF8) == 0xF0 && p[1] && p[2] && p[3]){ last = -1; p += 4; }
+    else { last = -1; p += 1; }
+  }
+  return last;   /* -1 한글 아님 / 0 받침 없음 / 8 = ㄹ / 그 밖 받침 있음 */
+}
+/* 조사 한 쌍. 앞이 「받침 없을 때」, 뒤가 「받침 있을 때」 */
+static const char *const JOSA[][2] = {
+  {"로","으로"},{"가","이"},{"를","을"},{"는","은"},{"와","과"},{"야","아"},{0,0}
+};
+/* fmt 안의 %s 를 who 로 바꾸되, 바로 뒤 조사를 받침에 맞춰 고쳐 쓴다 */
+static void fill_name(char *out, size_t cap, const char *fmt, const char *who){
+  const char *ph = strstr(fmt, "%s");
+  size_t pre;
+  int b, i;
+  if(!ph || !who || !*who){ snprintf(out, cap, fmt, who ? who : ""); return; }
+  pre = (size_t)(ph - fmt);
+  if(pre >= cap) pre = cap - 1;
+  memcpy(out, fmt, pre); out[pre] = 0;
+  strncat(out, who, cap - strlen(out) - 1);
+  b = kr_batchim(who);
+  ph += 2;                                    /* %s 를 지나 */
+  if(b >= 0){
+    for(i = 0; JOSA[i][0]; i++){
+      size_t l0 = strlen(JOSA[i][0]), l1 = strlen(JOSA[i][1]);
+      /* 표에 박힌 쪽이 「받침 없음」형이든 「받침 있음」형이든 둘 다 받는다 */
+      const char *hit = 0;
+      if(!strncmp(ph, JOSA[i][0], l0)) { hit = ph + l0; }
+      else if(!strncmp(ph, JOSA[i][1], l1)) { hit = ph + l1; }
+      if(!hit) continue;
+      /* 「로」는 ㄹ 받침(8)도 받침 없음 취급 */
+      { int noB = (b == 0) || (i == 0 && b == 8);
+        strncat(out, JOSA[i][noB ? 0 : 1], cap - strlen(out) - 1); }
+      ph = hit;
+      break;
+    }
+  }
+  strncat(out, ph, cap - strlen(out) - 1);
+}
+
 static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   const char *cand[EVMAXV]; int n=0, i, key;
   const char *fmt;
@@ -408,7 +463,7 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   if(!n) return 0;
   if(vsel >= 0) fmt = cand[vsel < n ? vsel : n-1];
   else          fmt = cand[rnd()%(unsigned)n];
-  if(strstr(fmt,"%s"))                 snprintf(outbuf,sizeof(outbuf),fmt,who?who:"");
+  if(strstr(fmt,"%s"))                 fill_name(outbuf,sizeof(outbuf),fmt,who);
   else if(strstr(fmt,"%d")){
     const char *p = strstr(fmt,"%d");
     if(strstr(p+2,"%d"))               snprintf(outbuf,sizeof(outbuf),fmt,n1,n2);
@@ -517,6 +572,16 @@ const char *ss2comm_current(int *age){
   return curline[0] ? curline : 0;
 }
 
+/* 검사용 — 아무 문장이나 띠에 올려서 **그림으로** 확인한다.
+   글꼴에 없는 글자·잘림·줄바꿈은 표를 들여다봐서는 안 보이고 그려 봐야 보인다.
+   배포 빌드에는 안 들어간다 (bandshot.c 만 이 매크로를 켠다). */
+#ifdef SS2COMM_TEST
+void ss2comm_test_say(const char *t, int spk){
+  snprintf(curline, sizeof curline, "%s", t);
+  cur_ev = -1; cur_spk = spk; cur_f = cm_f; last_line_f = cm_f;
+}
+#endif
+
 /* 블록값 → 캐릭터 번호. 0x98 은 쿠로코 수라와 샤를로트 나찰이 겹치는데,
    브라우저판과 같이 샤를로트로 해석한다(실기 제보 반영). */
 /* 캐릭터 바이트는 (번호<<4 | 유파<<3) 꼴이라 **하위 3비트가 반드시 0**이다.
@@ -528,8 +593,15 @@ static int blk_char(int blk){
   int c;
   if(blk < 0 || (blk & 7)) return -1;   /* 실행기와 같은 유효성 검사 */
   c = blk >> 4;
-  return (c >= 0 && c < 15) ? c : -1;
+  if(c < 0 || c >= 15) return -1;
+  /* 표에 없는 개체(중간보스 간다라 등)는 **-1 로 떨어뜨려 침묵**시킨다.
+     예전에는 위 4비트만 우연히 범위에 들면 겐주로 등으로 **오인**해서
+     엉뚱한 관계 대사가 나갔다. 실사용 제보: 「간다라 못 알아보는 유가」. */
+  return c;
 }
+/* 간다라는 로스터 밖 중간보스다. 해설자 15명에도 없다.
+   따로 알아보게 해 둔다 — 유가만 제 물건이라 아는 척을 한다. */
+#define SS2_CHAR_GANDHARA 15
 
 /* 필살기 이름 — SP 엔진이 방금 낸 기술만 안다(손 커맨드는 이름 없음).
    기술표는 코어에 내장이라 롬 버전과 무관하다. */
@@ -621,12 +693,12 @@ const char *ss2comm_frame(void){
       flow_reset(1);                              /* v0.7 관전 기억 — 매치 통째로 */
       st_myChar  = blk_char(rd(OFF_BLK1));
       st_oppChar = blk_char(rd(OFF_BLK2));
-      if(st_myChar>=0 && st_oppChar>=0){
-        char who[64];
-        snprintf(who,sizeof(who),"%s 대 %s",CHARNAME[st_myChar],CHARNAME[st_oppChar]);
-        emits(EV_START, who);
-      }else emits(EV_START, "한판");
-      ref_round();                                /* 첫 판 구호 — 이게 빠져 있었다 */
+      /* 판을 여는 건 **심판 하나**다. 예전에는 여기서 심판 구호 + EV_START(「하오마루 대
+         겐주로…」) + 관계 대사가 한꺼번에 몰려, 두 칸짜리 대기열이 막히면서
+         **흐름 대사가 통째로 버려졌다**(test_flow 6개 실패). 제보도 같았다 —
+         「시작 메시지랑 캐릭터 첫 메시지랑 겹친다」.
+         그래서 심판이 열고, 해설은 **관계 한 줄**로 받는다. 대진 소개는 심판이 이미 했다. */
+      ref_round();
       /* 2절 — 화자와 상대의 관계 대사 우선, 없으면 캐릭터 설정 한 줄 */
       rel = (st_oppChar>=0 ? RELLINE[cm_spk][st_oppChar] : 0);
       if(!rel && st_myChar>=0) rel = RELLINE[cm_spk][st_myChar];
@@ -801,7 +873,10 @@ out:
     /* 전투 15초 / 그 밖 5초. 예전에는 6초·3초였는데, 말할 기회를 4.5초로 조이고 나니
        그 기준이면 늘어난 침묵을 혼잣말이 전부 차지해 흐름 대사가 벽에 막혔다.
        잡담은 진짜로 오래 빌 때만 나와야 한다. */
-    unsigned need  = (mode==MD_BATTLE) ? 900 : 300;
+    /* 전투 8초 / 그 밖 5초. 예전에 6초였던 것을 15초로 올려 놨더니
+       「중간에 빌 때는 닥치고 있으니 아깝다」가 됐다. 8초로 되돌린다 —
+       말할 기회 자체는 4.5초 간격 규칙이 막고 있어서 수다스러워지지 않는다. */
+    unsigned need  = (mode==MD_BATTLE) ? 480 : 300;
     if(cm_f > 300 && quiet > need && cm_f > hush_until && !st_ko)   /* KO 연출 중엔 잡담 금지 */
       emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M));
   }
@@ -815,14 +890,16 @@ out:
   }
 
   /* 심판 구호가 먼저 나간다. 해설 대기열은 건드리지 않으므로 바로 뒤에 총평이 붙는다. */
-  if(ref_has && cm_f >= q_next){
+  /* 심판은 **제 차선**이다. 해설 간격(4.5초)을 같이 기다리면 판이 이미 시작된 뒤에
+     「첫 판 —」이 뜬다. 실사용 제보: 「늦고 밀린다」. 그래서 게이트를 안 본다. */
+  if(ref_has){
     if(cm_f - ref_at > Q_STALE_BIG){ ref_has = 0; }
     else{
       ref_has = 0;
       snprintf(curline, sizeof curline, "%s", ref_text);
       cur_ev = -3; cur_spk = SS2_SPK_REF; cur_f = cm_f; last_line_f = cm_f;
       mark_said(curline);
-      q_next = cm_f + GAP_OTHER;
+      q_next = cm_f + 150;     /* 2.5초 — 구호를 읽을 틈은 주되, 뒤 대사를 굶기지 않는다 */
       return curline;
     }
   }
