@@ -16,7 +16,6 @@ extern void        ss2comm_set_enabled(int on);
 extern void        ss2comm_set_speaker(int idx);
 extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
-extern void        ss2comm_set_duo(int on);
 extern void        ss2comm_draw_enable(int mode);
 extern void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h);
 extern const char *ss2comm_current(int *age);
@@ -114,7 +113,7 @@ static void match(int spk,int me,int opp,const char *tag){
 int main(int argc,char**argv){
     int i;
     outdir = argc>1?argv[1]:"/tmp/shots";
-    ss2comm_set_ram(ram); ss2comm_set_enabled(1); ss2comm_set_duo(0);
+    ss2comm_set_ram(ram); ss2comm_set_enabled(1); 
     ss2comm_draw_enable(4);              /* 4 = 화면 위 띠 (앱과 같은 모드) */
     ss2comm_reset();
 

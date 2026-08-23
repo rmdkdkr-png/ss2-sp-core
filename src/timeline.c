@@ -14,7 +14,6 @@ extern void        ss2comm_set_enabled(int on);
 extern void        ss2comm_set_speaker(int idx);
 extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
-extern void        ss2comm_set_duo(int on);
 
 const char *ss2sp_last_name = 0;
 int         ss2sp_last_ok   = 0;
@@ -53,7 +52,7 @@ static void hit(int scr,int *hp1,int *hp2,int who,int dmg){
 
 int main(void){
     int hp1=128, hp2=128, i, r;
-    ss2comm_set_ram(ram); ss2comm_set_enabled(1); ss2comm_set_speaker(0); ss2comm_set_duo(1);
+    ss2comm_set_ram(ram); ss2comm_set_enabled(1); ss2comm_set_speaker(0);
     ss2comm_reset(); memset(ram,0,sizeof ram);
     ram[BLK1]=8*(2*2+0);   /* 하오마루 */
     ram[BLK2]=8*(2*3+0);   /* 겐주로 */

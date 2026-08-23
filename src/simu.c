@@ -20,7 +20,6 @@ extern void        ss2comm_set_enabled(int on);
 extern void        ss2comm_set_speaker(int idx);
 extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
-extern void        ss2comm_set_duo(int on);
 extern void        ss2comm_draw_enable(int mode);
 extern void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h);
 
@@ -81,6 +80,12 @@ static void set(int mode,int scr,int hp1,int hp2){ ram[MODE]=mode; ram[SCR]=scr;
 static void run(int n){ while(n-- > 0) tick(); }
 static void hold(int n,int mode,int scr,int hp1,int hp2){ set(mode,scr,hp1,hp2); w16(ACT1,8); w16(ACT2,8); run(n); }
 static void act1(int v,int n){ w16(ACT1,v); run(n); w16(ACT1,8); }
+/* hold() 는 동작값을 8 로 되돌린다. 다운처럼 **값을 유지한 채** 시간을 보내야 하는
+   상황에는 이걸 쓴다 — 안 그러면 다운이 한 프레임 만에 지워져 「안 나온다」로 보인다. */
+static void hold_a(int n,int mode,int scr,int hp1,int hp2,int va1,int va2){
+  set(mode,scr,hp1,hp2); w16(ACT1,va1); w16(ACT2,va2);
+  while(n-- > 0){ w16(ACT1,va1); w16(ACT2,va2); tick(); }
+}
 static void act2(int v,int n){ w16(ACT2,v); run(n); w16(ACT2,8); }
 static void dmg2(int *h2,int d){ *h2 -= d; if(*h2<0) *h2=0; ram[HP2]=*h2; act1(0x200,1); run(1); }
 static void dmg1(int *h1,int d){ *h1 -= d; if(*h1<0) *h1=0; ram[HP1]=*h1; act2(0x200,1); run(1); }
@@ -97,7 +102,7 @@ static void enter(void){ hold(60,0xF0,2,128,128); hold(90,0xF1,8,128,128); }
 int main(int argc,char**argv){
     int h1,h2,i,s;
     dir_out = argc>1?argv[1]:"/tmp/sim";
-    ss2comm_set_ram(ram); ss2comm_set_enabled(1); ss2comm_set_duo(0);
+    ss2comm_set_ram(ram); ss2comm_set_enabled(1); 
     ss2comm_draw_enable(4); ss2comm_reset();
     printf("no\t시나리오\t프레임\t대사\n");
 
@@ -177,6 +182,44 @@ int main(int argc,char**argv){
       hold(60,0xF0,1,128,128);
       hold(120,0xF1,8,128,128); hold(300,0xF1,8,128,0);    /* 3판 */
       hold(30,0xF1,8,0,0); hold(300,0xF1,0,0,0);
+    /* ── 아직 한 번도 안 나온다고 찍힌 것들을 겨냥한 시나리오 ── */
+    begin("다운 주고받기",0,2,3); enter(); h1=h2=128;
+      hold(120,0xF1,8,h1,h2);
+      dmg2(&h2,14); hold_a(150,0xF1,8,h1,h2,8,0x013C); hold(120,0xF1,8,h1,h2);
+      dmg1(&h1,14); hold_a(150,0xF1,8,h1,h2,0x013C,8); hold(120,0xF1,8,h1,h2);
+    begin("기술로 눕힘",0,2,3); enter(); h1=h2=128;
+      mv("앵화참"); act1(0x210,2); hold(6,0xF1,8,h1,h2);
+      hold_a(200,0xF1,8,h1,h2,8,0x013C);
+    /* 맞은 직후의 다운은 MOVEHIT 이 이미 말했으므로 침묵한다(st_hitAt +42프레임).
+       **한참 뒤에 넘어지는** 경우라야 EV_DOWN 이 나온다 — 그 자리를 따로 만든다. */
+    begin("한참 뒤 눕힘",0,2,3); enter(); h1=h2=128;
+      dmg2(&h2,14); hold(180,0xF1,8,h1,h2); hold_a(150,0xF1,8,h1,h2,8,0x013C);
+    begin("한참 뒤 내가 눕음",0,2,3); enter(); h1=h2=128;
+      dmg1(&h1,14); hold(180,0xF1,8,h1,h2); hold_a(150,0xF1,8,h1,h2,0x013C,8);
+    begin("이름 없이 눕힘",0,2,3); enter(); h1=h2=128;
+      hold(120,0xF1,8,h1,h2); dmg2(&h2,16); hold(60,0xF1,8,h1,h2);
+      hold_a(200,0xF1,8,h1,h2,8,0x013C);
+    begin("약타 적중",0,2,3); enter(); h1=h2=128;
+      mv("광양인"); act1(0x210,2); hold(6,0xF1,8,h1,h2); dmg2(&h2,4); hold(200,0xF1,8,h1,h2);
+    begin("역전 패",0,2,3); enter(); hold(200,0xF1,8,128,7); hold(400,0xF1,8,0,7);
+    begin("두 판 내리 짐",0,2,3); enter();
+      hold(120,0xF1,8,128,128); hold(300,0xF1,8,0,128); hold(60,0xF0,1,128,128);
+      hold(120,0xF1,8,128,128); hold(300,0xF1,8,0,128);
+      hold(30,0xF1,8,0,0); hold(300,0xF1,0,0,0);
+    begin("먼저 따고 뒤집힘",0,2,3); enter();
+      hold(120,0xF1,8,128,128); hold(300,0xF1,8,128,0); hold(60,0xF0,1,128,128);
+      hold(120,0xF1,8,128,128); hold(300,0xF1,8,0,128); hold(60,0xF0,1,128,128);
+      hold(120,0xF1,8,128,128); hold(300,0xF1,8,0,128);
+      hold(30,0xF1,8,0,0); hold(300,0xF1,0,0,0);
+    begin("밀리다 뒤집음",0,2,3); enter();
+      hold(120,0xF1,8,128,128); hold(300,0xF1,8,0,128); hold(60,0xF0,1,128,128);
+      hold(120,0xF1,8,128,128); hold(300,0xF1,8,128,0); hold(60,0xF0,1,128,128);
+      hold(120,0xF1,8,128,128); hold(300,0xF1,8,128,0);
+      hold(30,0xF1,8,0,0); hold(300,0xF1,0,0,0);
+    begin("서바이벌 끝",0,2,3); ram[SURV]=9; enter(); hold(120,0xF1,8,128,128);
+      ram[SURV]=0; hold(300,0xF1,8,0,128); hold(30,0xF1,8,0,0); hold(300,0xF1,0,0,0);
+    begin("엔딩",0,2,3); begin("엔딩",0,2,3); hold(120,0xF0,1,128,128); hold(400,0xC7,1,128,128);
+    begin("긴 판",0,2,3); enter(); hold(3600,0xF1,8,64,64);
     /* 화자를 바꿔 가며 한 판씩 — 목소리가 다른지 */
     for(s=0;s<15;s++){
         char tag[32]; snprintf(tag,sizeof tag,"화자%02d",s);

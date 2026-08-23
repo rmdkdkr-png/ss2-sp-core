@@ -44,7 +44,6 @@ void ss2comm_set_ram(void *p) { (void)p; }
 
 
 #include "ss2comm_lines.h"
-#include "ss2comm_duo.h"
 
 static const char *CHARNAME[15] = {
   "카즈키","소게츠","하오마루","겐주로","나코루루","리무루루","한조","갈포드",
@@ -171,8 +170,6 @@ static char  curline[160];
 static unsigned cur_f = 0;
 static int cur_ev = -1;
 static int cur_spk = 0;            /* 지금 줄을 말한 사람 — 짝꿍이 받으면 여기가 바뀐다 */
-static int cm_duo = 1;             /* 짝꿍 켬/끔 */
-static unsigned duo_at, duo_big_at;/* 시계 둘 — 잔반응 6초 · 승부 순간 2초 */
 static unsigned rng = 2463534242u;
 
 /* 발화 대기열.
@@ -201,6 +198,7 @@ static unsigned q_next;
 
 /* 심판 전용 칸 — 해설 대기열과 따로 선다 */
 static unsigned char anec_at[15], weap_at[15];  /* 썰·무기 소회를 어디까지 풀었나 */
+static unsigned ref_next;                       /* 심판끼리의 최소 간격 */
 static char     ref_text[160];
 static unsigned ref_at;
 static int      ref_has;
@@ -238,6 +236,22 @@ static void mark_said(const char *s){
      2  판을 가르는 순간 — KO·역전·총평
      1  흐름·기록
      0  잔반응        — 맞았다/때렸다. 없어도 아쉽지 않다 */
+/* 우선도만으로는 안 갈린다. 축이 하나 더 필요하다 —
+   **지금 아니면 의미 없는 말**(KO·총평·결과·흐름)과 **나중에 해도 되는 말**(관계·썰·사담).
+   관계·썰은 빈 자리·메뉴·라운드마다 나갈 데가 많지만, KO 반응은 그 순간을 놓치면
+   없는 것만 못하다. 그래서 자리가 없을 때는 **두어도 되는 말부터 밀어낸다.**
+   (증상: 매치 시작에 들어온 관계 대사 둘이 두 칸을 차지한 채 심판이 게이트를 잡고
+    있는 동안, 그 뒤 KO·퍼펙트·총평·결과가 통째로 버려졌다) */
+static int ev_keep(int ev){
+  switch(ev){
+    case EV_REL: case EV_LORE: case EV_CHARSELCHAT: case EV_START:
+    case EV_VSQ: case EV_STORYCHAT: case EV_MENUIDLE:
+    case EV_MUSE_B: case EV_MUSE_Q: case EV_MUSE_M: case EV_IDLE:
+      return 0;                 /* 두어도 되는 말 */
+    default:
+      return 1;                 /* 지금 아니면 의미 없는 말 */
+  }
+}
 static unsigned char ev_prio(int ev){
   if(ev == -3) return 3;    /* 심판 구호 — 무엇보다 먼저 */
   if(ev == -2) return 0;    /* 짝꿍이 받는 말 — 있으면 좋고 없어도 그만 */
@@ -275,7 +289,6 @@ static void speaker_switched(void){
   curline[0] = 0; cur_ev = -1; cur_f = cm_f;
   cur_spk = cm_spk;
   q_head = q_cnt = 0; q_next = 0; ref_has = 0;
-  duo_at = duo_big_at = 0;
 }
 void ss2comm_set_speaker(int idx){
   if(idx < 0 || idx >= SS2COMM_SPK_N || idx == cm_spk) return;
@@ -289,7 +302,8 @@ const char *ss2comm_speaker_name(int idx){
   return (idx>=0 && idx<SS2COMM_SPK_N) ? SPK_NAME[idx] : "";
 }
 int ss2comm_get_speaker(void){ return cm_spk; }
-void ss2comm_set_duo(int on){ cm_duo = on ? 1 : 0; }
+/* 짝꿍(두 명이 주고받기)은 폐기했다. 옛 호출부가 남아 있어도 조용히 무시한다. */
+void ss2comm_set_duo(int on){ (void)on; }
 /* 다음 해설자로 넘기고 그 사람 번호를 돌려준다. 인사 한마디는 프런트엔드가 띄운다. */
 int ss2comm_next_speaker(int step){
   int n = SS2COMM_SPK_N;
@@ -307,9 +321,10 @@ void ss2comm_reset(void){
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
+  ref_next=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
-  curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk; duo_at=duo_big_at=0;
+  curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk;
   last_line_f=0; last_input_f=0; hush_until=0;
   pend_name=0; pend_sup=0; pend_left=0;
   { int k; fl_hit=fl_tak=fl_alt=fl_lastBy=fl_oppSp=0; fl_said=0; fl_nr=0; fl_rounds[0]=0;
@@ -325,22 +340,6 @@ void ss2comm_reset(void){
    한 명이 혼자 떠들면 심심하다. 받는 말은 길면 안 된다 — 한 호흡이어야 주고받는 맛이 난다.
    잔반응과 승부 순간은 **시계를 따로** 쓴다. 하나로 두면 시작 멘트에 한 번 받아친 것 때문에
    정작 KO 를 못 받는다(브라우저판에서 실제로 그랬다). */
-static int duo_cat(int ev){
-  switch(ev){
-    case EV_KO: case EV_MOVEKO: case EV_KOED: case EV_DKO:
-    case EV_PERFECT: case EV_QUICK:                       return DC_KO;
-    case EV_MOVE:                                         return DC_SUP;
-    case EV_LOW1: case EV_LOW2: case EV_DOUBLELOW:
-    case EV_MATCHPOINT:                                   return DC_CRISIS;
-    case EV_REVERSAL: case EV_COMEBACK:                   return DC_TURN;
-    case EV_ARCSWEEP: case EV_ARCSWEPT: case EV_ARCCOMEBACK:
-    case EV_ARCSWEAT: case EV_ARCCHOKE: case EV_ARCSLIP:  return DC_ARC;
-    case EV_FLOWSAME: case EV_FLOWTRADE: case EV_FLOWONE:
-    case EV_FLOWCHASE: case EV_FLOWSP:                    return DC_FLOW;
-    case EV_START:                                        return DC_START;
-    default:                                              return -1;
-  }
-}
 
 /* ── 심판 (쿠로코) ─────────────────────────────────────────────
    해설자와 **별개 목소리**다. 누구를 해설자로 골라도 심판은 늘 거기 있다 —
@@ -381,26 +380,6 @@ static void ref_say(const char *text){
 static void ref_round(void){ int rn = st_myR + st_opR; if(rn > 2) rn = 2; ref_say(REF_ROUND[rn]); }
 
 
-static void duo_after(int ev){
-  const char *cand[DUOMAXV];
-  int cat, p, n = 0, i, big, slot;
-  if(!cm_duo) return;
-  cat = duo_cat(ev);            if(cat < 0) return;
-  p   = DUO_PAIR_C[cm_spk];     if(p < 0)   return;   /* 받아칠 표가 없는 짝 — 조용히 */
-  big = (cat == DC_KO || cat == DC_ARC);
-  if(cm_f < (big ? duo_big_at : duo_at)) return;
-  for(i = 0; i < DUOMAXV; i++) if(DUOLINE[p][cat][i]) cand[n++] = DUOLINE[p][cat][i];
-  if(!n) return;
-  if(big) duo_big_at = cm_f + 120; else duo_at = cm_f + 360;
-  { const char *pickd = cand[rnd()%(unsigned)n];
-    if(said_recently(pickd)) return;
-    if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
-    else { slot = q_head; q_head = (q_head+1)%QN; }
-    snprintf(q[slot].text, sizeof(q[slot].text), "%s", pickd); }
-  q[slot].ev  = -2;             /* 받는 말: 표정·강조 없이 담담하게, 자리 다툼에선 가장 뒤 */
-  q[slot].spk = (short)p;
-  q[slot].at  = cm_f;
-}
 
 /* ── 조사 보정 ────────────────────────────────────────────────────
    대사표에는 「%s로 눕혔군」처럼 조사가 **박혀** 있다. 생성기가 받침 없는
@@ -479,15 +458,26 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   { int slot;
     if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
     else {
-      /* 꽉 찼다 — 등급이 제일 낮은 것을 밀어낸다. 같은 등급이면 묵은 쪽. */
-      int i, worst = q_head;
-      for(i = 1; i < q_cnt; i++){
-        int c = (q_head + i) % QN;
-        if(ev_prio(q[c].ev) < ev_prio(q[worst].ev)) worst = c;
+      /* 꽉 찼다. **지금 아니면 의미 없는 말이 들어오면, 두어도 되는 말부터 밀어낸다.**
+         그 안에서는 등급이 낮은 쪽, 같으면 묵은 쪽. */
+      int i, worst = -1;
+      if(ev_keep(ev)){
+        for(i = 0; i < q_cnt; i++){
+          int c = (q_head + i) % QN;
+          if(ev_keep(q[c].ev)) continue;
+          if(worst < 0 || ev_prio(q[c].ev) < ev_prio(q[worst].ev)) worst = c;
+        }
       }
-      /* 새것이 **더 하찮을 때만** 버린다. 같은 등급이면 새것이 이긴다 —
-         한꺼번에 몰려올 때 먼저 온 둘만 남으면, 마지막에 오는 총평이 늘 밀린다. */
-      if(ev_prio(q[worst].ev) > ev_prio(ev)) return 0;
+      if(worst < 0){
+        worst = q_head;
+        for(i = 1; i < q_cnt; i++){
+          int c = (q_head + i) % QN;
+          if(ev_prio(q[c].ev) < ev_prio(q[worst].ev)) worst = c;
+        }
+        /* 새것이 **더 하찮을 때만** 버린다. 같은 등급이면 새것이 이긴다 —
+           한꺼번에 몰려올 때 먼저 온 둘만 남으면, 마지막에 오는 총평이 늘 밀린다. */
+        if(ev_prio(q[worst].ev) > ev_prio(ev)) return 0;
+      }
       slot = worst;
     }
     snprintf(q[slot].text,sizeof(q[slot].text),"%s",outbuf);
@@ -495,7 +485,6 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
     q[slot].ev = (short)ev;
     q[slot].spk = (short)cm_spk;
   }
-  duo_after(ev);
   return 1;
 }
 static int emit(int ev){ return emit_ex(ev,-1,0,0,0); }
@@ -960,10 +949,12 @@ out:
       int a2c = (mode==MD_BATTLE) ? st_myChar  : blk_char(rd(OFF_BLK1));
       int said;
       if(turn & 1){ int t = a1c; a1c = a2c; a2c = t; }
-      said = say_anec(a1c) || say_anec(a2c);
+      /* 세 번에 한 번은 **혼잣말** 차례로 둔다. 안 그러면 썰이 빈 자리를 전부 먹어
+         MUSE 계열 60줄이 통째로 죽는다(시뮬레이터가 「한 번도 안 나옴」으로 잡았다). */
+      said = ((turn % 3) == 2) ? 0 : (say_anec(a1c) || say_anec(a2c));
       if(said) turn++;
       else if(quiet > need)
-        emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M));
+        { turn++; emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M)); }
     }
   }
   /* 묵은 반응은 보여 주지 않고 버린다 — 그 순간이 지난 말은 없는 것만 못하다.
@@ -977,15 +968,19 @@ out:
 
   /* 심판 구호가 먼저 나간다. 해설 대기열은 건드리지 않으므로 바로 뒤에 총평이 붙는다. */
   /* 심판은 **제 차선**이다. 해설 간격(4.5초)을 같이 기다리면 판이 이미 시작된 뒤에
-     「첫 판 —」이 뜬다. 실사용 제보: 「늦고 밀린다」. 그래서 게이트를 안 본다. */
-  if(ref_has){
+     「첫 판 —」이 뜬다(제보: 「늦고 밀린다」). 그래서 해설 게이트는 안 본다.
+     다만 **제 간격은 지킨다.** 안 그러면 판이 몰릴 때 심판이 연달아 네 번 떠들면서
+     KO·총평을 통째로 굶긴다. 몰린 구호는 ref_text 가 덮어써서 **최신 것 하나로 합쳐진다** —
+     세 판이 순식간에 지나가면 「셋째 판」만 나오는 게 맞다. */
+  if(ref_has && cm_f >= ref_next){
     if(cm_f - ref_at > Q_STALE_BIG){ ref_has = 0; }
     else{
       ref_has = 0;
       snprintf(curline, sizeof curline, "%s", ref_text);
       cur_ev = -3; cur_spk = SS2_SPK_REF; cur_f = cm_f; last_line_f = cm_f;
       mark_said(curline);
-      q_next = cm_f + 150;     /* 2.5초 — 구호를 읽을 틈은 주되, 뒤 대사를 굶기지 않는다 */
+      q_next   = cm_f + 150;   /* 2.5초 — 구호를 읽을 틈은 주되, 뒤 대사를 굶기지 않는다 */
+      ref_next = cm_f + 150;   /* 심판끼리도 이만큼은 벌린다 */
       return curline;
     }
   }

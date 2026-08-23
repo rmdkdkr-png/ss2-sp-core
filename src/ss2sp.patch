@@ -50,7 +50,6 @@ index ef01e22..961ec32 100644
 +extern int         ss2sp_card_block;
 +extern void        ss2comm_set_enabled(int on);
 +extern void        ss2comm_set_speaker(int idx);
-+extern void        ss2comm_set_duo(int on);
 +extern int         ss2comm_next_speaker(int step);
 +extern const char *ss2comm_speaker_hello(int idx);
 +extern void        ss2comm_reset(void);
@@ -100,11 +99,6 @@ index ef01e22..961ec32 100644
 +         if (!strcmp(var.value, spk_key[k])) { sp = k; break; }
 +      ss2comm_set_speaker(sp);
 +   }
-+
-+   var.key   = "ngp_ss2sp_comm_duo";
-+   var.value = NULL;
-+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-+      ss2comm_set_duo(!strcmp(var.value, "enabled"));
 +
 +   var.key   = "ngp_ss2sp_comm_draw";
 +   var.value = NULL;
@@ -366,20 +360,6 @@ index a0dc3ec..a1d66b8 100644
 +         { NULL, NULL},
 +      },
 +      "haohmaru",
-+   },
-+   {
-+      "ngp_ss2sp_comm_duo",
-+      "SS2 Commentary Partner",
-+      NULL,
-+      "In big moments a second character answers the commentator in one short line - KO, super move, comeback, danger, and the end-of-match verdict. Turn it off if one voice is enough.",
-+      NULL,
-+      "video",
-+      {
-+         { "enabled",  "Enabled" },
-+         { "disabled", "Disabled" },
-+         { NULL, NULL},
-+      },
-+      "enabled",
 +   },
 +   {
 +      "ngp_ss2sp_comm_draw",

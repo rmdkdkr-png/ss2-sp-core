@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "ss2comm_lines.h"
-#include "ss2comm_duo.h"
 
 extern void        ss2comm_set_ram(void *p);
 extern void        ss2comm_set_enabled(int on);
@@ -13,7 +12,6 @@ extern void        ss2comm_set_speaker(int idx);
 extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
 extern int         ss2comm_speaker_count(void);
-extern void        ss2comm_set_duo(int on);
 extern const char *ss2comm_speaker_name(int);
 
 /* ss2sp 쪽 심볼 — 여기서는 안 쓴다 */
@@ -247,41 +245,6 @@ int main(void)
         ss2comm_set_speaker(0);
     }
 
-    /* ── 짝꿍: 큰 장면에서 짝이 받아친다 ── */
-    {
-        int i2, got = 0, p;
-        ss2comm_set_speaker(0);              /* 하오마루 → 짝은 나코루루 */
-        p = 1;
-        begin("duo");
-        idle(200);
-        step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 120, 90, 8, 8); step(0xF1, 8, 120, 0, 8, 8);
-        dset(0xF1,8,120,0); drain(900);
-        for(i2 = 0; i2 < nseen; i2++){
-            int c, v;
-            for(c = 0; c < DC_N && !got; c++)
-                for(v = 0; v < DUOMAXV; v++)
-                    if(DUOLINE[p][c][v] && !strcmp(seen[i2], DUOLINE[p][c][v])){ got = 1; break; }
-        }
-        check("짝꿍: 큰 장면에서 받아친다", got);
-    }
-
-    /* ── 짝꿍 끔이면 조용하다 ── */
-    {
-        int i2, got = 0, p = 1;
-        ss2comm_set_duo(0);
-        begin("duooff");
-        idle(200);
-        step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 120, 90, 8, 8); step(0xF1, 8, 120, 0, 8, 8);
-        dset(0xF1,8,120,0); drain(900);
-        for(i2 = 0; i2 < nseen; i2++){
-            int c, v;
-            for(c = 0; c < DC_N && !got; c++)
-                for(v = 0; v < DUOMAXV; v++)
-                    if(DUOLINE[p][c][v] && !strcmp(seen[i2], DUOLINE[p][c][v])){ got = 1; break; }
-        }
-        check("짝꿍 끔이면 받는 말이 없다", !got);
-        ss2comm_set_duo(1);
-    }
 
     printf("\n==== %d passed / %d failed ====\n", pass, fail);
     return fail ? 1 : 0;
