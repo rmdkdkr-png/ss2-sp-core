@@ -373,6 +373,9 @@ static void ref_say(const char *text){
   ref_at  = cm_f;
   ref_has = 1;
 }
+/* 몇 판째인지는 **따낸 판 수**로 센다. 화면에 라운드 번호가 없기 때문이다. */
+static void ref_round(void){ int rn = st_myR + st_opR; if(rn > 2) rn = 2; ref_say(REF_ROUND[rn]); }
+
 
 static void duo_after(int ev){
   const char *cand[DUOMAXV];
@@ -623,6 +626,7 @@ const char *ss2comm_frame(void){
         snprintf(who,sizeof(who),"%s 대 %s",CHARNAME[st_myChar],CHARNAME[st_oppChar]);
         emits(EV_START, who);
       }else emits(EV_START, "한판");
+      ref_round();                                /* 첫 판 구호 — 이게 빠져 있었다 */
       /* 2절 — 화자와 상대의 관계 대사 우선, 없으면 캐릭터 설정 한 줄 */
       rel = (st_oppChar>=0 ? RELLINE[cm_spk][st_oppChar] : 0);
       if(!rel && st_myChar>=0) rel = RELLINE[cm_spk][st_myChar];
@@ -635,8 +639,7 @@ const char *ss2comm_frame(void){
     }else{                                        /* 라운드 재개 */
       st_roundN++; st_fb=st_longSaid=st_dblLow=0;
       flow_reset(0);                              /* v0.7 라운드 단위 관찰만 */
-      /* 심판이 먼저 판을 연다 — 해설은 그 뒤에 붙는다 */
-      { int rn = st_myR + st_opR; if(rn > 2) rn = 2; ref_say(REF_ROUND[rn]); }
+      ref_round();                                /* 심판이 먼저 판을 연다 */
       if(st_myR==1 && st_opR==1)      emit(EV_MATCHPOINT);
       else if(st_myR==1 && st_opR==0) emit(EV_ROUNDLEAD);
       else if(st_myR==0 && st_opR==1) emit(EV_ROUNDBEHIND);
@@ -677,7 +680,12 @@ const char *ss2comm_frame(void){
     }
     if(hp1>32) st_low1=0;
     if(hp2>32) st_low2=0;
-    if(hp1>0 && hp2>0) st_ko=0;
+    if(hp1>0 && hp2>0){
+      /* 체력이 가득 돌아왔다 = 다음 판이 선다. mode 를 안 벗어나는 전환도 여기로 온다
+         (체력이 오르는 틱은 mode 가 전투여도 이 갈래로 떨어진다 — 위 조건 참고). */
+      if(st_ko && mode==MD_BATTLE && hp1>=100 && hp2>=100 && (st_myR+st_opR)>=1) ref_round();
+      st_ko=0;
+    }
     goto store;
   }
 
