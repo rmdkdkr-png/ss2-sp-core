@@ -173,11 +173,84 @@ static int cm_duo = 1;             /* 짝꿍 켬/끔 */
 static unsigned duo_at, duo_big_at;/* 시계 둘 — 잔반응 6초 · 승부 순간 2초 */
 static unsigned rng = 2463534242u;
 
-/* 발화 대기열 — 한 프레임에 두세 마디가 겹치면 순서대로 내보낸다(브라우저판 ANN 큐와 같은 역할) */
-#define QN 4
-static struct { char text[160]; short ev; short spk; } q[QN];
+/* 발화 대기열.
+   예전에는 네 칸에 쌓아 두고 1.6초마다 한 줄씩 밀어냈다. 그래서 한 판 44초에 24줄이 나오고
+   6초부터 끝까지 간격이 전부 1.6초로 고정됐다 — 반응이 아니라 컨베이어였다.
+   KO 를 봐도 그 말이 1.6초 뒤에 나오면 이미 그 순간이 아니다.
+
+   그래서 셋을 건다:
+     · 칸을 둘로 줄인다
+     · 늦은 반응은 버린다 (Q_STALE 지나면 안 보여 준다 — 없는 것만 못하다)
+     · 공방 중에는 GAP_BATTLE 만큼 벌린다. 말할 기회가 드물어야 고르게 된다 */
+#define QN 2
+/* 얼마나 묵으면 버리나 — 등급이 높을수록 오래 기다려 준다.
+   **벽(GAP_BATTLE)보다 짧으면 안 된다.** 짧으면 말한 직후 들어온 것이
+   다음 기회가 오기 전에 반드시 죽어서, 흐름 대사가 영영 못 나간다. */
+#define Q_STALE      150  /* 2.5초 — 잔반응(맞았다/때렸다)은 그 순간이 지나면 의미가 없다 */
+#define Q_STALE_MID  300  /* 5초  — 흐름·기록 */
+#define Q_STALE_BIG  600  /* 10초 — 관계·세계관·KO·총평 */
+#define GAP_BATTLE  270   /* 4.5초 — 공방 중 최소 간격 */
+#define GAP_OTHER    96   /* 1.6초 — 화면 전환·메뉴에서는 촘촘해도 된다 */
+#define GAP_RESULT  150   /* 결과 계열은 한 박자 더 */
+typedef struct { char text[160]; short ev; short spk; unsigned at; } ss2q;
+static ss2q q[QN];
 static int q_head, q_cnt;
 static unsigned q_next;
+
+/* 최근에 한 말은 다시 안 한다. 예전에는 44초 안에 같은 줄이 세 번 나왔다. */
+#define RECENT_N   12
+#define RECENT_F 1800     /* 30초 */
+static unsigned recent_h[RECENT_N], recent_f[RECENT_N];
+static int recent_i;
+static unsigned line_hash(const char *s){
+  unsigned h = 2166136261u;
+  while(*s){ h ^= (unsigned char)*s++; h *= 16777619u; }
+  return h;
+}
+static int said_recently(const char *s){
+  unsigned h = line_hash(s); int i;
+  for(i = 0; i < RECENT_N; i++) if(recent_h[i] == h && cm_f - recent_f[i] < RECENT_F) return 1;
+  for(i = 0; i < q_cnt; i++) if(line_hash(q[(q_head+i)%QN].text) == h) return 1;  /* 대기 중인 것도 */
+  return 0;
+}
+static void mark_said(const char *s){
+  recent_h[recent_i] = line_hash(s); recent_f[recent_i] = cm_f;
+  recent_i = (recent_i + 1) % RECENT_N;
+}
+
+
+/* ── 무엇을 먼저 말할까 ────────────────────────────────────────────
+   말할 기회를 4.5초에 한 번으로 줄이면 **무엇을 버릴지**가 곧 성격이 된다.
+   먼저 온 것부터 내보내면 「좋은 베기다!」 같은 잔반응이 자리를 차지하고
+   관계 대사가 밀려난다 — 실제로 그랬다.
+   그래서 자리를 다툴 때는 아래 등급이 이긴다.
+
+     3  관계·세계관   — 상대가 누구인지 아는 말. 이 앱의 존재 이유다
+     2  판을 가르는 순간 — KO·역전·총평
+     1  흐름·기록
+     0  잔반응        — 맞았다/때렸다. 없어도 아쉽지 않다 */
+static unsigned char ev_prio(int ev){
+  if(ev == -2) return 0;    /* 짝꿍이 받는 말 — 있으면 좋고 없어도 그만 */
+  if(ev == -1) return 3;    /* ss2comm_notify — 사용자에게 꼭 보여야 하는 안내 */
+  switch(ev){
+    case EV_REL: case EV_LORE: case EV_CHARSELCHAT: case EV_START:
+    case EV_VSQ: case EV_STORYCHAT:
+      return 3;
+    case EV_KO: case EV_KOED: case EV_DKO: case EV_MOVEKO:
+    case EV_PERFECT: case EV_COMEBACK: case EV_QUICK: case EV_REVERSAL:
+    case EV_ARCSWEEP: case EV_ARCSWEPT: case EV_ARCCOMEBACK:
+    case EV_ARCSWEAT: case EV_ARCCHOKE: case EV_ARCSLIP:
+    case EV_WINTALK: case EV_LOSETALK: case EV_ENDING:
+      return 2;
+    case EV_HIT: case EV_TAKEN: case EV_DOWN: case EV_DOWNED: case EV_OPPSP:
+    case EV_MOVE: case EV_MOVEHIT: case EV_MOVEHITL:
+    case EV_MOVEDOWN: case EV_MOVEDOWNA:
+    case EV_MUSE_B: case EV_MUSE_Q: case EV_MUSE_M: case EV_IDLE:
+      return 0;
+    default:
+      return 1;
+  }
+}
 
 static unsigned rnd(void){ rng ^= rng<<13; rng ^= rng>>17; rng ^= rng<<5; return rng; }
 static int rd(int off){ return RAM[off]; }
@@ -217,6 +290,7 @@ void ss2comm_reset(void){
   { int k; fl_hit=fl_tak=fl_alt=fl_lastBy=fl_oppSp=0; fl_said=0; fl_nr=0; fl_rounds[0]=0;
     for(k=0;k<FLMV;k++){ fl_mv[k].name=0; fl_mv[k].n=0; } }
   q_head=q_cnt=0; q_next=0;
+  memset(recent_h,0,sizeof recent_h); memset(recent_f,0,sizeof recent_f); recent_i=0;
 }
 
 /* 대사 한 줄 만들어 대기열에 넣는다.
@@ -253,11 +327,14 @@ static void duo_after(int ev){
   for(i = 0; i < DUOMAXV; i++) if(DUOLINE[p][cat][i]) cand[n++] = DUOLINE[p][cat][i];
   if(!n) return;
   if(big) duo_big_at = cm_f + 120; else duo_at = cm_f + 360;
-  if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
-  else { slot = q_head; q_head = (q_head+1)%QN; }
-  snprintf(q[slot].text, sizeof(q[slot].text), "%s", cand[rnd()%(unsigned)n]);
-  q[slot].ev  = -1;             /* 받는 말은 표정·강조 없이 담담하게 */
+  { const char *pickd = cand[rnd()%(unsigned)n];
+    if(said_recently(pickd)) return;
+    if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
+    else { slot = q_head; q_head = (q_head+1)%QN; }
+    snprintf(q[slot].text, sizeof(q[slot].text), "%s", pickd); }
+  q[slot].ev  = -2;             /* 받는 말: 표정·강조 없이 담담하게, 자리 다툼에선 가장 뒤 */
   q[slot].spk = (short)p;
+  q[slot].at  = cm_f;
 }
 
 static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
@@ -277,11 +354,24 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
     else                               snprintf(outbuf,sizeof(outbuf),fmt,n1);
   }
   else                                 snprintf(outbuf,sizeof(outbuf),"%s",fmt);
+  if(said_recently(outbuf)) return 0;      /* 최근에 한 말은 다시 안 한다 */
   cd[key] = cm_f + EVCD[ev].cool;
   { int slot;
     if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
-    else { slot = q_head; q_head = (q_head+1)%QN; }   /* 꽉 차면 가장 오래된 것을 민다 */
+    else {
+      /* 꽉 찼다 — 등급이 제일 낮은 것을 밀어낸다. 같은 등급이면 묵은 쪽. */
+      int i, worst = q_head;
+      for(i = 1; i < q_cnt; i++){
+        int c = (q_head + i) % QN;
+        if(ev_prio(q[c].ev) < ev_prio(q[worst].ev)) worst = c;
+      }
+      /* 새것이 **더 하찮을 때만** 버린다. 같은 등급이면 새것이 이긴다 —
+         한꺼번에 몰려올 때 먼저 온 둘만 남으면, 마지막에 오는 총평이 늘 밀린다. */
+      if(ev_prio(q[worst].ev) > ev_prio(ev)) return 0;
+      slot = worst;
+    }
     snprintf(q[slot].text,sizeof(q[slot].text),"%s",outbuf);
+    q[slot].at = cm_f;
     q[slot].ev = (short)ev;
     q[slot].spk = (short)cm_spk;
   }
@@ -358,6 +448,7 @@ void ss2comm_notify(const char *text){
   snprintf(q[slot].text,sizeof(q[slot].text),"%s",text);
   q[slot].ev = -1;                       /* 표정·강조 없음 */
   q[slot].spk = (short)cm_spk;
+  q[slot].at  = cm_f;                    /* 안내는 최근-중복 검사를 거치지 않는다 */
 }
 
 const char *ss2comm_current(int *age){
@@ -367,7 +458,17 @@ const char *ss2comm_current(int *age){
 
 /* 블록값 → 캐릭터 번호. 0x98 은 쿠로코 수라와 샤를로트 나찰이 겹치는데,
    브라우저판과 같이 샤를로트로 해석한다(실기 제보 반영). */
-static int blk_char(int blk){ int c = blk>>4; return (c>=0 && c<15) ? c : -1; }
+/* 캐릭터 바이트는 (번호<<4 | 유파<<3) 꼴이라 **하위 3비트가 반드시 0**이다.
+   실행기(readOpp)는 v%8!==0 이면 버리는데 C 에는 그 검사가 없어서,
+   캐릭터 고르는 중의 과도값이나 쿠로코 같은 숨은 캐릭터(번호가 표에 없다)에서
+   위 4비트만 우연히 0~14 에 들면 **엉뚱한 사람으로 읽혔다.**
+   그 사람의 관계 대사가 그대로 나오니 「고르면 아무나로 바뀐다」로 보인다. */
+static int blk_char(int blk){
+  int c;
+  if(blk < 0 || (blk & 7)) return -1;   /* 실행기와 같은 유효성 검사 */
+  c = blk >> 4;
+  return (c >= 0 && c < 15) ? c : -1;
+}
 
 /* 필살기 이름 — SP 엔진이 방금 낸 기술만 안다(손 커맨드는 이름 없음).
    기술표는 코어에 내장이라 롬 버전과 무관하다. */
@@ -621,19 +722,43 @@ out:
   /* 아무도 말하지 않고 조용하면 화자가 혼잣말 — 전투 6초 / 그 밖 3초 */
   if(!q_cnt && cm_f >= q_next){
     unsigned quiet = cm_f - (last_line_f > cur_f ? last_line_f : cur_f);
-    unsigned need  = (mode==MD_BATTLE) ? 360 : 180;
+    /* 전투 15초 / 그 밖 5초. 예전에는 6초·3초였는데, 말할 기회를 4.5초로 조이고 나니
+       그 기준이면 늘어난 침묵을 혼잣말이 전부 차지해 흐름 대사가 벽에 막혔다.
+       잡담은 진짜로 오래 빌 때만 나와야 한다. */
+    unsigned need  = (mode==MD_BATTLE) ? 900 : 300;
     if(cm_f > 300 && quiet > need && cm_f > hush_until && !st_ko)   /* KO 연출 중엔 잡담 금지 */
       emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M));
   }
-  /* 대기열에서 한 줄 꺼내 보여준다 — 겹칠 때도 순서대로 읽히게 1.6초 간격 */
-  if(q_cnt && cm_f >= q_next){
-    int slot = q_head;
+  /* 묵은 반응은 보여 주지 않고 버린다 — 그 순간이 지난 말은 없는 것만 못하다.
+     다만 관계·세계관 쪽은 더 기다려 준다. VS 화면이 짧아 2.5초로는 못 나간다. */
+  while(q_cnt){
+    unsigned pr  = ev_prio(q[q_head].ev);
+    unsigned lim = pr >= 2 ? Q_STALE_BIG : pr >= 1 ? Q_STALE_MID : Q_STALE;
+    if(cm_f - q[q_head].at <= lim) break;
     q_head = (q_head+1)%QN; q_cnt--;
-    snprintf(curline,sizeof(curline),"%s",q[slot].text);
-    cur_ev = q[slot].ev; cur_spk = q[slot].spk; cur_f = cm_f; last_line_f = cm_f;
-    /* 결과 계열(승패 화면·한마디 더·전적)은 한 박자 더 벌려야 자연스럽다 */
+  }
+
+  if(q_cnt && cm_f >= q_next){
+    /* 등급이 높은 것부터 내보낸다. 같은 등급이면 먼저 들어온 쪽.
+       고른 것을 복사해 두고, 그 자리에 머리를 옮긴 뒤 머리를 민다. */
+    int i, best = q_head;
+    ss2q chosen;
+    for(i = 1; i < q_cnt; i++){
+      int c = (q_head + i) % QN;
+      if(ev_prio(q[c].ev) > ev_prio(q[best].ev)) best = c;
+    }
+    chosen = q[best];
+    if(best != q_head) q[best] = q[q_head];
+    q_head = (q_head+1)%QN; q_cnt--;
+    snprintf(curline,sizeof(curline),"%s",chosen.text);
+    cur_ev = chosen.ev; cur_spk = chosen.spk; cur_f = cm_f; last_line_f = cm_f;
+    mark_said(curline);
+    /* 공방 중에는 넓게 벌린다. 말할 기회가 드물어야 아무 말이나 안 하게 된다.
+       결과 계열(승패 화면·한마디 더·전적)은 한 박자 더. */
     q_next = cm_f + ((cur_ev==EV_WINSCR||cur_ev==EV_LOSESCR||cur_ev==EV_WINTALK||
-                      cur_ev==EV_LOSETALK||cur_ev==EV_RECORD) ? 150 : 100);
+                      cur_ev==EV_LOSETALK||cur_ev==EV_RECORD) ? GAP_RESULT
+                    : (ev_prio(cur_ev) >= 3) ? GAP_OTHER      /* 관계·안내는 드무니 막지 않는다 */
+                    : (mode==MD_BATTLE && !st_ko) ? GAP_BATTLE : GAP_OTHER);
     return curline;
   }
   return 0;
@@ -1001,6 +1126,13 @@ static int wrap8(const char *line, const char *end, int maxw, const char *seg[BO
   return n;
 }
 
+/* 강조 순간의 흔들기 — 처음 여섯 프레임 좌우로 튄다.
+   게임 화면은 건드리지 않는다. 띠 안의 글자와 얼굴만 흔든다. */
+static const signed char SS2_SHAKE[6] = { 2, -2, 1, -1, 1, 0 };
+
+/* 지금 보여 주는 줄이 강조인가 — 진동처럼 그리기 밖에서 쓰려고 열어 둔다 */
+int ss2comm_impact(void){ return (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev] : 0; }
+
 void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   const char *line, *end, *seg[BOX_MAXL+1];
   int age=0, x, y, top, bot, mood, hit, spk, tx0, x1, maxw, show, i, nl, boxh, ty, lh;
@@ -1030,6 +1162,8 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   tx0  = face_ok[spk] ? 21 : 4;
   x1   = w - 3;
   maxw = x1 - tx0;
+  { int shx = (hit && age < 6) ? SS2_SHAKE[age] : 0;   /* 강조면 좌우로 튄다 */
+    tx0 += shx; }
 
   /* 줄 나누기 — 띠는 높이가 고정이라 두 줄까지. 큰 글씨로 안 들어가면 작은 글씨로 접는다. */
   small = 0;
@@ -1048,12 +1182,19 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   }
   bot = top + boxh;
 
-  /* 바탕 — 띠는 검정, 화면 안 상자는 게임 화면을 1/16 로 눌러 깐다. 강조면 첫 네 프레임 붉게. */
+  /* 바탕 — 띠는 검정, 화면 안 상자는 게임 화면을 1/16 로 눌러 깐다.
+     강조면 **첫 프레임에 금색으로 확 채우고** 두 프레임에 걸쳐 식힌다.
+     16ms 짜리 번쩍임이라 글자를 가려도 상관없다 — 터지는 느낌이 목적이다. */
   for(y=top; y<bot; y++)
     for(x=0; x<w; x++){
       uint16_t c = fb[y*pitch_px+x];
       uint16_t base = band ? 0x0000 : (uint16_t)((c>>4)&0x0861);
-      fb[y*pitch_px+x] = (hit && age<4) ? (uint16_t)(0x3000 | base) : base;
+      uint16_t v;
+      if     (hit && age < 1) v = COL_GOLD;
+      else if(hit && age < 2) v = (uint16_t)(0x8C40 | base);
+      else if(hit && age < 5) v = (uint16_t)(0x3000 | base);
+      else                    v = base;
+      fb[y*pitch_px+x] = v;
     }
   /* 게임 화면과 맞닿는 쪽에 경계선 — 새 대사면 하얗게 튄다 */
   { uint16_t bc = (age<6) ? COL_WHITE : (hit ? COL_GOLD : (band ? 0x39E7 : 0x52AA));
@@ -1063,6 +1204,7 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   /* 얼굴 */
   if(face_ok[spk]){
     int fx=3, fy=top + (boxh-16)/2, a, b;
+    if(hit && age < 6) fx += SS2_SHAKE[age];          /* 얼굴도 같이 흔든다 */
     if(age < 4) fy -= 1;
     else if(mood==1 && age < 28 && (age % 12) < 6) fy -= 1;
     if(mood==2 && age < 20) fx += ((age>>1)&1) ? 1 : -1;

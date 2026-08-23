@@ -29,6 +29,7 @@ const char *ss2comm_current(int *age_frames);/* 현재 표시 중인 대사(자�
 void        ss2comm_draw_enable(int mode);   /* 0 끔 1 확장띠 2 상단겹침 3 하단겹침 */
 int         ss2comm_band_h(void);            /* 화면 밖 띠 모드에서 늘려야 할 세로 픽셀 */
 int         ss2comm_band_top(void);          /* 1이면 띠가 게임 화면 위에 붙는다 */
+int         ss2comm_impact(void);            /* 지금 줄이 강조인가 — 진동·연출용 */
 int         ss2comm_drawing(void);           /* 1이면 코어가 직접 그린다(알림 불필요) */
 void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h); /* 화면에 직접 그리기 */
 
