@@ -198,6 +198,7 @@ static int q_head, q_cnt;
 static unsigned q_next;
 
 /* 심판 전용 칸 — 해설 대기열과 따로 선다 */
+static unsigned char anec_at[15], weap_at[15];  /* 썰·무기 소회를 어디까지 풀었나 */
 static char     ref_text[160];
 static unsigned ref_at;
 static int      ref_has;
@@ -303,6 +304,7 @@ void ss2comm_reset(void){
   st_ko=st_low1=st_low2=st_lead=st_rev=0;
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
+  memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
   curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk; duo_at=duo_big_at=0;
@@ -504,6 +506,35 @@ static void flow_reset(int newMatch){
   fl_hit=fl_tak=fl_alt=fl_lastBy=fl_oppSp=0; fl_said=0;
   for(i=0;i<FLMV;i++){ fl_mv[i].name=0; fl_mv[i].n=0; }
   if(newMatch){ fl_nr=0; fl_rounds[0]=0; }
+}
+
+/* ── 썰과 무기 소회 ───────────────────────────────────────────────
+   LORE[] 는 한 줄짜리 이름표라 「썰」이 못 된다. ANEC[] 은 캐릭터마다 여섯 줄짜리
+   일화·행적이고, WEAP[] 은 무기 갈래에 대한 소회다. 둘 다 **화자별이 아니라
+   캐릭터별**이다 — 누가 해설하든 그 사람에 대한 이야기는 같다.
+   캐릭터마다 어디까지 풀었는지 기억해 두고 차례로 낸다. 같은 판에서 같은 썰이
+   두 번 나오면 썰이 아니라 소음이다. */
+static int say_anec(int ch){
+  int i, n = 0;
+  if(ch < 0 || ch >= 15) return 0;
+  for(i = 0; i < SS2COMM_ANEC_N; i++) if(ANEC[ch][i]) n++;
+  if(!n) return 0;
+  for(i = 0; i < n; i++){
+    const char *t = ANEC[ch][(anec_at[ch] + i) % n];
+    if(!t) continue;
+    anec_at[ch] = (unsigned char)((anec_at[ch] + i + 1) % n);
+    return emits(EV_LORE, t);
+  }
+  return 0;
+}
+static int say_weap(int ch){
+  int i, n = 0;
+  if(ch < 0 || ch >= 15) return 0;
+  for(i = 0; i < SS2COMM_WEAP_N; i++) if(WEAP[ch][i]) n++;
+  if(!n) return 0;
+  { const char *t = WEAP[ch][weap_at[ch] % n];
+    weap_at[ch] = (unsigned char)((weap_at[ch] + 1) % n);
+    return t ? emits(EV_LORE, t) : 0; }
 }
 /* 쌓인 모양이 임계에 닿으면 한 마디. 한 번에 한 종류만 낸다. */
 static void flow_check(void){
@@ -787,7 +818,7 @@ const char *ss2comm_frame(void){
 
   if(!st_fb && (hit1||hit2)){
     st_fb = 1;
-    if(hit2 && !hit1 && st_roundN==1 && hp2>0 && !pend_name && (p_hp2-hp2)>=4) emit(EV_FIRSTBLOOD);
+    if(hit2 && !hit1 && st_roundN==1 && hp2>0 && !pend_name && (p_hp2-hp2)>=4) (((rnd()&1) && say_weap(st_oppChar)) || emit(EV_FIRSTBLOOD));
   }
 
   if(hit1 && hit2 && hp1<=0 && hp2<=0 && !st_ko){ st_ko=1; pend_take(0); flow_round('d'); emit(EV_DKO); }
@@ -876,9 +907,22 @@ out:
     /* 전투 8초 / 그 밖 5초. 예전에 6초였던 것을 15초로 올려 놨더니
        「중간에 빌 때는 닥치고 있으니 아깝다」가 됐다. 8초로 되돌린다 —
        말할 기회 자체는 4.5초 간격 규칙이 막고 있어서 수다스러워지지 않는다. */
-    unsigned need  = (mode==MD_BATTLE) ? 480 : 300;
-    if(cm_f > 300 && quiet > need && cm_f > hush_until && !st_ko)   /* KO 연출 중엔 잡담 금지 */
-      emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M));
+    /* 두 단계로 본다. **썰이 혼잣말보다 먼저** 나와야 한다 —
+       6초쯤 비면 상대 이야기를 풀고, 그래도 8초를 넘기면 그때 혼잣말이다.
+       (전에는 15초 하나뿐이라 실제로는 아무 말도 안 나왔다. 제보: 「빌 때 아깝다」) */
+    unsigned anecN = (mode==MD_BATTLE) ? 360 : 240;   /* 6초 / 4초 */
+    unsigned need  = (mode==MD_BATTLE) ? 480 : 300;   /* 8초 / 5초 */
+    if(cm_f > 300 && quiet > anecN && cm_f > hush_until && !st_ko){ /* KO 연출 중엔 잡담 금지 */
+      /* 상대 이야기를 한 번 풀고, 다음 차례엔 내 편 이야기. 번갈아 간다. */
+      static unsigned char turn;
+      int a1c = st_oppChar, a2c = st_myChar;
+      int said;
+      if(turn & 1){ int t = a1c; a1c = a2c; a2c = t; }
+      said = say_anec(a1c) || say_anec(a2c);
+      if(said) turn++;
+      else if(quiet > need)
+        emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M));
+    }
   }
   /* 묵은 반응은 보여 주지 않고 버린다 — 그 순간이 지난 말은 없는 것만 못하다.
      다만 관계·세계관 쪽은 더 기다려 준다. VS 화면이 짧아 2.5초로는 못 나간다. */
@@ -1331,7 +1375,10 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
 
   tx0  = (face_ok[spk] && !ref_line) ? 21 : 4;
   x1   = w - 3;
-  maxw = x1 - tx0;
+  /* 글자 상자는 12px 인데 자간(adv11)은 8px 다. 그래서 마지막 글자는 자기 자간보다
+     **4px 더 오른쪽까지 그린다.** 폭을 자간으로만 재서 딱 맞추면 그 4px 이 잘려
+     「…지은 것이다」가 「…것이ㄷ」로 나왔다. 그만큼을 미리 뺀다. */
+  maxw = x1 - tx0 - 4;
   { int shx = (hit && age < 6) ? SS2_SHAKE[age] : 0;   /* 강조면 좌우로 튄다 */
     tx0 += shx; }
 
