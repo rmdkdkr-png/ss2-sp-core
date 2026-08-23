@@ -186,7 +186,8 @@ static unsigned rng = 2463534242u;
    **벽(GAP_BATTLE)보다 짧으면 안 된다.** 짧으면 말한 직후 들어온 것이
    다음 기회가 오기 전에 반드시 죽어서, 흐름 대사가 영영 못 나간다. */
 #define Q_STALE      150  /* 2.5초 — 잔반응(맞았다/때렸다)은 그 순간이 지나면 의미가 없다 */
-#define Q_STALE_MID  300  /* 5초  — 흐름·기록 */
+#define Q_STALE_MID  360  /* 6초 — 흐름·기록. 뽑을 때 최신을 고르게 한 뒤로 이 창은
+                              「아주 묵은 것만 버리는」 안전장치일 뿐이다 */
 #define Q_STALE_BIG  600  /* 10초 — 관계·세계관·KO·총평 */
 #define GAP_BATTLE  270   /* 4.5초 — 공방 중 최소 간격 */
 #define GAP_OTHER    96   /* 1.6초 — 화면 전환·메뉴에서는 촘촘해도 된다 */
@@ -199,6 +200,7 @@ static unsigned q_next;
 /* 심판 전용 칸 — 해설 대기열과 따로 선다 */
 static unsigned char anec_at[15], weap_at[15];  /* 썰·무기 소회를 어디까지 풀었나 */
 static unsigned ref_next;                       /* 심판끼리의 최소 간격 */
+static unsigned ref_shown;                      /* 아래 칸에 세운 시각 (0 = 아직) */
 static char     ref_text[160];
 static unsigned ref_at;
 static int      ref_has;
@@ -247,13 +249,17 @@ static int ev_keep(int ev){
     case EV_REL: case EV_LORE: case EV_CHARSELCHAT: case EV_START:
     case EV_VSQ: case EV_STORYCHAT: case EV_MENUIDLE:
     case EV_MUSE_B: case EV_MUSE_Q: case EV_MUSE_M: case EV_IDLE:
+    /* 라운드 맥락(「한 판 챙겼군」 「최종 라운드다」)도 후순위다. 심판과는 자리가
+       갈렸지만 **KO·총평과는 여전히 다툰다** — 되돌려 보니 검사 셋이 다시 깨졌다.
+       이쪽은 놓쳐도 다음 판에 또 올 말이고, KO 반응은 그 순간뿐이다. */
+    case EV_ROUND: case EV_ROUNDLEAD: case EV_ROUNDBEHIND: case EV_MATCHPOINT:
       return 0;                 /* 두어도 되는 말 */
     default:
       return 1;                 /* 지금 아니면 의미 없는 말 */
   }
 }
 static unsigned char ev_prio(int ev){
-  if(ev == -3) return 3;    /* 심판 구호 — 무엇보다 먼저 */
+  if(ev == -3) return 4;    /* 심판 구호 — **무엇보다 먼저.** 판을 여는 건 심판이다 */
   if(ev == -2) return 0;    /* 짝꿍이 받는 말 — 있으면 좋고 없어도 그만 */
   if(ev == -1) return 3;    /* ss2comm_notify — 사용자에게 꼭 보여야 하는 안내 */
   switch(ev){
@@ -270,6 +276,7 @@ static unsigned char ev_prio(int ev){
     case EV_MOVE: case EV_MOVEHIT: case EV_MOVEHITL:
     case EV_MOVEDOWN: case EV_MOVEDOWNA:
     case EV_MUSE_B: case EV_MUSE_Q: case EV_MUSE_M: case EV_IDLE:
+    case EV_ROUND: case EV_ROUNDLEAD: case EV_ROUNDBEHIND: case EV_MATCHPOINT:
       return 0;
     default:
       return 1;
@@ -373,11 +380,26 @@ static void ref_say(const char *text){
   if(!cm_on || !text || !*text) return;
   if(said_recently(text)) return;
   snprintf(ref_text, sizeof ref_text, "%s", text);
+  ref_shown = 0;
   ref_at  = cm_f;
   ref_has = 1;
 }
 /* 몇 판째인지는 **따낸 판 수**로 센다. 화면에 라운드 번호가 없기 때문이다. */
-static void ref_round(void){ int rn = st_myR + st_opR; if(rn > 2) rn = 2; ref_say(REF_ROUND[rn]); }
+/* 심판이 설 판인가. 쿠로코는 **사람끼리의 정식 승부**를 보는 사람이다.
+   마계에서 온 것(유가)이나 시체를 꿰맨 인형(간다라)과의 싸움은 승부가 아니라 그냥
+   싸움이라, 구호도 「오미고토」도 없다. 구호가 뚝 끊기는 것 자체가 「여기서부터는
+   다른 판이다」라는 신호가 된다. 원작에서도 보스전에는 심판이 안 나온다. */
+static int ref_stands(void){
+  if(st_oppChar < 0)  return 0;      /* 표 밖 개체 = 간다라 */
+  if(st_oppChar == 14) return 0;     /* 유가 */
+  return 1;
+}
+static void ref_round(void){
+  int rn;
+  if(!ref_stands()) return;
+  rn = st_myR + st_opR; if(rn > 2) rn = 2;
+  ref_say(REF_ROUND[rn]);
+}
 
 
 
@@ -598,6 +620,15 @@ const char *ss2comm_current(int *age){
    글꼴에 없는 글자·잘림·줄바꿈은 표를 들여다봐서는 안 보이고 그려 봐야 보인다.
    배포 빌드에는 안 들어간다 (bandshot.c 만 이 매크로를 켠다). */
 #ifdef SS2COMM_TEST
+/* 심판은 이제 대사 흐름(ss2comm_frame)에 안 들어간다 — 아래 칸에 따로 선다.
+   그래서 시뮬레이터가 심판을 놓친다. 세워진 구호를 한 번만 돌려주는 창구를 둔다. */
+const char *ss2comm_test_ref_take(void){
+  static unsigned last;
+  if(!ref_has || cm_f < ref_next) return 0;
+  if(ref_at == last) return 0;
+  last = ref_at;
+  return ref_text;
+}
 /* 롬이 없는 방에서 심판 초상 **그리기 경로**만 확인하려고 합성 그림을 직접 밀어 넣는다.
    실제 그림은 언제나 사용자 롬에서 나온다 — 이 훅은 배포 빌드에 없다. */
 void ss2comm_test_ref_face(const uint16_t *px, const unsigned char *al){
@@ -690,7 +721,7 @@ const char *ss2comm_frame(void){
         st_resultDone = 1;
         /* 승자의 본명을 부른다. 이 게임은 음성도 없고 본명을 띄우지도 않아서
            여기서만 불리는 이름이 된다. */
-        if(wc >= 0 && wc < 15){
+        if(wc >= 0 && wc < 15 && ref_stands()){
           char t[160];
           snprintf(t, sizeof t, "%s — 훌륭하오!", CHARFULL[wc]);
           ref_say(t);
@@ -972,27 +1003,23 @@ out:
      다만 **제 간격은 지킨다.** 안 그러면 판이 몰릴 때 심판이 연달아 네 번 떠들면서
      KO·총평을 통째로 굶긴다. 몰린 구호는 ref_text 가 덮어써서 **최신 것 하나로 합쳐진다** —
      세 판이 순식간에 지나가면 「셋째 판」만 나오는 게 맞다. */
-  if(ref_has && cm_f >= ref_next){
-    if(cm_f - ref_at > Q_STALE_BIG){ ref_has = 0; }
-    else{
-      ref_has = 0;
-      snprintf(curline, sizeof curline, "%s", ref_text);
-      cur_ev = -3; cur_spk = SS2_SPK_REF; cur_f = cm_f; last_line_f = cm_f;
-      mark_said(curline);
-      q_next   = cm_f + 150;   /* 2.5초 — 구호를 읽을 틈은 주되, 뒤 대사를 굶기지 않는다 */
-      ref_next = cm_f + 150;   /* 심판끼리도 이만큼은 벌린다 */
-      return curline;
-    }
-  }
+  /* 심판은 **화면 아래 레터박스**에 따로 선다(SS2_REF_H). 해설창과 자리를 나누므로
+     대기열을 두고 다툴 일이 없다 — 구호가 뜨는 동안에도 위에서는 해설이 제 말을 한다.
+     여기서는 묵은 구호만 지운다. 그리는 것은 ss2comm_draw 가 한다. */
+  if(ref_has && cm_f - ref_at > 90) ref_has = 0;   /* 1.5초 안에 못 세우면 버린다 */
 
   if(q_cnt && cm_f >= q_next){
-    /* 등급이 높은 것부터 내보낸다. 같은 등급이면 먼저 들어온 쪽.
-       고른 것을 복사해 두고, 그 자리에 머리를 옮긴 뒤 머리를 민다. */
+    /* 등급이 높은 것부터. 같은 등급이면 **제일 최근 것**을 낸다.
+       예전에는 먼저 들어온 쪽을 냈다. 그러면 말할 차례가 왔을 때 이미 지난 얘기를
+       하게 되고, 그걸 막으려고 「몇 초 지나면 버린다」는 창을 캐릭터별로 매번
+       손봐야 했다. 뽑을 때 최신을 고르면 애초에 상할 일이 없다 —
+       상태는 매 프레임 보고 있고, 지켜야 하는 건 **말 사이 간격 하나**뿐이다. */
     int i, best = q_head;
     ss2q chosen;
     for(i = 1; i < q_cnt; i++){
       int c = (q_head + i) % QN;
-      if(ev_prio(q[c].ev) > ev_prio(q[best].ev)) best = c;
+      int pc = ev_prio(q[c].ev), pb = ev_prio(q[best].ev);
+      if(pc > pb || (pc == pb && q[c].at > q[best].at)) best = c;
     }
     chosen = q[best];
     if(best != q_head) q[best] = q[q_head];
@@ -1300,6 +1327,10 @@ static uint16_t tint(uint16_t c, int mood){
    유파가 없는 쿠로코는 그 배열에 자리가 아예 없다. 16x16 으로 줄이거나 잘라 봤으나
    후드 실루엣이 통째로 있어야 알아볼 수 있어 둘 다 못 쓴다(청록 덩어리가 된다). */
 #define SS2_BAND_H 32
+/* 심판은 **화면 아래**에 따로 선다. 해설창(위)과 자리를 나누면 서로 밀어내지 않는다.
+   32 인 이유는 위 띠와 같다 — 쿠로코 초상이 32x32 뿐이라서. */
+#define SS2_REF_H  32
+#define REF_TTL    180                        /* 3초 */
 #define CM_TTL     150
 #define COL_WHITE  0xFFFF
 #define COL_GOLD   0xFEA0
@@ -1307,6 +1338,7 @@ static uint16_t tint(uint16_t c, int mood){
 #define BOX_LINE_H 13
 #define BOX_MAXL   3
 int ss2comm_band_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_BAND_H : 0; }
+int ss2comm_ref_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_REF_H : 0; }
 int ss2comm_band_top(void){ return (cm_on && cm_draw==4) ? 1 : 0; }
 int ss2comm_drawing(void){ return (cm_on && cm_draw) ? 1 : 0; }
 
@@ -1440,10 +1472,53 @@ static const signed char SS2_SHAKE[6] = { 2, -2, 1, -1, 1, 0 };
 /* 지금 보여 주는 줄이 강조인가 — 진동처럼 그리기 밖에서 쓰려고 열어 둔다 */
 int ss2comm_impact(void){ return (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev] : 0; }
 
+/* ── 심판 칸 (화면 아래 레터박스) ────────────────────────────────
+   해설창은 위, 심판은 아래. 자리를 나누니 서로 밀어낼 일이 없고,
+   구호가 떠 있는 동안에도 위에서는 해설이 제 말을 이어 간다.
+   버퍼는 위 띠(SS2_BAND_H) + 게임(h) + 이 칸(SS2_REF_H) 순으로 쌓여 있다. */
+static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h){
+  const char *seg[BOX_MAXL+1], *t, *end;
+  int x, y, top, bot, tx0, x1, maxw, nl, i, lh, ty, show;
+  top = SS2_BAND_H + h;
+  bot = top + SS2_REF_H;
+  for(y=top; y<bot; y++) for(x=0; x<w; x++) fb[y*pitch_px+x] = 0x0000;
+  if(!ref_has && !ref_shown) return;
+  if(ref_has){                                   /* 이번 프레임에 세운다 */
+    if(cm_f < ref_next) return;
+    ref_has = 0; ref_shown = cm_f; ref_next = cm_f + 150;
+  }
+  if(cm_f - ref_shown > REF_TTL){ ref_shown = 0; return; }
+  t = ref_text; if(!*t) return;
+  end = t + strlen(t);
+  if(ref_ok){                                    /* 쿠로코 초상 32x32 */
+    int fx=2, fy=top, a, b;
+    for(b=0;b<32;b++) for(a=0;a<32;a++){
+      int px=fx+a, py=fy+b;
+      if(!ref_a[b*32+a]) continue;
+      if(px<0||px>=w||py<top||py>=bot) continue;
+      fb[py*pitch_px+px] = ref_px[b*32+a];
+    }
+  }
+  tx0  = ref_ok ? 37 : 4;
+  x1   = w - 3;
+  maxw = x1 - tx0 - 4;
+  nl   = wrap11(t, end, maxw, seg);
+  lh   = BOX_LINE_H;
+  if(nl > 2){ nl = wrap8(t, end, maxw, seg); lh = 9; }
+  ty   = top + (SS2_REF_H - nl*lh)/2;
+  show = 2 + (int)(cm_f - ref_shown)*2;          /* 위 띠와 같은 타자 연출 */
+  for(i=0;i<nl && show>0;i++){
+    int drawn = (lh==9)
+      ? draw_line  (fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh + 1, top, bot, show, COL_REF, 0)
+      : draw_line11(fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh,     top, bot, show, COL_REF, 0);
+    show -= drawn;
+  }
+}
+
 void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   const char *line, *end, *seg[BOX_MAXL+1];
   int age=0, x, y, top, bot, mood, hit, spk, tx0, x1, maxw, show, i, nl, boxh, ty, lh;
-  int band, bandTop, small, ref_line;
+  int band, bandTop, small;
   uint16_t col;
   if(!cm_on || !cm_draw || !fb) return;
   band    = (cm_draw==1 || cm_draw==4);
@@ -1456,21 +1531,18 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
     for(y=b0; y<b1; y++)
       for(x=0; x<w; x++) fb[y*pitch_px+x] = 0x0000;
   }
+  if(band) draw_ref_strip(fb, pitch_px, w, h);   /* 아래 심판 칸은 대사 유무와 무관하게 매 프레임 */
   if(!line || age > CM_TTL) return;            /* 2.5초만 표시 */
 
   end  = line + strlen(line);
   mood = (cur_ev>=0 && cur_ev<EV_N) ? EVMOOD[cur_ev] : 0;
   hit  = (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev]  : 0;
   col  = hit ? COL_GOLD : COL_WHITE;
-  { int isRef = (cur_spk == SS2_SPK_REF);
-    spk = (cur_spk >= 0 && cur_spk < SS2COMM_SPK_N) ? cur_spk : cm_spk;
-    if(isRef){ col = COL_REF; mood = 0; hit = 0; }   /* 심판은 담담하게, 제 색으로 */
-    ref_line = isRef; }
+  spk = (cur_spk >= 0 && cur_spk < SS2COMM_SPK_N) ? cur_spk : cm_spk;
   if(!face_built) build_faces();
   show = 2 + (int)age*2;                       /* 타자 연출: 프레임당 두 글자 */
 
-  tx0  = ref_line ? (ref_ok ? 37 : 4)          /* 심판 초상은 32 폭 */
-                  : (face_ok[spk] ? 21 : 4);
+  tx0  = face_ok[spk] ? 21 : 4;
   x1   = w - 3;
   /* 글자 상자는 12px 인데 자간(adv11)은 8px 다. 그래서 마지막 글자는 자기 자간보다
      **4px 더 오른쪽까지 그린다.** 폭을 자간으로만 재서 딱 맞추면 그 4px 이 잘려
@@ -1515,18 +1587,8 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
     int by = (cm_draw==2 || cm_draw==4) ? (bot-1) : top;
     for(x=0; x<w; x++) fb[by*pitch_px+x] = bc;
   }
-  /* 얼굴 — 심판은 32x32 두 겹짜리 제 초상 */
-  if(ref_line && ref_ok){
-    int fx=2, fy=top + (boxh-32)/2, a, b;
-    if(fy < top) fy = top;
-    for(b=0;b<32;b++) for(a=0;a<32;a++){
-      int px=fx+a, py=fy+b;
-      if(!ref_a[b*32+a]) continue;
-      if(px<0||px>=w||py<top||py>=bot) continue;
-      fb[py*pitch_px+px] = ref_px[b*32+a];
-    }
-  }
-  if(face_ok[spk] && !ref_line){
+  /* 얼굴 */
+  if(face_ok[spk]){
     int fx=3, fy=top + (boxh-16)/2, a, b;
     if(hit && age < 6) fx += SS2_SHAKE[age];          /* 얼굴도 같이 흔든다 */
     if(age < 4) fy -= 1;

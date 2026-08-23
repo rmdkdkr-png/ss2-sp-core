@@ -22,6 +22,7 @@ extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
 extern void        ss2comm_draw_enable(int mode);
 extern void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h);
+extern const char *ss2comm_test_ref_take(void);   /* 아래 칸에 선 심판 구호 */
 
 const char *ss2sp_last_name = 0;
 int         ss2sp_last_ok   = 0;
@@ -67,7 +68,12 @@ static void snap(const char *text){
 }
 static void tick(void){
     const char *l = ss2comm_frame();
+    const char *r;
     fno++;
+    /* 심판은 화면 아래 제 칸에 선다 — 해설 흐름에 안 섞이므로 따로 걷는다 */
+    r = ss2comm_test_ref_take();
+    if(r){ char t[192]; snprintf(t,sizeof t,"%s",r); memset(fb,0,sizeof fb);
+           ss2comm_draw(fb,W,W,H); snap(t); }
     if(l && strcmp(l,last)){
         int k;
         snprintf(last,sizeof last,"%s",l);
