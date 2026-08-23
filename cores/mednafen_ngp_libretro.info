@@ -6,7 +6,7 @@ corename = "Beetle NeoPop (SS2 One-button)"
 categories = "Emulator"
 license = "GPLv2"
 permissions = ""
-display_version = "v1.29.0.0 · SS2 v0.6"
+display_version = "v1.29.0.0 · SS2 v0.7"
 supports_no_game = "false"
 
 # Hardware Information
@@ -31,4 +31,4 @@ disk_control = "false"
 is_experimental = "true"
 
 # Notes
-notes = "Fork of Beetle NeoPop with a built-in one-button special-move engine for Samurai Shodown! 2 (Korean patch). Toggle with the 'SS2 One-button Specials' core option. Does nothing on other games."
+notes = "Fork of Beetle NeoPop with a built-in one-button special-move engine and a 15-character commentary engine for Samurai Shodown! 2 (Korean patch). L2 hands the mic to the next commentator. Does nothing on other games."

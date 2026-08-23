@@ -1,0 +1,4 @@
+build/
+*.o
+*.ngc
+*.ngp

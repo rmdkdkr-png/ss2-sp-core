@@ -31,9 +31,9 @@ cp "$HERE"/src/*.c "$HERE"/src/*.h "$WORK/"    # 소스는 통째로 (파일이 
 cd "$WORK"; make clean >/dev/null 2>&1 || true
 case "$TARGET" in
   host)            make -j"$(nproc)";                              cp mednafen_ngp_libretro.so  "$OUT/mednafen_ngp_libretro.linux-x86_64.so" ;;
-  linux-aarch64)   make -j"$(nproc)" platform=unix CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++
+  linux-aarch64)   CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make -e -j"$(nproc)" platform=unix
                                                                    cp mednafen_ngp_libretro.so  "$OUT/mednafen_ngp_libretro.linux-aarch64.so" ;;
-  windows-x86_64)  make -j"$(nproc)" platform=win CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++
+  windows-x86_64)  CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ make -e -j"$(nproc)" platform=win
                                                                    cp mednafen_ngp_libretro.dll "$OUT/mednafen_ngp_libretro.windows-x86_64.dll" ;;
   android-arm64)   : "${ANDROID_NDK_ROOT:?ANDROID_NDK_ROOT 를 NDK 경로로 지정하세요}"
                    "$ANDROID_NDK_ROOT/ndk-build" -C jni -j"$(nproc)" APP_ABI=arm64-v8a

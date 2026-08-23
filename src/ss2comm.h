@@ -13,7 +13,13 @@ extern "C" {
 void        ss2comm_set_ram(void *p);        /* SS2SP_RAM_POINTER 빌드에서만 필요 */
 void        ss2comm_set_enabled(int on);     /* 코어 옵션 */
 void        ss2comm_set_rom(const void *rom, unsigned len); /* 초상(얼굴)을 사용자 롬에서 그린다 */
-void        ss2comm_set_speaker(int idx);    /* 0 하오마루 1 나코루루 2 한조 3 갈포드 */
+void        ss2comm_set_speaker(int idx);    /* 0 = 하오마루. 순서는 ss2comm_speaker_name() 으로 */
+int         ss2comm_speaker_count(void);     /* 해설자 수 (v0.7: 15) */
+const char *ss2comm_speaker_name(int idx);   /* 화자 이름 (UTF-8) */
+const char *ss2comm_speaker_hello(int idx);  /* 화자 인사 한마디 */
+int         ss2comm_get_speaker(void);
+int         ss2comm_next_speaker(int step);  /* 다음(또는 이전) 해설자로. 새 번호를 돌려준다 */
+void        ss2comm_set_duo(int on);        /* 짝꿍(받아치는 말) 켬/끔. 기본 켬 */
 void        ss2comm_reset(void);             /* 롬 로드/리셋 시 */
 void        ss2comm_notify(const char *text);/* 해설 자리에 안내 한 줄 */
 /* 카드가 없어 SP 발동을 거른 경우의 안내. 글리프 추출이 이 파일도 훑으므로 여기에 둔다. */

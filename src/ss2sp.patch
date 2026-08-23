@@ -31,7 +31,7 @@ index ef01e22..961ec32 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,34 @@ static void check_color_depth(void)
+@@ -377,6 +379,37 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -50,6 +50,9 @@ index ef01e22..961ec32 100644
 +extern int         ss2sp_card_block;
 +extern void        ss2comm_set_enabled(int on);
 +extern void        ss2comm_set_speaker(int idx);
++extern void        ss2comm_set_duo(int on);
++extern int         ss2comm_next_speaker(int step);
++extern const char *ss2comm_speaker_hello(int idx);
 +extern void        ss2comm_reset(void);
 +extern const char *ss2comm_frame(void);
 +extern void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h);
@@ -66,7 +69,7 @@ index ef01e22..961ec32 100644
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +422,44 @@ static void check_variables(void)
+@@ -392,6 +422,54 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -86,12 +89,22 @@ index ef01e22..961ec32 100644
 +   var.value = NULL;
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 +   {
-+      int sp = 0;
-+      if      (!strcmp(var.value, "nakoruru")) sp = 1;
-+      else if (!strcmp(var.value, "hanzo"))    sp = 2;
-+      else if (!strcmp(var.value, "galford"))  sp = 3;
++      /* v0.7: 해설자가 15명이다. 표는 엔진(ss2comm)이 들고 있으므로 이름으로 찾는다 —
++         대사표를 늘려도 이 파일은 안 고쳐도 된다. */
++      static const char *const spk_key[] = {
++         "haohmaru","nakoruru","hanzo","galford","rimururu","genjuro","ukyo","charlotte",
++         "jubei","kazuki","sogetsu","asura","shiki","morozumi","yuga"
++      };
++      int sp = 0, k;
++      for (k = 0; k < (int)(sizeof(spk_key)/sizeof(spk_key[0])); k++)
++         if (!strcmp(var.value, spk_key[k])) { sp = k; break; }
 +      ss2comm_set_speaker(sp);
 +   }
++
++   var.key   = "ngp_ss2sp_comm_duo";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      ss2comm_set_duo(!strcmp(var.value, "enabled"));
 +
 +   var.key   = "ngp_ss2sp_comm_draw";
 +   var.value = NULL;
@@ -130,7 +143,7 @@ index ef01e22..961ec32 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +531,12 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +531,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -140,6 +153,7 @@ index ef01e22..961ec32 100644
 +      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,  "SP (with a direction)" },
 +      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,  "SP (same as X)" },
 +      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,  "A + B (same as Y)" },
++      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2, "Next commentator" },
  
        { 0 },
     };
@@ -155,7 +169,7 @@ index ef01e22..961ec32 100644
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +640,26 @@ static void update_input(void)
+@@ -556,6 +640,38 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -172,6 +186,18 @@ index ef01e22..961ec32 100644
 +      if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_Y)) ||
 +          (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L)))
 +         input_buf |= (uint8_t)((1 << 4) | (1 << 5));   /* A + B 동시 */
++      /* v0.7: L2 = 해설자 교대. 설정을 열지 않고 판 중에 다음 사람에게 넘긴다.
++         누른 순간에만 한 번 — 누르고 있는 동안 계속 넘어가면 안 된다. */
++      {
++         static int comm_prev = 0;
++         int now = (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L2)) ? 1 : 0;
++         if (now && !comm_prev)
++         {
++            int sp = ss2comm_next_speaker(1);
++            ss2comm_notify(ss2comm_speaker_hello(sp));
++         }
++         comm_prev = now;
++      }
 +      input_buf = ss2sp_frame(input_buf, trig);
 +      if (ss2sp_card_block)      /* 카드가 없어 걸러진 순간 — 왜 안 나갔는지 알려 준다 */
 +      {
@@ -279,7 +305,7 @@ index a0dc3ec..a1d66b8 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -52,6 +52,67 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -52,6 +52,92 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
        },
        "english",
     },
@@ -301,7 +327,7 @@ index a0dc3ec..a1d66b8 100644
 +      "ngp_ss2sp_comm",
 +      "SS2 Character Commentary",
 +      NULL,
-+      "Samurai Shodown! 2 only. A character (Haohmaru / Nakoruru / Hanzo / Galford) comments on the match: KO, perfect win, comeback, win streak, story progress and menu chatter. Korean text.",
++      "Samurai Shodown! 2 only. One of 15 characters comments on the match: KO, perfect win, comeback, win streak, story progress and menu chatter. Press L2 during play to hand over to the next commentator. Korean text.",
 +      NULL,
 +      "video",
 +      {
@@ -319,13 +345,38 @@ index a0dc3ec..a1d66b8 100644
 +      NULL,
 +      "video",
 +      {
-+         { "haohmaru", "Haohmaru" },
-+         { "nakoruru", "Nakoruru" },
-+         { "hanzo",    "Hanzo" },
-+         { "galford",  "Galford" },
++         { "haohmaru",  "Haohmaru" },
++         { "nakoruru",  "Nakoruru" },
++         { "hanzo",     "Hanzo" },
++         { "galford",   "Galford" },
++         { "rimururu",  "Rimururu" },
++         { "genjuro",   "Genjuro" },
++         { "ukyo",      "Ukyo" },
++         { "charlotte", "Charlotte" },
++         { "jubei",     "Jubei" },
++         { "kazuki",    "Kazuki" },
++         { "sogetsu",   "Sogetsu" },
++         { "asura",     "Asura" },
++         { "shiki",     "Shiki" },
++         { "morozumi",  "Morozumi" },
++         { "yuga",      "Yuga" },
 +         { NULL, NULL},
 +      },
 +      "haohmaru",
++   },
++   {
++      "ngp_ss2sp_comm_duo",
++      "SS2 Commentary Partner",
++      NULL,
++      "In big moments a second character answers the commentator in one short line - KO, super move, comeback, danger, and the end-of-match verdict. Turn it off if one voice is enough.",
++      NULL,
++      "video",
++      {
++         { "enabled",  "Enabled" },
++         { "disabled", "Disabled" },
++         { NULL, NULL},
++      },
++      "enabled",
 +   },
 +   {
 +      "ngp_ss2sp_comm_draw",

@@ -44,6 +44,7 @@ void ss2comm_set_ram(void *p) { (void)p; }
 
 
 #include "ss2comm_lines.h"
+#include "ss2comm_duo.h"
 
 static const char *CHARNAME[15] = {
   "카즈키","소게츠","하오마루","겐주로","나코루루","리무루루","한조","갈포드",
@@ -56,7 +57,8 @@ enum { CK_ROUND, CK_ROUNDCTX, CK_KO, CK_MV, CK_HIT, CK_TK, CK_DN, CK_DN2, CK_OSP
        CK_LOW, CK_LOW2X, CK_REV, CK_PFT, CK_CBK, CK_QKO, CK_RVG, CK_STK,
        CK_SURV, CK_SURV2, CK_STG, CK_QUOTE, CK_ENDING, CK_RES, CK_RES2, CK_REC,
        CK_VSQ, CK_STORY, CK_SCR0, CK_SCR2, CK_SCR4, CK_SCR6, CK_SELCHAT, CK_MIDLE,
-       CK_FB, CK_IDLE, CK_LONG, CK_MUSE, CK_LORE, CK_N };
+       CK_FB, CK_IDLE, CK_LONG, CK_MUSE, CK_LORE,
+       CK_FLOW, CK_ARC, CK_N };
 
 /* {쿨다운 키, 쿨다운(프레임 · 60fps 기준)} — 브라우저판의 ms 값을 프레임으로 옮긴 것 */
 static const struct { unsigned char key; unsigned short cool; } EVCD[EV_N] = {
@@ -75,7 +77,11 @@ static const struct { unsigned char key; unsigned short cool; } EVCD[EV_N] = {
   {CK_MV,66},{CK_MV,66},{CK_MV,66},{CK_KO,240},
   {CK_RVG,900},{CK_STK,300},{CK_REC,360},
   {CK_RES,480},{CK_RES,480},
-  {CK_LORE,300},{CK_LORE,300}
+  {CK_LORE,300},{CK_LORE,300},
+  /* v0.7 흐름 — 라운드 안에서 12초에 한 번 */
+  {CK_FLOW,720},{CK_FLOW,720},{CK_FLOW,720},{CK_FLOW,720},{CK_FLOW,720},
+  /* v0.7 총평 — 매치 끝에 한 번. 승패 한마디(RES2)와 같은 자리를 쓴다 */
+  {CK_ARC,420},{CK_ARC,420},{CK_ARC,420},{CK_ARC,420},{CK_ARC,420},{CK_ARC,420}
 };
 
 /* ── 상태 ── */
@@ -98,15 +104,33 @@ static int sess_wins, sess_games, sess_streak, sess_survBest, sess_lastLossChar 
 /* 기술 결합창 — 필살기가 나가면 450ms(27프레임) 기다렸다가 결과와 묶는다 */
 static const char *pend_name; static int pend_sup, pend_left;
 
+/* ── v0.7 관전 기억 ────────────────────────────────────────────────
+   방금 일어난 일이 아니라 **쌓인 흐름**에 반응한다. 브라우저판 flowMem 과 같은 규칙:
+   같은 기술 3번 · 주고받기 5회 · 6대 무피해 · 6대 맞고 무반격 · 상대 필살기 4번째.
+   매치가 끝나면 라운드 결과 배열('w'/'l'/'d')을 읽어 판의 **모양**을 한 마디로 낸다. */
+#define FLMV 6
+static int fl_hit, fl_tak, fl_alt, fl_lastBy, fl_oppSp;
+static unsigned char fl_said;             /* 라운드당 한 종류씩만 */
+#define FLS_SAME  1
+#define FLS_TRADE 2
+#define FLS_ONE   4
+#define FLS_CHASE 8
+#define FLS_SP    16
+static struct { const char *name; int n; } fl_mv[FLMV];
+static char fl_rounds[10]; static int fl_nr;
+
 static char  outbuf[160];
 static char  curline[160];
 static unsigned cur_f = 0;
 static int cur_ev = -1;
+static int cur_spk = 0;            /* 지금 줄을 말한 사람 — 짝꿍이 받으면 여기가 바뀐다 */
+static int cm_duo = 1;             /* 짝꿍 켬/끔 */
+static unsigned duo_at, duo_big_at;/* 시계 둘 — 잔반응 6초 · 승부 순간 2초 */
 static unsigned rng = 2463534242u;
 
 /* 발화 대기열 — 한 프레임에 두세 마디가 겹치면 순서대로 내보낸다(브라우저판 ANN 큐와 같은 역할) */
 #define QN 4
-static struct { char text[160]; short ev; } q[QN];
+static struct { char text[160]; short ev; short spk; } q[QN];
 static int q_head, q_cnt;
 static unsigned q_next;
 
@@ -115,7 +139,25 @@ static int rd(int off){ return RAM[off]; }
 static int rd16(int off){ return RAM[off] | (RAM[off+1]<<8); }
 
 void ss2comm_set_enabled(int on){ cm_on = on ? 1 : 0; }
-void ss2comm_set_speaker(int idx){ if(idx>=0 && idx<4) cm_spk = idx; }
+void ss2comm_set_speaker(int idx){ if(idx>=0 && idx<SS2COMM_SPK_N) cm_spk = idx; }
+/* v0.7: 해설자가 15명이 되면서 프런트엔드가 이름·수를 알아야 한다.
+   버튼 하나로 교대하는 길도 여기서 연다 — 코어·앱이 같은 순서를 쓴다. */
+int ss2comm_speaker_count(void){ return SS2COMM_SPK_N; }
+const char *ss2comm_speaker_name(int idx){
+  return (idx>=0 && idx<SS2COMM_SPK_N) ? SPK_NAME[idx] : "";
+}
+int ss2comm_get_speaker(void){ return cm_spk; }
+void ss2comm_set_duo(int on){ cm_duo = on ? 1 : 0; }
+/* 다음 해설자로 넘기고 그 사람 번호를 돌려준다. 인사 한마디는 프런트엔드가 띄운다. */
+int ss2comm_next_speaker(int step){
+  int n = SS2COMM_SPK_N;
+  cm_spk = ((cm_spk + (step?step:1)) % n + n) % n;
+  cur_spk = cm_spk; duo_at = duo_big_at = 0;
+  return cm_spk;
+}
+const char *ss2comm_speaker_hello(int idx){
+  return (idx>=0 && idx<SS2COMM_SPK_N) ? HELLO[idx] : "";
+}
 void ss2comm_reset(void){
   int i; for(i=0;i<CK_N;i++) cd[i]=0;
   p_mode=p_scr=-1; p_hp1=p_hp2=-1; p_a1=p_a2=0; p_surv=p_stage=0;
@@ -124,14 +166,55 @@ void ss2comm_reset(void){
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
-  curline[0]=0; cur_f=0; cur_ev=-1; last_line_f=0; last_input_f=0; hush_until=0;
+  curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk; duo_at=duo_big_at=0;
+  last_line_f=0; last_input_f=0; hush_until=0;
   pend_name=0; pend_sup=0; pend_left=0;
+  { int k; fl_hit=fl_tak=fl_alt=fl_lastBy=fl_oppSp=0; fl_said=0; fl_nr=0; fl_rounds[0]=0;
+    for(k=0;k<FLMV;k++){ fl_mv[k].name=0; fl_mv[k].n=0; } }
   q_head=q_cnt=0; q_next=0;
 }
 
 /* 대사 한 줄 만들어 대기열에 넣는다.
    vsel < 0 이면 변형 중 무작위, 0 이상이면 그 변형을 고른다.
    돌려주는 값: 1 = 받아들임(쿨다운 통과), 0 = 무시됨 → 호출부의 || 사슬이 다음 후보로 넘어간다 */
+/* ── v0.7 짝꿍 — 큰 장면에서 다른 한 명이 짧게 받는다 ────────────
+   한 명이 혼자 떠들면 심심하다. 받는 말은 길면 안 된다 — 한 호흡이어야 주고받는 맛이 난다.
+   잔반응과 승부 순간은 **시계를 따로** 쓴다. 하나로 두면 시작 멘트에 한 번 받아친 것 때문에
+   정작 KO 를 못 받는다(브라우저판에서 실제로 그랬다). */
+static int duo_cat(int ev){
+  switch(ev){
+    case EV_KO: case EV_MOVEKO: case EV_KOED: case EV_DKO:
+    case EV_PERFECT: case EV_QUICK:                       return DC_KO;
+    case EV_MOVE:                                         return DC_SUP;
+    case EV_LOW1: case EV_LOW2: case EV_DOUBLELOW:
+    case EV_MATCHPOINT:                                   return DC_CRISIS;
+    case EV_REVERSAL: case EV_COMEBACK:                   return DC_TURN;
+    case EV_ARCSWEEP: case EV_ARCSWEPT: case EV_ARCCOMEBACK:
+    case EV_ARCSWEAT: case EV_ARCCHOKE: case EV_ARCSLIP:  return DC_ARC;
+    case EV_FLOWSAME: case EV_FLOWTRADE: case EV_FLOWONE:
+    case EV_FLOWCHASE: case EV_FLOWSP:                    return DC_FLOW;
+    case EV_START:                                        return DC_START;
+    default:                                              return -1;
+  }
+}
+static void duo_after(int ev){
+  const char *cand[DUOMAXV];
+  int cat, p, n = 0, i, big, slot;
+  if(!cm_duo) return;
+  cat = duo_cat(ev);            if(cat < 0) return;
+  p   = DUO_PAIR_C[cm_spk];     if(p < 0)   return;   /* 받아칠 표가 없는 짝 — 조용히 */
+  big = (cat == DC_KO || cat == DC_ARC);
+  if(cm_f < (big ? duo_big_at : duo_at)) return;
+  for(i = 0; i < DUOMAXV; i++) if(DUOLINE[p][cat][i]) cand[n++] = DUOLINE[p][cat][i];
+  if(!n) return;
+  if(big) duo_big_at = cm_f + 120; else duo_at = cm_f + 360;
+  if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
+  else { slot = q_head; q_head = (q_head+1)%QN; }
+  snprintf(q[slot].text, sizeof(q[slot].text), "%s", cand[rnd()%(unsigned)n]);
+  q[slot].ev  = -1;             /* 받는 말은 표정·강조 없이 담담하게 */
+  q[slot].spk = (short)p;
+}
+
 static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   const char *cand[EVMAXV]; int n=0, i, key;
   const char *fmt;
@@ -155,12 +238,70 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
     else { slot = q_head; q_head = (q_head+1)%QN; }   /* 꽉 차면 가장 오래된 것을 민다 */
     snprintf(q[slot].text,sizeof(q[slot].text),"%s",outbuf);
     q[slot].ev = (short)ev;
+    q[slot].spk = (short)cm_spk;
   }
+  duo_after(ev);
   return 1;
 }
 static int emit(int ev){ return emit_ex(ev,-1,0,0,0); }
 static int emitn(int ev,int n){ return emit_ex(ev,-1,n,0,0); }
 static int emits(int ev,const char *s){ return emit_ex(ev,-1,0,0,s); }
+
+/* ── 관전 기억 ── */
+static void flow_reset(int newMatch){
+  int i;
+  fl_hit=fl_tak=fl_alt=fl_lastBy=fl_oppSp=0; fl_said=0;
+  for(i=0;i<FLMV;i++){ fl_mv[i].name=0; fl_mv[i].n=0; }
+  if(newMatch){ fl_nr=0; fl_rounds[0]=0; }
+}
+/* 쌓인 모양이 임계에 닿으면 한 마디. 한 번에 한 종류만 낸다. */
+static void flow_check(void){
+  if(fl_alt>=5 && !(fl_said&FLS_TRADE)){ fl_said|=FLS_TRADE; emitn(EV_FLOWTRADE, fl_alt); return; }
+  if(fl_hit>=6 && fl_tak==0 && !(fl_said&FLS_ONE)){ fl_said|=FLS_ONE; emitn(EV_FLOWONE, fl_hit); return; }
+  if(fl_tak>=6 && fl_hit==0 && !(fl_said&FLS_CHASE)){ fl_said|=FLS_CHASE; emitn(EV_FLOWCHASE, fl_tak); }
+}
+static int flow_mv_bump(const char *name){
+  int i, free_i = -1;
+  for(i=0;i<FLMV;i++){
+    if(fl_mv[i].name && !strcmp(fl_mv[i].name, name)) return ++fl_mv[i].n;
+    if(!fl_mv[i].name && free_i<0) free_i = i;
+  }
+  if(free_i<0) free_i = 0;                 /* 자리가 없으면 첫 칸을 재사용 */
+  fl_mv[free_i].name = name; fl_mv[free_i].n = 1;
+  return 1;
+}
+static void flow_hit(const char *name){
+  fl_hit++;
+  if(fl_lastBy==2) fl_alt++;
+  fl_lastBy = 1;
+  if(name && *name && strcmp(name,"필살기")){
+    if(flow_mv_bump(name)==3 && !(fl_said&FLS_SAME)){
+      fl_said |= FLS_SAME; emits(EV_FLOWSAME, name); return;
+    }
+  }
+  flow_check();
+}
+static void flow_take(void){
+  fl_tak++;
+  if(fl_lastBy==1) fl_alt++;
+  fl_lastBy = 2;
+  flow_check();
+}
+static void flow_oppsp(void){
+  if(++fl_oppSp==4 && !(fl_said&FLS_SP)){ fl_said |= FLS_SP; emitn(EV_FLOWSP, 4); }
+}
+static void flow_round(char r){ if(fl_nr < (int)sizeof(fl_rounds)-1) fl_rounds[fl_nr++] = r; }
+/* 매치의 모양 — 없으면 -1 (그러면 원래 승패 한마디로 떨어진다) */
+static int flow_arc(void){
+  fl_rounds[fl_nr] = 0;
+  if(!strcmp(fl_rounds,"ww"))  return EV_ARCSWEEP;
+  if(!strcmp(fl_rounds,"ll"))  return EV_ARCSWEPT;
+  if(!strcmp(fl_rounds,"lww")) return EV_ARCCOMEBACK;
+  if(!strcmp(fl_rounds,"wlw")) return EV_ARCSWEAT;
+  if(!strcmp(fl_rounds,"wll")) return EV_ARCCHOKE;
+  if(!strcmp(fl_rounds,"lwl")) return EV_ARCSLIP;
+  return -1;
+}
 
 /* 엔진 밖에서 한 줄 띄우기 — 지금은 "카드가 없다" 안내에 쓴다.
    해설과 같은 자리에 같은 글꼴로 뜬다(해설을 꺼 두면 조용히 넘어간다). */
@@ -171,6 +312,7 @@ void ss2comm_notify(const char *text){
   else { slot = q_head; q_head = (q_head+1)%QN; }
   snprintf(q[slot].text,sizeof(q[slot].text),"%s",text);
   q[slot].ev = -1;                       /* 표정·강조 없음 */
+  q[slot].spk = (short)cm_spk;
 }
 
 const char *ss2comm_current(int *age){
@@ -237,7 +379,10 @@ const char *ss2comm_frame(void){
       if(!st_resultDone && done && (st_won || st_lost)){
         st_resultDone = 1;
         emit(st_won ? EV_WINSCR  : EV_LOSESCR);
-        emit(st_won ? EV_WINTALK : EV_LOSETALK);
+        /* v0.7: 판의 **모양**이 잡히면 승패 한마디 대신 총평을 낸다.
+           "이겼다/졌다"를 두 번 말하지 않기 위해서다. */
+        { int arc = flow_arc();
+          if(arc < 0 || !emit(arc)) emit(st_won ? EV_WINTALK : EV_LOSETALK); }
         /* 오늘 전적은 세 판에 한 번만 — 매번 붙으면 결과가 늘어진다 */
         if(sess_games>=3 && sess_games%3==0)
           emit_ex(EV_RECORD, sess_wins*2>=sess_games?0:1, sess_games, sess_wins, 0);
@@ -258,6 +403,7 @@ const char *ss2comm_frame(void){
       const char *rel;
       st_myR=st_opR=0; st_roundN=1;
       st_fb=st_longSaid=st_dblLow=0;
+      flow_reset(1);                              /* v0.7 관전 기억 — 매치 통째로 */
       st_myChar  = blk_char(rd(OFF_BLK1));
       st_oppChar = blk_char(rd(OFF_BLK2));
       if(st_myChar>=0 && st_oppChar>=0){
@@ -276,6 +422,7 @@ const char *ss2comm_frame(void){
       }
     }else{                                        /* 라운드 재개 */
       st_roundN++; st_fb=st_longSaid=st_dblLow=0;
+      flow_reset(0);                              /* v0.7 라운드 단위 관찰만 */
       if(st_myR==1 && st_opR==1)      emit(EV_MATCHPOINT);
       else if(st_myR==1 && st_opR==0) emit(EV_ROUNDLEAD);
       else if(st_myR==0 && st_opR==1) emit(EV_ROUNDBEHIND);
@@ -333,10 +480,14 @@ const char *ss2comm_frame(void){
     /* 비오의는 **나가는 순간 바로** 호들갑을 떤다. 결합창을 기다리면 적중 멘트에 먹힌다. */
     if(pend_sup) emit(EV_MOVE);
   }
-  if(live && a2>=0x180 && p_a2<0x180) emit(EV_OPPSP);
+  if(live && a2>=0x180 && p_a2<0x180){ flow_oppsp(); emit(EV_OPPSP); }
   }
 
   hit2 = hp2 < p_hp2; hit1 = hp1 < p_hp1;
+  /* v0.7 관전 기억 — 유효타만. pend_name 이 살아 있으면 그 기술로 친 것이다
+     (아래 pend_take 가 가져가기 전에 세야 한다). */
+  if(hit2 && (p_hp2-hp2)>=4) flow_hit(pend_name);
+  if(hit1 && (p_hp1-hp1)>=4) flow_take();
   down2   = (a2>=0x13C && a2<=0x154) && !(p_a2>=0x13C && p_a2<=0x154);
   downed1 = (a1>=0x13C && a1<=0x154) && !(p_a1>=0x13C && p_a1<=0x154);
 
@@ -345,13 +496,13 @@ const char *ss2comm_frame(void){
     if(hit2 && !hit1 && st_roundN==1 && hp2>0 && !pend_name && (p_hp2-hp2)>=4) emit(EV_FIRSTBLOOD);
   }
 
-  if(hit1 && hit2 && hp1<=0 && hp2<=0 && !st_ko){ st_ko=1; pend_take(0); emit(EV_DKO); }
+  if(hit1 && hit2 && hp1<=0 && hp2<=0 && !st_ko){ st_ko=1; pend_take(0); flow_round('d'); emit(EV_DKO); }
   else{
     if(hit2 && hp2<=0 && !st_ko){
       int sup; const char *nm = pend_take(&sup);
       st_ko=1; st_won=1; st_lost=0;
       if(nm) emit_ex(EV_MOVEKO,0,0,0,nm); else emit(EV_KO);
-      st_myR++;
+      st_myR++; flow_round('w');
       { int mw = (st_myR>=2); int said;
         if(mw){ sess_streak++; sess_wins++; sess_games++; }
         said =
@@ -386,7 +537,7 @@ const char *ss2comm_frame(void){
         st_ko=1; st_lost=1; st_won=0;
         emit(EV_KOED);
         if(surv>0) emitn(EV_SURVEND, surv);
-        st_opR++;
+        st_opR++; flow_round('l');
         if(st_opR>=2){ sess_streak=0; sess_lastLossChar=st_oppChar; sess_games++; }
       }
       else if(d>=12) emit(EV_TAKEN);
@@ -434,7 +585,7 @@ out:
     int slot = q_head;
     q_head = (q_head+1)%QN; q_cnt--;
     snprintf(curline,sizeof(curline),"%s",q[slot].text);
-    cur_ev = q[slot].ev; cur_f = cm_f; last_line_f = cm_f;
+    cur_ev = q[slot].ev; cur_spk = q[slot].spk; cur_f = cm_f; last_line_f = cm_f;
     /* 결과 계열(승패 화면·한마디 더·전적)은 한 박자 더 벌려야 자연스럽다 */
     q_next = cm_f + ((cur_ev==EV_WINSCR||cur_ev==EV_LOSESCR||cur_ev==EV_WINTALK||
                       cur_ev==EV_LOSETALK||cur_ev==EV_RECORD) ? 150 : 100);
@@ -481,12 +632,15 @@ static const unsigned char EVMOOD[EV_N] = {
   /* DOUBLELOW LONGFIGHT */                                 1,0,
   /* HIT TAKEN DOWN DOWNED OPPSP */                         1,2,1,2,2,
   /* MOVE MOVEHIT MOVEDOWN MOVEKO */                        1,1,1,1,
-  /* REVENGE STREAK RECORD WINSCR LOSESCR REL LORE */       1,1,0,1,2,0,0
+  /* REVENGE STREAK RECORD WINSCR LOSESCR REL LORE */       1,1,0,1,2,0,0,
+  /* v0.7 흐름: FLOWSAME TRADE ONE CHASE SP */              0,1,1,2,0,
+  /* v0.7 총평: SWEEP SWEPT COMEBACK SWEAT CHOKE SLIP */    1,2,1,1,2,2
 };
 static const unsigned char EVHIT[EV_N] = {
   0,0,1,0,1,1,1,1,   0,0,1,0,0,   1,0,1,0,1,   0,0,0,0,
   0,0,0,0,           0,0,0,0,     0,0,0,1,     1,0,
-  0,0,0,0,0,         1,0,0,1,     1,1,0,0,0,0,0
+  0,0,0,0,0,         1,0,0,1,     1,1,0,0,0,0,0,
+  0,0,0,0,0,         1,0,1,1,0,0
 };
 
 /* ── 초상 (얼굴) ──────────────────────────────────────────────────
@@ -495,17 +649,13 @@ static const unsigned char EVHIT[EV_N] = {
    그림은 사용자 롬에서 그 자리에서 그린다(게임 그림은 어디에도 넣지 않는다).
    sum = 64바이트 단순합. 다른 버전 롬이면 초상은 조용히 생략한다. */
 typedef struct { unsigned off; unsigned short pal[4]; unsigned short sum; } ss2face;
-static const ss2face FACE_ROM[4] = {          /* 화자 순서: 하오마루·나코루루·한조·갈포드 */
-  { 388903, {0x0000,0x0BDF,0x0865,0x0024}, 12253 },
-  { 389671, {0x0000,0x0CDF,0x043F,0x0224}, 13246 },
-  { 389543, {0x0000,0x00AF,0x0653,0x0210}, 11994 },
-  { 388711, {0x0000,0x0BDF,0x00FF,0x0410}, 11724 }
-};
+/* 표는 ss2comm_lines.h 가 만든다 (브라우저판 FACE_ROM 을 화자 순서로 옮긴 것) */
+static const ss2face FACE_ROM[SS2COMM_SPK_N] = SS2COMM_FACE_ROM_INIT;
 static const unsigned char *cm_rom = 0;
 static unsigned cm_romlen = 0;
-static uint16_t face_px[4][256];
-static unsigned char face_a[4][256];          /* 0 = 투명(색인 0) */
-static unsigned char face_ok[4];
+static uint16_t face_px[SS2COMM_SPK_N][256];
+static unsigned char face_a[SS2COMM_SPK_N][256];   /* 0 = 투명(색인 0) */
+static unsigned char face_ok[SS2COMM_SPK_N];
 static int face_built = 0;
 
 void ss2comm_set_rom(const void *rom, unsigned len){
@@ -521,8 +671,9 @@ static void build_faces(void){
   face_built = 1;
   memset(face_ok, 0, sizeof(face_ok));
   if(!cm_rom) return;
-  for(i=0;i<4;i++){
+  for(i=0;i<SS2COMM_SPK_N;i++){
     unsigned off = FACE_ROM[i].off, sum = 0; int j;
+    if(!off) continue;                        /* 오프셋을 아직 못 뜬 화자 — 얼굴 없이 글자만 */
     if(off + 64 > cm_romlen) continue;
     for(j=0;j<64;j++) sum = (sum + cm_rom[off+j]) & 0xFFFF;
     if(sum != FACE_ROM[i].sum) continue;      /* 다른 롬 — 이 얼굴은 생략 */
@@ -712,7 +863,7 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   mood = (cur_ev>=0 && cur_ev<EV_N) ? EVMOOD[cur_ev] : 0;
   hit  = (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev]  : 0;
   col  = hit ? COL_GOLD : COL_WHITE;
-  spk  = cm_spk;
+  spk  = (cur_spk >= 0 && cur_spk < SS2COMM_SPK_N) ? cur_spk : cm_spk;
   if(!face_built) build_faces();
   show = 2 + (int)age*2;                       /* 타자 연출: 프레임당 두 글자 */
 
