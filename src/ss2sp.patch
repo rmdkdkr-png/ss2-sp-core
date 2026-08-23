@@ -60,7 +60,7 @@ index ef01e22..961ec32 100644
 +extern int         ss2comm_band_h(void);
 +extern int         ss2comm_band_top(void);
 +extern int         ss2comm_drawing(void);
-+#define SS2COMM_BAND_MAX 30
++#define SS2COMM_BAND_MAX 32
 +extern int         ss2sp_last_ok;
 +
 +/* SS2 원버튼 엔진 on/off (코어 옵션 ngp_ss2sp) */

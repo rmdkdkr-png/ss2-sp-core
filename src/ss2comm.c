@@ -607,6 +607,14 @@ const char *ss2comm_current(int *age){
    글꼴에 없는 글자·잘림·줄바꿈은 표를 들여다봐서는 안 보이고 그려 봐야 보인다.
    배포 빌드에는 안 들어간다 (bandshot.c 만 이 매크로를 켠다). */
 #ifdef SS2COMM_TEST
+/* 롬이 없는 방에서 심판 초상 **그리기 경로**만 확인하려고 합성 그림을 직접 밀어 넣는다.
+   실제 그림은 언제나 사용자 롬에서 나온다 — 이 훅은 배포 빌드에 없다. */
+void ss2comm_test_ref_face(const uint16_t *px, const unsigned char *al){
+  extern uint16_t ref_px[]; extern unsigned char ref_a[]; extern unsigned char ref_ok;
+  memcpy(ref_px, px, sizeof(uint16_t)*32*32);
+  memcpy(ref_a, al, 32*32);
+  ref_ok = 1;
+}
 void ss2comm_test_say(const char *t, int spk){
   snprintf(curline, sizeof curline, "%s", t);
   cur_ev = -1; cur_spk = spk; cur_f = cm_f; last_line_f = cm_f;
@@ -1148,6 +1156,28 @@ typedef struct { unsigned off; unsigned short pal[4]; unsigned short sum; } ss2f
 static const ss2face FACE_ROM[SS2COMM_SPK_N] = SS2COMM_FACE_ROM_INIT;
 static const unsigned char *cm_rom = 0;
 static unsigned cm_romlen = 0;
+/* ── 심판(쿠로코) 초상 ────────────────────────────────────────────
+   선택 화면 아이콘 32x32. 스크롤2(밑그림) 위에 스크롤1(색 입히는 겹)을 얹어 그린다.
+   윗겹은 타일 두 칸을 다른 그림과 **공유**해서 순서가 연속이 아니다.
+   숫자는 실기 롬에서 CharacterRAM·ScrollVRAM·ColorPaletteRAM 을 떠서 뜬 것이다.
+   그림은 배포물에 없다 — 사용자 롬에서 실행 중에 그린다. */
+static const unsigned KUROKO_BG[16] = {          /* 밑겹: 394187 + 16k */
+  394187,394203,394219,394235, 394251,394267,394283,394299,
+  394315,394331,394347,394363, 394379,394395,394411,394427 };
+static const unsigned KUROKO_FG[16] = {          /* 윗겹 (2번째·15번째가 공유 타일) */
+  397883,394203,397899,397915, 397931,397947,397963,397979,
+  397995,398011,398027,398043, 398059,398075,394411,398091 };
+static const unsigned short KUROKO_PAL_FG[4] = {0x000,0x660,0xA95,0xFFF};
+static const unsigned short KUROKO_PAL_BG[4] = {0x000,0x49D,0xADF,0xFFF};
+#ifdef SS2COMM_TEST
+#define REFSTATIC
+#else
+#define REFSTATIC static
+#endif
+REFSTATIC uint16_t      ref_px[32*32];
+REFSTATIC unsigned char ref_a[32*32];
+REFSTATIC unsigned char ref_ok;
+
 static uint16_t face_px[SS2COMM_SPK_N][256];
 static unsigned char face_a[SS2COMM_SPK_N][256];   /* 0 = 투명(색인 0) */
 static unsigned char face_ok[SS2COMM_SPK_N];
@@ -1161,6 +1191,38 @@ static uint16_t pal12_to565(unsigned short v){
   int r=(v&0xF)*17, g=((v>>4)&0xF)*17, b=((v>>8)&0xF)*17;   /* RGB444, R이 하위 니블 */
   return (uint16_t)(((r>>3)<<11) | ((g>>2)<<5) | (b>>3));
 }
+/* 32x32 두 겹을 한 장으로 굽는다. 밑겹은 색0까지 다 칠하고, 윗겹은 색0 을 비운다.
+   따로 체크섬이 없어서 **HUD 얼굴 15개가 맞은 롬인지**로 대신 확인한다 —
+   그게 맞으면 같은 빌드이고, 이 오프셋도 같이 맞는다. */
+static void build_ref_face(void){
+  int k, ty, tx, okAny = 0, i;
+  ref_ok = 0;
+  memset(ref_a, 0, sizeof ref_a);
+  if(!cm_rom) return;
+  for(i=0;i<SS2COMM_SPK_N;i++) if(face_ok[i]) okAny++;
+  if(okAny < SS2COMM_SPK_N) return;          /* 다른 롬 — 심판 얼굴은 생략 */
+  for(k=0;k<16;k++){
+    unsigned ob = KUROKO_BG[k], of = KUROKO_FG[k];
+    int ox = (k & 3) * 8, oy = (k >> 2) * 8;
+    if(ob + 16 > cm_romlen || of + 16 > cm_romlen) return;
+    for(ty=0; ty<8; ty++){
+      unsigned wb = cm_rom[ob+ty*2] | (cm_rom[ob+ty*2+1]<<8);
+      unsigned wf = cm_rom[of+ty*2] | (cm_rom[of+ty*2+1]<<8);
+      for(tx=0; tx<8; tx++){
+        int cb = (wb >> ((7-tx)*2)) & 3;
+        int cf = (wf >> ((7-tx)*2)) & 3;
+        int p  = (oy+ty)*32 + (ox+tx);
+        if(cf){ ref_px[p] = pal12_to565(KUROKO_PAL_FG[cf]); ref_a[p] = 1; }
+        /* 밑겹의 흰색(색3)은 선택 화면 카드의 **바탕**이다. 띠에 그대로 옮기면
+           검은 띠 위에 흰 사각형이 앉는다. 그건 비우고 쿠로코만 띄운다. */
+        else if(cb && cb != 3){ ref_px[p] = pal12_to565(KUROKO_PAL_BG[cb]); ref_a[p] = 1; }
+        else ref_a[p] = 0;
+      }
+    }
+  }
+  ref_ok = 1;
+}
+
 static void build_faces(void){
   int i, k, ty, tx;
   face_built = 1;
@@ -1186,6 +1248,7 @@ static void build_faces(void){
     }
     face_ok[i] = 1;
   }
+  build_ref_face();
 }
 /* 표정: 신남이면 밝게, 걱정이면 어둡고 푸르게 */
 static uint16_t tint(uint16_t c, int mood){
@@ -1203,7 +1266,11 @@ static uint16_t tint(uint16_t c, int mood){
 
 /* 표시 모드: 0 끔(프론트엔드 알림) / 1 화면 밖 아래 띠 / 2 화면 안 위 / 3 화면 안 아래 / 4 화면 밖 위 띠
    화면 밖 띠는 게임 화면을 하나도 가리지 않는다. 큰 글씨 두 줄이 들어가게 30px 로 잡았다. */
-#define SS2_BAND_H 30
+/* 32 인 이유: 심판 쿠로코 초상이 **32x32 선택화면 아이콘**뿐이기 때문이다.
+   HUD 얼굴(16x16)은 388519~390375 에 64바이트 × 30칸 = 15캐릭터 × 2유파로 꽉 차 있고,
+   유파가 없는 쿠로코는 그 배열에 자리가 아예 없다. 16x16 으로 줄이거나 잘라 봤으나
+   후드 실루엣이 통째로 있어야 알아볼 수 있어 둘 다 못 쓴다(청록 덩어리가 된다). */
+#define SS2_BAND_H 32
 #define CM_TTL     150
 #define COL_WHITE  0xFFFF
 #define COL_GOLD   0xFEA0
@@ -1373,7 +1440,8 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   if(!face_built) build_faces();
   show = 2 + (int)age*2;                       /* 타자 연출: 프레임당 두 글자 */
 
-  tx0  = (face_ok[spk] && !ref_line) ? 21 : 4;
+  tx0  = ref_line ? (ref_ok ? 37 : 4)          /* 심판 초상은 32 폭 */
+                  : (face_ok[spk] ? 21 : 4);
   x1   = w - 3;
   /* 글자 상자는 12px 인데 자간(adv11)은 8px 다. 그래서 마지막 글자는 자기 자간보다
      **4px 더 오른쪽까지 그린다.** 폭을 자간으로만 재서 딱 맞추면 그 4px 이 잘려
@@ -1418,7 +1486,17 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
     int by = (cm_draw==2 || cm_draw==4) ? (bot-1) : top;
     for(x=0; x<w; x++) fb[by*pitch_px+x] = bc;
   }
-  /* 얼굴 */
+  /* 얼굴 — 심판은 32x32 두 겹짜리 제 초상 */
+  if(ref_line && ref_ok){
+    int fx=2, fy=top + (boxh-32)/2, a, b;
+    if(fy < top) fy = top;
+    for(b=0;b<32;b++) for(a=0;a<32;a++){
+      int px=fx+a, py=fy+b;
+      if(!ref_a[b*32+a]) continue;
+      if(px<0||px>=w||py<top||py>=bot) continue;
+      fb[py*pitch_px+px] = ref_px[b*32+a];
+    }
+  }
   if(face_ok[spk] && !ref_line){
     int fx=3, fy=top + (boxh-16)/2, a, b;
     if(hit && age < 6) fx += SS2_SHAKE[age];          /* 얼굴도 같이 흔든다 */
