@@ -350,9 +350,9 @@ static int duo_cat(int ev){
 #define SS2_SPK_REF (-2)          /* 얼굴 없이, 심판 색으로 */
 
 static const char *const REF_ROUND[3] = {
-  "일 본째 — 진조니, 쇼부!",
-  "이 본째 — 진조니, 쇼부!",
-  "삼 본째 — 진조니, 쇼부!",
+  "첫 판 — 정정당당히, 승부!",
+  "둘째 판 — 정정당당히, 승부!",
+  "셋째 판 — 정정당당히, 승부!",
 };
 
 /* 승부가 갈리면 승자의 **본명**을 부른다. 갈포드는 성이 없다. */
@@ -587,7 +587,7 @@ const char *ss2comm_frame(void){
            여기서만 불리는 이름이 된다. */
         if(wc >= 0 && wc < 15){
           char t[160];
-          snprintf(t, sizeof t, "%s — 오미고토!", CHARFULL[wc]);
+          snprintf(t, sizeof t, "%s — 훌륭하오!", CHARFULL[wc]);
           ref_say(t);
         }
         emit(st_won ? EV_WINSCR  : EV_LOSESCR);
