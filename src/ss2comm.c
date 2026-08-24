@@ -202,6 +202,7 @@ static unsigned q_next;
 static unsigned char anec_at[15], weap_at[15];  /* 썰·무기 소회를 어디까지 풀었나 */
 static unsigned ref_next;                       /* 심판끼리의 최소 간격 */
 static unsigned char ref_pend_round;            /* 새 매치 구호 — 전투 화면이 설 때 낸다 */
+static char pend_rel[160];                      /* 첫 관계 대사도 같이 미룬다 — VS 에서 소모되면 판에서는 안 보인다 */
 static unsigned ref_shown;                      /* 아래 칸에 세운 시각 (0 = 아직) */
 static char     ref_text[160];
 static unsigned ref_at;
@@ -330,7 +331,7 @@ void ss2comm_reset(void){
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
-  ref_next=0; ref_pend_round=0;
+  ref_next=0; ref_pend_round=0; pend_rel[0]=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
   curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk;
@@ -717,7 +718,15 @@ const char *ss2comm_frame(void){
 
   /* ── 전투측 화면 전환: 문구(VS) 화면 · 승패 결과 이름 화면 · 스토리 사담 ── */
   if(mode==MD_BATTLE && scr!=p_scr){
-    if(scr>=8 && p_scr<8 && ref_pend_round){ ref_pend_round=0; ref_round(); }  /* 미뤄 둔 첫 구호 */
+    if(scr>=8 && p_scr<8 && ref_pend_round){
+      /* 판이 선 **그 프레임**에 구호(0초). 호명과의 심판 간격은 여기선 안 기다린다 —
+         호명은 VS 화면에서 제 시간을 다 썼고, 판이 서면 판 이야기를 해야 한다. */
+      ref_pend_round=0; ref_next=cm_f; ref_round();
+      if(pend_rel[0]){
+        emits(EV_REL, pend_rel); pend_rel[0]=0;
+        q_next = cm_f + 180;                     /* 관계는 구호 3초 뒤 — 겹치지 않게 */
+      }
+    }
     if(p_scr>=8 && (scr==0 || scr==2)){
       /* 매치가 실제로 끝났을 때만 결과 멘트를 낸다(2선승). 라운드 하나 이긴 것으로는 말하지 않는다.
          승패 화면에서는 **두 줄까지** — 결과 한 마디 + 한마디 더. 그 뒤 잡담은 잠시 잠근다.
@@ -798,11 +807,19 @@ const char *ss2comm_frame(void){
       else if(st_oppChar<0)                     rel = RELGAND[cm_spk];
       else rel = RELOPP[cm_spk][st_oppChar];          /* 225칸 — 빈칸 없음 */
       if(!rel && st_myChar>=0) rel = RELME[cm_spk][st_myChar];
-      if(rel) emits(EV_REL, rel);
-      else if(st_oppChar>=0 && LORE[st_oppChar]){
-        char t[160];
-        snprintf(t,sizeof(t),"%s — %s",CHARNAME[st_oppChar],LORE[st_oppChar]);
-        emits(EV_LORE, t);
+      /* 제보: 「초기 3초·6초 멘트를 0초·3초로」. 진입이 VS 화면이면 관계 대사도
+         여기서 내지 않고 미룬다 — VS 에서 소모되면 정작 판에서는 안 보인다. */
+      if(scr >= 8){
+        if(rel) emits(EV_REL, rel);
+        else if(st_oppChar>=0 && LORE[st_oppChar]){
+          char t[160];
+          snprintf(t,sizeof(t),"%s — %s",CHARNAME[st_oppChar],LORE[st_oppChar]);
+          emits(EV_LORE, t);
+        }
+      }else{
+        if(rel) snprintf(pend_rel,sizeof pend_rel,"%s",rel);
+        else if(st_oppChar>=0 && LORE[st_oppChar])
+          snprintf(pend_rel,sizeof pend_rel,"%s — %s",CHARNAME[st_oppChar],LORE[st_oppChar]);
       }
     }else{                                        /* 라운드 재개 */
       st_roundN++; st_fb=st_longSaid=st_dblLow=0;
