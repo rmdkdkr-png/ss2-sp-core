@@ -31,6 +31,7 @@ int         ss2comm_ref_h(void);             /* 항상 0 — 심판은 게임 �
 int         ss2comm_ref_overlay(void);       /* 이번 프레임에 심판 오버레이를 그렸으면 그 높이(게임 자리 맨 아래 32줄) */
 int         ss2comm_band_top(void);          /* 1이면 띠가 게임 화면 위에 붙는다 */
 int         ss2comm_impact(void);            /* 지금 줄이 강조인가 — 진동·연출용 */
+int         ss2comm_thump(void);             /* 심판 구령(승부!·한 판!)이 선 프레임에 1 — 진동 한 번용, 읽으면 지워짐 */
 int         ss2comm_drawing(void);           /* 1이면 코어가 직접 그린다(알림 불필요) */
 void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h); /* 화면에 직접 그리기 */
 

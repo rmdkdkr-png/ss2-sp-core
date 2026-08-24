@@ -36,6 +36,10 @@ void ss2comm_set_ram(void *p) { (void)p; }
 #define OFF_SURV   0x180B
 #define OFF_STAGE  0x17FE
 #define OFF_PAD    0x2F82   /* 패드 레지스터 — 자동 전환(무입력 화면 넘김) 판별용 */
+#define OFF_JING   0x0000   /* 징글 명령. 라운드 인트로에서 2 가 되는 프레임 = 게임 「승부!」 글이 서는 프레임.
+                               세이브스테이트 두 주행(무입력 +494 · 연타 +190)에서 정확히 일치 */
+#define OFF_SEQTXT 0x17D1   /* 인트로 글 연출 카운터. 「자아」(15부터)·「N회전」(33부터)이 서기 4~10프레임
+                               전에 돌기 시작한다 — 연타로 인트로가 줄어도 그대로 따라간다 */
 #define MD_BATTLE  241
 #define MD_MENU    240
 #define MD_QUOTE   197
@@ -136,6 +140,7 @@ static int  cm_on = 1, cm_spk = 0;
 static unsigned cm_f = 0;                 /* 프레임 카운터 */
 static unsigned cd[CK_N];                 /* 쿨다운 만료 프레임 */
 static int p_mode=-1, p_scr=-1, p_hp1=-1, p_hp2=-1, p_a1=0, p_a2=0, p_surv=0, p_stage=0;
+static int p_jing=-1, p_seqtxt=-1;   /* 징글·인트로 글 카운터의 지난 값 — 마커 에지 검출용 */
 static int st_ko, st_low1, st_low2, st_lead, st_rev;
 static int st_won, st_lost, st_resultDone;
 static int st_myR, st_opR, st_roundN, st_fb, st_longSaid, st_dblLow;
@@ -208,9 +213,11 @@ static unsigned ref_shown;                      /* 아래 칸에 세운 시각 (
 static char     ref_text[160];
 static unsigned char ref_flash;   /* 반짝이 — 「승부!」「한 판!」 같은 구령은 게임 연출처럼 깜빡인다 */
 static int ref_ttl;               /* 이 줄의 수명 — 구령은 짧게 */
-static unsigned intro_line2_at;   /* 「정정당당히 — N회전!」 낼 시각 (0 = 없음) */
+static unsigned char intro_line2_wait; /* 「정정당당히 — N회전!」 — 인트로 글 연출이 돌기 시작하면 낸다 */
+static unsigned char intro_shout_done; /* 이 인트로에서 「승부!」를 이미 외쳤나 (징글 + F1 이중 발성 방지) */
 static int      intro_roundN;     /* 그때 부를 판 번호 (게임 표기와 같은 N회전) */
 static unsigned char intro_refok; /* 이 판에 심판이 서나 (인트로 진입 때 판정) */
+static unsigned char ref_thump_pend;   /* 구령이 선 프레임 — 앱이 진동 한 번으로 받아 간다 */
 static unsigned plate_at;         /* 승자 팻말 호명 시각 (0 = 없음) */
 static int      plate_char;       /* 팻말에 오를 승자 */
 
@@ -340,7 +347,7 @@ void ss2comm_reset(void){
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
-  ref_next=0; intro_line2_at=0; plate_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0;
+  ref_next=0; intro_line2_wait=0; intro_shout_done=0; plate_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
   curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk;
@@ -405,8 +412,11 @@ static void ref_say3(const char *text, int force, int flash, int ttl){
   if(force) ref_next = cm_f;        /* 안무로 박은 줄은 심판 간격을 안 기다린다 */
 }
 static void ref_say(const char *text){ ref_say3(text, 0, 0, 180); }
-/* 구령: 강제 + 반짝 + 1.5초. 매 판 반복되는 말이라 「같은 말 금지」도 우회한다 */
-static void ref_shout(const char *text){ ref_say3(text, 1, 1, 90); }
+/* 구령: 강제 + 반짝(금빛 버스트·흔들림·진동 한 번) + 1초.
+   매 판 반복되는 말이라 「같은 말 금지」도 우회한다.
+   제보: 「반짝 = 노랗게 되면서 쿵 하는 효과. 지금은 깜빡이고, 끝나고도 쓸데없이 더 깜빡임」
+   — 점멸을 버리고 해설창의 강조 연출(금 배경 번쩍 + 좌우 흔들림)과 같은 문법으로 간다. */
+static void ref_shout(const char *text){ ref_say3(text, 1, 1, 60); ref_thump_pend = 1; }
 /* 몇 판째인지는 **따낸 판 수**로 센다. 화면에 라운드 번호가 없기 때문이다. */
 /* 심판이 설 판인가. 쿠로코는 **사람끼리의 정식 승부**를 보는 사람이다.
    마계에서 온 것(유가)이나 시체를 꿰맨 인형(간다라)과의 싸움은 승부가 아니라 그냥
@@ -716,7 +726,7 @@ const char *ss2comm_frame(void){
 
   if(p_mode < 0){                                /* 첫 프레임: 기준만 잡는다 */
     p_mode=mode; p_scr=scr; p_hp1=hp1; p_hp2=hp2; p_a1=a1; p_a2=a2;
-    p_surv=surv; p_stage=stage; goto out;
+    p_surv=surv; p_stage=stage; p_jing=rd(OFF_JING); p_seqtxt=rd(OFF_SEQTXT); goto out;
   }
   if(mode!=MD_BATTLE && p_mode==MD_BATTLE)
   {
@@ -730,13 +740,23 @@ const char *ss2comm_frame(void){
   if(mode==MD_QUOTE  && p_mode!=MD_QUOTE)  emit(EV_QUOTE);
   if(mode==MD_ENDING && p_mode!=MD_ENDING) emit(EV_ENDING);
 
-  /* ── 심판 안무 예약분 집행 — 어느 모드에서든 시각이 되면 낸다 ── */
-  if(intro_line2_at && cm_f >= intro_line2_at){
-    intro_line2_at = 0;
-    if(intro_refok){
-      char t[64];
-      snprintf(t, sizeof t, "정정당당히 — %d회전!", intro_roundN);
-      ref_say3(t, 1, 0, 180);
+  /* ── 심판 안무 — 게임 마커로 구동한다. 시계 예약은 연타로 인트로가 줄면 어긋난다
+        (세이브스테이트 실측: 새 매치 인트로 518 → 연타 시 214 프레임) ── */
+  if(mode==MD_MENU && scr>=8){
+    /* 인트로 글 연출 카운터가 돌기 시작하면 = 게임의 「자아/N회전」 글이 선다 */
+    if(intro_line2_wait && rd(OFF_SEQTXT) != p_seqtxt){
+      intro_line2_wait = 0;
+      if(intro_refok){
+        char t[64];
+        snprintf(t, sizeof t, "정정당당히 — %d회전!", intro_roundN);
+        ref_say3(t, 1, 0, 180);
+      }
+    }
+    /* 징글 2 = 게임 「승부!」 글이 서는 그 프레임 — F1 보다 24프레임 빠르다 */
+    if(!intro_shout_done && rd(OFF_JING)==2 && p_jing!=2){
+      intro_shout_done = 1;
+      intro_line2_wait = 0;              /* 글을 건너뛴 판이면 회전 구호도 접는다 */
+      if(intro_refok) ref_shout("승부!");
     }
   }
   if(plate_at && cm_f >= plate_at){
@@ -756,13 +776,15 @@ const char *ss2comm_frame(void){
     int me2 = blk_char(rd(OFF_BLK1)), op2 = blk_char(rd(OFF_BLK2));
     intro_refok  = (op2 >= 0 && op2 != 14);
     intro_roundN = nw ? 1 : st_roundN + 1;
+    plate_at = 0;                        /* 못 낸 팻말 호명이 남아 있으면 여기서 접는다 */
     if(nw && intro_refok && me2 >= 0){
       char t[96];
       snprintf(t, sizeof t, "%s 대 %s!", CHARFULL[me2], CHARFULL[op2]);
       ref_say3(t, 1, 0, 180);
     }
-    /* 게임 글에 맞춘다: 새 매치는 「자아 정정당당히」가 +326, 재개는 「N회전」이 +28 */
-    intro_line2_at = cm_f + (nw ? 326 : 28);
+    /* 다음 구호들은 시계가 아니라 게임 마커에 맞춘다 — 위 집행부 참조 */
+    intro_line2_wait = 1;
+    intro_shout_done = 0;
   }
 
   /* ── 전투측 화면 전환: 승패 결과 이름 화면 · 스토리 사담 ── */
@@ -821,9 +843,9 @@ const char *ss2comm_frame(void){
          **흐름 대사가 통째로 버려졌다**(test_flow 6개 실패). 제보도 같았다 —
          「시작 메시지랑 캐릭터 첫 메시지랑 겹친다」.
          그래서 심판이 열고, 해설은 **관계 한 줄**로 받는다. 대진 소개는 심판이 이미 했다. */
-      /* 게임의 「승부!」와 같은 순간이다(F1 이 서는 프레임 — 코어 추적으로 확인).
-         심판도 같이 외친다 — 반짝이는 짧은 구령. */
-      if(ref_stands()) ref_shout("승부!");
+      /* 「승부!」는 보통 징글 마커(인트로 +494/+190)에서 이미 나갔다.
+         여기는 마커를 못 본 판(엔진을 중간에 켠 경우 등)의 예비다. */
+      if(!intro_shout_done && ref_stands()) ref_shout("승부!");
       /* 2절 — 관계 대사. 순서가 중요하다:
            같은 캐릭터끼리면 미러 전용 (제보: 「본인이 상대인데도 대사가 좆같음」)
            상대를 못 알아보면 표 밖 개체 = 간다라 (제보: 「간다라 못 알아보는 유가」)
@@ -842,7 +864,7 @@ const char *ss2comm_frame(void){
     }else{                                        /* 라운드 재개 */
       st_roundN++; st_fb=st_longSaid=st_dblLow=0;
       flow_reset(0);                              /* v0.7 라운드 단위 관찰만 */
-      if(ref_stands()) ref_shout("승부!");        /* 게임의 「승부!」와 같은 프레임 */
+      if(!intro_shout_done && ref_stands()) ref_shout("승부!");   /* 징글 마커를 놓친 판의 예비 */
       /* 판이 설 때마다 관계를 한 줄씩 돌린다 — 맞은편 → 내 편 → 사람.
          제보: 「관계를 전혀 안 보여주노, 넘치게 넣어라」.
          예전에는 매치 진입 한 번뿐이라 한 판에 한 줄이 전부였다. */
@@ -919,6 +941,13 @@ const char *ss2comm_frame(void){
 
   /* ── 전투 중 ── */
   if(scr>=8) st_lastFightF = cm_f;   /* 진짜 격투 프레임 — 문구·스토리(F1/scr0)는 안 친다 */
+  if(scr>=8 && (st_myChar<0 || st_oppChar<0)){
+    /* 세이브스테이트를 전투 중간에 불러오면 매치 진입 에지가 없어 캐릭터를 모른다 —
+       그 매치 내내 심판이 통째로 침묵했다(스테이트 재현으로 확인). BLK 는 전투 중에도
+       살아 있으니 여기서 주워 담는다. 간다라(표 밖)는 그대로 -1 로 남는다. */
+    st_myChar  = blk_char(rd(OFF_BLK1));
+    st_oppChar = blk_char(rd(OFF_BLK2));
+  }
   /* v0.5.6: 승부가 난 뒤의 승리 포즈도 액션ID가 0x180을 넘는다.
      그걸 필살기로 읽어 "온다! 비오의!" 를 뜬금없이 외치던 버그를 여기서 막는다.
      둘 다 살아 있고 KO 상태가 아닐 때만 기술 발동으로 본다. */
@@ -1030,7 +1059,7 @@ const char *ss2comm_frame(void){
 
 store:
   p_mode=mode; p_scr=scr; p_hp1=hp1; p_hp2=hp2; p_a1=a1; p_a2=a2;
-  p_surv=surv; p_stage=stage;
+  p_surv=surv; p_stage=stage; p_jing=rd(OFF_JING); p_seqtxt=rd(OFF_SEQTXT);
 
 out:
   /* 아무도 말하지 않고 조용하면 화자가 혼잣말 — 전투 6초 / 그 밖 3초 */
@@ -1628,12 +1657,23 @@ static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h, int bandTop
   }
   if(cm_f - ref_shown > (unsigned)(ref_ttl>0?ref_ttl:REF_TTL)){ ref_shown = 0; return; }
   t = ref_text; if(!*t) return;
-  if(ref_flash && ((cm_f - ref_shown) & 8)) return;   /* 구령은 8프레임 간격으로 깜빡 */
   ref_drawn_now = 1;
-  for(y=top; y<bot; y++) for(x=0; x<w; x++) fb[y*pitch_px+x] = 0x0000;
+  /* 구령의 「반짝」 = 해설창 강조와 같은 문법 — 첫 프레임 금빛으로 꽉 번쩍,
+     몇 프레임에 걸쳐 식으며 좌우로 쿵 흔들린다. 점멸은 안 한다
+     (제보: 「반짝 = 노랗게 되면서 쿵. 지금은 깜빡이고, 끝나고도 더 깜빡임」). */
+  { unsigned age = cm_f - ref_shown;
+    uint16_t bg = 0x0000;
+    if(ref_flash){
+      if     (age < 1) bg = COL_GOLD;
+      else if(age < 2) bg = 0x8C40;
+      else if(age < 5) bg = 0x3000;
+    }
+    for(y=top; y<bot; y++) for(x=0; x<w; x++) fb[y*pitch_px+x] = bg;
+  }
   end = t + strlen(t);
   if(ref_ok){                                    /* 쿠로코 초상 32x32 */
     int fx=2, fy=top, a, b;
+    if(ref_flash && cm_f-ref_shown < 6) fx += SS2_SHAKE[cm_f-ref_shown];
     for(b=0;b<32;b++) for(a=0;a<32;a++){
       int px=fx+a, py=fy+b;
       if(!ref_a[b*32+a]) continue;
@@ -1644,18 +1684,23 @@ static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h, int bandTop
   tx0  = ref_ok ? 37 : 4;
   x1   = w - 3;
   maxw = x1 - tx0 - 4;
+  if(ref_flash && cm_f-ref_shown < 6) tx0 += SS2_SHAKE[cm_f-ref_shown];  /* 쿵 — 글도 튄다 */
   nl   = wrap11(t, end, maxw, seg);
   lh   = BOX_LINE_H;
   if(nl > 2){ nl = wrap8(t, end, maxw, seg); lh = 9; }
   ty   = top + (SS2_REF_H - nl*lh)/2;
   show = ref_flash ? 999 : 2 + (int)(cm_f - ref_shown)*2;   /* 구령은 타자 없이 통째로 */
+  { uint16_t rc = ref_flash ? COL_GOLD : COL_REF;           /* 구령은 금빛 */
   for(i=0;i<nl && show>0;i++){
     int drawn = (lh==9)
-      ? draw_line  (fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh + 1, top, bot, show, COL_REF, 0)
-      : draw_line11(fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh,     top, bot, show, COL_REF, 0);
+      ? draw_line  (fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh + 1, top, bot, show, rc, ref_flash)
+      : draw_line11(fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh,     top, bot, show, rc, 0);
     show -= drawn;
-  }
+  } }
 }
+
+/* 구령이 선 프레임 — 앱이 이걸 보고 40ms 진동 한 번(쿵)을 울린다. 읽으면 지워진다. */
+int ss2comm_thump(void){ int t = ref_thump_pend; ref_thump_pend = 0; return t; }
 
 /* 이번 프레임에 심판 오버레이가 그려졌으면 높이(32)를 돌려준다.
    32비트 화면 경로가 이걸 보고 게임 자리 맨 아래 32줄만 다시 변환한다. */
