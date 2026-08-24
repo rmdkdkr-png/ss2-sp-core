@@ -201,6 +201,7 @@ static unsigned q_next;
 /* 심판 전용 칸 — 해설 대기열과 따로 선다 */
 static unsigned char anec_at[15], weap_at[15];  /* 썰·무기 소회를 어디까지 풀었나 */
 static unsigned ref_next;                       /* 심판끼리의 최소 간격 */
+static unsigned char ref_pend_round;            /* 새 매치 구호 — 전투 화면이 설 때 낸다 */
 static unsigned ref_shown;                      /* 아래 칸에 세운 시각 (0 = 아직) */
 static char     ref_text[160];
 static unsigned ref_at;
@@ -329,7 +330,7 @@ void ss2comm_reset(void){
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
-  ref_next=0;
+  ref_next=0; ref_pend_round=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
   curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk;
@@ -716,6 +717,7 @@ const char *ss2comm_frame(void){
 
   /* ── 전투측 화면 전환: 문구(VS) 화면 · 승패 결과 이름 화면 · 스토리 사담 ── */
   if(mode==MD_BATTLE && scr!=p_scr){
+    if(scr>=8 && p_scr<8 && ref_pend_round){ ref_pend_round=0; ref_round(); }  /* 미뤄 둔 첫 구호 */
     if(p_scr>=8 && (scr==0 || scr==2)){
       /* 매치가 실제로 끝났을 때만 결과 멘트를 낸다(2선승). 라운드 하나 이긴 것으로는 말하지 않는다.
          승패 화면에서는 **두 줄까지** — 결과 한 마디 + 한마디 더. 그 뒤 잡담은 잠시 잠근다.
@@ -743,7 +745,17 @@ const char *ss2comm_frame(void){
       }
     }
     else if(scr==0 && p_mode!=MD_BATTLE){
-      /* 문구(VS) 화면 — **대진 소개는 여기가 제 자리다.** 예전에는 전투가 시작되는
+      /* 문구(VS) 화면. 심판이 먼저 **풀네임으로 대진을 호명한다** —
+         「카자마 카즈키 대 모로즈미 타무리키!」. 이 게임은 본명을 화면에 안 띄우니
+         여기서만 불리는 이름이 된다(승자 호명과 같은 원리). 심판이 안 서는 판
+         (상대가 유가·간다라)에는 호명도 없다 — 구호와 같은 규칙. */
+      { int me2 = blk_char(rd(OFF_BLK1)), op2 = blk_char(rd(OFF_BLK2));
+        if(me2>=0 && op2>=0 && op2!=14){
+          char t[96];
+          snprintf(t,sizeof t,"%s 대 %s!",CHARFULL[me2],CHARFULL[op2]);
+          ref_say(t);
+        } }
+      /* **대진 소개(해설 쪽)도 여기가 제 자리다.** 예전에는 전투가 시작되는
          순간에 심판 구호와 함께 나가서 서로 겹쳤다(제보: 「시작 메시지랑 캐릭터 첫
          메시지가 겹친다」). 여기로 옮기니 겹치지도 않고, EV_START 60줄이 살아난다. */
       int me = blk_char(rd(OFF_BLK1)), op = blk_char(rd(OFF_BLK2));
@@ -774,7 +786,10 @@ const char *ss2comm_frame(void){
          **흐름 대사가 통째로 버려졌다**(test_flow 6개 실패). 제보도 같았다 —
          「시작 메시지랑 캐릭터 첫 메시지랑 겹친다」.
          그래서 심판이 열고, 해설은 **관계 한 줄**로 받는다. 대진 소개는 심판이 이미 했다. */
-      ref_round();
+      /* 진입 순간은 대개 아직 **문구(VS) 화면**이다(mode 는 이미 전투다).
+         여기서 바로 구호를 내면 방금 선 풀네임 호명을 한 프레임 만에 덮는다 —
+         appview 렌더로 잡았다. 구호는 실제 전투 화면(scr 8)이 설 때로 미룬다. */
+      if(scr >= 8) ref_round(); else ref_pend_round = 1;
       /* 2절 — 관계 대사. 순서가 중요하다:
            같은 캐릭터끼리면 미러 전용 (제보: 「본인이 상대인데도 대사가 좆같음」)
            상대를 못 알아보면 표 밖 개체 = 간다라 (제보: 「간다라 못 알아보는 유가」)
