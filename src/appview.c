@@ -25,7 +25,7 @@ const char *ss2sp_last_name=0; int ss2sp_last_ok=0;
 #define GH 152
 #define BH 32
 #define RH 32
-#define TOT (BH+RH+GH)
+#define TOT (BH+GH)   /* 심판은 오버레이 — 제 자리가 없다 */
 static uint16_t fb[W*TOT];
 static uint8_t  ram[16384];
 #define MODE 0x00A7
@@ -45,7 +45,7 @@ static void fake_game(void){
     int r=(y>>3)&1, c=(x>>3)&1;
     uint16_t v = (r^c) ? 0x2965 : 0x18C3;
     if(y>60 && y<92) v = 0x6B4D;
-    fb[(BH+RH+y)*W+x] = v;
+    fb[(BH+y)*W+x] = v;
   }
 }
 static const char *dir; static int shots;

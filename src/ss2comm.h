@@ -27,7 +27,8 @@ const char *ss2comm_frame(void);             /* 매 프레임 1회. 새 대사�
 const char *ss2comm_current(int *age_frames);/* 현재 표시 중인 대사(자체 렌더용) */
 void        ss2comm_draw_enable(int mode);   /* 0 끔 1 확장띠 2 상단겹침 3 하단겹침 */
 int         ss2comm_band_h(void);            /* 화면 **위** 해설 띠 높이 */
-int         ss2comm_ref_h(void);             /* 화면 **아래** 심판 칸 높이 */
+int         ss2comm_ref_h(void);             /* 항상 0 — 심판은 게임 화면 위 오버레이라 제 자리가 없다 */
+int         ss2comm_ref_overlay(void);       /* 이번 프레임에 심판 오버레이를 그렸으면 그 높이(게임 자리 맨 아래 32줄) */
 int         ss2comm_band_top(void);          /* 1이면 띠가 게임 화면 위에 붙는다 */
 int         ss2comm_impact(void);            /* 지금 줄이 강조인가 — 진동·연출용 */
 int         ss2comm_drawing(void);           /* 1이면 코어가 직접 그린다(알림 불필요) */

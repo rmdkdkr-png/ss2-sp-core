@@ -1447,7 +1447,8 @@ static uint16_t tint(uint16_t c, int mood){
 #define BOX_LINE_H 13
 #define BOX_MAXL   3
 int ss2comm_band_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_BAND_H : 0; }
-int ss2comm_ref_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_REF_H : 0; }
+int ss2comm_ref_h(void){ return 0; }  /* 심판은 이제 게임 화면 위 오버레이 — 제 자리를 차지하지 않는다 */
+int ss2comm_ref_overlay(void);        /* 아래에 — 이번 프레임에 오버레이가 실제로 그려졌으면 그 높이 */
 int ss2comm_band_top(void){ return (cm_on && cm_draw==4) ? 1 : 0; }
 int ss2comm_drawing(void){ return (cm_on && cm_draw) ? 1 : 0; }
 
@@ -1582,17 +1583,16 @@ static const signed char SS2_SHAKE[6] = { 2, -2, 1, -1, 1, 0 };
 int ss2comm_impact(void){ return (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev] : 0; }
 
 /* ── 심판 칸 ─────────────────────────────────────────────────────
-   **해설창 바로 아래**에 붙는다. 둘 다 게임 화면 위쪽이다.
-   버퍼는 위에서부터 [해설 SS2_BAND_H][심판 SS2_REF_H][게임 h] 순으로 쌓인다.
-   자리를 나눠 두니 서로 밀어낼 일이 없고, 구호가 떠 있는 동안에도
-   바로 위에서는 해설이 제 말을 이어 간다. */
-static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h){
+   전용 자리를 차지하지 않는다. **게임 화면 맨 아래 32줄에 오버레이**로 얹는다 —
+   대사가 서 있는 동안만 검은 상자가 뜨고, 끝나면 게임이 그대로 보인다.
+   (예전에는 해설창 아래 별도 칸이었다. 제보: 「추가 대화 공간 날려줘」) */
+static int ref_drawn_now;                        /* 이번 프레임에 실제로 그렸나 — 앱 32비트 경로가 묻는다 */
+static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h, int bandTop){
   const char *seg[BOX_MAXL+1], *t, *end;
   int x, y, top, bot, tx0, x1, maxw, nl, i, lh, ty, show;
-  (void)h;
-  top = SS2_BAND_H;                 /* 해설창 바로 아래 */
+  ref_drawn_now = 0;
+  top = (bandTop ? SS2_BAND_H : 0) + h - SS2_REF_H;  /* 게임 자리의 마지막 32줄 */
   bot = top + SS2_REF_H;
-  for(y=top; y<bot; y++) for(x=0; x<w; x++) fb[y*pitch_px+x] = 0x0000;
   if(!ref_has && !ref_shown) return;
   if(ref_has){                                   /* 이번 프레임에 세운다 */
     if(cm_f < ref_next) return;
@@ -1600,6 +1600,8 @@ static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h){
   }
   if(cm_f - ref_shown > REF_TTL){ ref_shown = 0; return; }
   t = ref_text; if(!*t) return;
+  ref_drawn_now = 1;
+  for(y=top; y<bot; y++) for(x=0; x<w; x++) fb[y*pitch_px+x] = 0x0000;
   end = t + strlen(t);
   if(ref_ok){                                    /* 쿠로코 초상 32x32 */
     int fx=2, fy=top, a, b;
@@ -1626,6 +1628,10 @@ static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h){
   }
 }
 
+/* 이번 프레임에 심판 오버레이가 그려졌으면 높이(32)를 돌려준다.
+   32비트 화면 경로가 이걸 보고 게임 자리 맨 아래 32줄만 다시 변환한다. */
+int ss2comm_ref_overlay(void){ return ref_drawn_now ? SS2_REF_H : 0; }
+
 void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   const char *line, *end, *seg[BOX_MAXL+1];
   int age=0, x, y, top, bot, mood, hit, spk, tx0, x1, maxw, show, i, nl, boxh, ty, lh;
@@ -1644,7 +1650,7 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   }
   /* 초상 굽기가 먼저다. 심판 칸을 먼저 그리면 **첫 프레임에 쿠로코 얼굴이 빈다** */
   if(!face_built) build_faces();
-  if(band) draw_ref_strip(fb, pitch_px, w, h);   /* 심판 칸은 대사 유무와 무관하게 매 프레임 */
+  if(band) draw_ref_strip(fb, pitch_px, w, h, bandTop);   /* 심판 오버레이 — 대사가 서 있을 때만 그린다 */
   if(!line || age > CM_TTL) return;            /* 2.5초만 표시 */
 
   end  = line + strlen(line);
