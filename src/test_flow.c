@@ -223,6 +223,21 @@ int main(void)
         check("흐름 라인은 라운드당 한 번", n == 1);
     }
 
+    /* ── 썰 화자 목소리(ANECV): 225칸 전부 차 있고, 전부 서로 다르다 ── */
+    {
+        int a2, b2, dup = 0, empty = 0;
+        for(a2 = 0; a2 < SS2COMM_SPK_N*15; a2++){
+            const char *x = ANECV[a2/15][a2%15];
+            if(!x){ empty++; continue; }
+            for(b2 = a2+1; b2 < SS2COMM_SPK_N*15; b2++){
+                const char *y = ANECV[b2/15][b2%15];
+                if(y && !strcmp(x,y)) dup++;
+            }
+        }
+        check("썰 화자 목소리 — 빈칸 없음", empty == 0);
+        check("썰 화자 목소리 — 복붙 없음", dup == 0);
+    }
+
     /* ── 온오프 조합: 캐릭터챗과 심판을 따로 끈다 ── */
     {
         extern void ss2comm_set_chat(int);
