@@ -59,6 +59,9 @@ static const char *CHARNAME[15] = {
   "카즈키","소게츠","하오마루","겐주로","나코루루","리무루루","한조","갈포드",
   "아수라","샤를로트","모로즈미","우쿄","쥬베이","시키","유가"
 };
+/* 게임 로스터 번호(위 순서) → 화자/아이콘 번호(하오마루 0…). 아이콘을 로스터
+   번호로 그리면 카즈키 그림에 샤를로트 이름이 붙는다 — 미리보기 렌더로 잡은 버그. */
+static const signed char ROST2SPK[15] = {9,10,0,5,1,4,2,3,11,7,13,6,8,12,14};
 
 /* ── 쿨다운 키 — 브라우저판 commEmit 의 키를 그대로 옮겼다.
       같은 키를 쓰는 이벤트는 쿨다운을 나눠 쓴다(예: ko/koed/dko/moveKo = "ko"). */
@@ -164,6 +167,7 @@ static int sess_wins, sess_games, sess_streak, sess_survBest, sess_lastLossChar 
 static int st_fHp1, st_fHp2;   /* KO 전 마지막으로 본 두 체력 — 타임오버 라운드 판정용 */
 static int st_settled;         /* 이번 매치의 승패 정산(연승·전적)을 이미 했나 */
 static int blk_boot = -1, blk_moved;   /* 부팅 뒤 BLK1 이 한 번이라도 움직였나 — 기본값 썰 도배 방지 */
+static int st_survSaid = -1, st_streakSaid = -1;   /* 이미 낭독한 연승 값 — 같은 값 반복 금지 */
 /* KO 없이 끝난 라운드(타임오버) 정산 — 체력바가 안 비면 KO 갈래가 라운드를 못 세고,
    그러면 판세 안내도 연승도 다 어긋난다 (제보: 「연승 카운트가 끊기지 않는다」).
    마지막으로 본 체력으로 그 판의 주인을 정한다. 스냅샷은 한 번 쓰면 비운다 —
@@ -385,7 +389,7 @@ void ss2comm_reset(void){
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   st_fHp1=st_fHp2=0; st_settled=0;
-  blk_boot=-1; blk_moved=0;
+  blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
   ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
@@ -548,7 +552,8 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
     /* 이름 인자가 없는 호출(emit)의 %s 는 **상대 이름**이다 — 전투 반응이 상대를
        부르게 하려고 열었다 (제보: 「상대를 인지하고 뱉는 느낌이 없다. 모든 말에 엮어라」).
        표 밖 개체(간다라류)면 「상대」라 부른다. 조사는 fill_name 이 받침 보고 고친다. */
-    if(!who) who = (st_oppChar>=0 && st_oppChar<15) ? CHARNAME[st_oppChar] : "상대";
+    if(!who) who = (st_oppChar>=0 && st_oppChar<15 && ROST2SPK[st_oppChar]!=cm_spk)
+               ? CHARNAME[st_oppChar] : "상대";   /* 화자=상대(거울)면 제 이름 대신 「상대」 */
     fill_name(outbuf,sizeof(outbuf),fmt,who);
   }
   else if(strstr(fmt,"%d")){
@@ -863,7 +868,8 @@ const char *ss2comm_frame(void){
     int me2 = blk_char(rd(OFF_BLK1)), op2 = opp_read();
     /* 새 매치 = 격투를 오래 안 봤거나 **상대가 바뀌었거나** — 무한 대전은 75프레임 만에
        다음 상대가 와서 시간만 보면 「라운드 재개」로 오판, 호명이 통째로 빠졌다 */
-    int nw  = (!st_lastFightF || cm_f - st_lastFightF > 180 || op2 != st_oppChar);
+    int nw  = (!st_lastFightF || cm_f - st_lastFightF > 180 || op2 != st_oppChar
+                || st_myR >= 2 || st_opR >= 2);   /* 결판난 매치는 재개일 수 없다 */
     intro_refok  = (op2 >= 0 && op2 != 14);
     intro_roundN = nw ? 1 : st_roundN + 1;
     plate_at = 0; plate2_at = 0;         /* 못 낸 팻말 호명이 남아 있으면 여기서 접는다 */
@@ -923,7 +929,8 @@ const char *ss2comm_frame(void){
     st_won=st_lost=st_resultDone=0;
     st_actAt=cm_f; st_roundStart=cm_f;
     cd[CK_KO]=0; cd[CK_REV]=0;
-    if(!st_lastFightF || cm_f-st_lastFightF > 180 || opp_read() != st_oppChar){   /* 새 매치 — 시간 또는 상대 교체 */
+    if(!st_lastFightF || cm_f-st_lastFightF > 180 || opp_read() != st_oppChar
+       || st_myR >= 2 || st_opR >= 2){   /* 새 매치 — 시간·상대 교체·직전 매치 결판 */
       const char *rel;
       /* 전판 정산 — 2선승 결말을 못 본 채 떠난 매치(무한대전 1라운드제·타임오버·중도 이탈).
          진 채로 떠났으면 연승은 여기서 끊는다 (제보: 「연승 카운트가 끊기거나 줄지 않는다」 —
@@ -989,7 +996,9 @@ const char *ss2comm_frame(void){
     if(surv >= 1){
       int rec = (surv > sess_survBest && surv >= 3);
       if(surv > sess_survBest) sess_survBest = surv;
-      emit_ex(EV_SURV, rec?0:(surv>=10?1:(surv>=7?2:(surv>=3?3:-1))), surv, 0, 0);
+      if(surv != st_survSaid &&
+         emit_ex(EV_SURV, rec?0:(surv>=10?1:(surv>=7?2:(surv>=3?3:-1))), surv, 0, 0))
+        st_survSaid = surv;
     }else if(stage>=1 && stage<=14 && stage > st_lastStage){
       st_lastStage = stage;
       emit_ex(EV_STAGE, (stage+1)>=8?0:((stage+1)>=5?1:-1), stage+1, 0, 0);
@@ -1111,9 +1120,11 @@ const char *ss2comm_frame(void){
         (hp1>=128 && emit(EV_PERFECT)) ||
         ((cm_f-st_roundStart) < 600 && emit(EV_QUICK)) ||
         (mw && st_oppChar>=0 && st_oppChar==sess_lastLossChar && emit(EV_REVENGE)) ||
-        (mw && (sess_streak==2||sess_streak==3||sess_streak==5||sess_streak==7||
+        (mw && sess_streak != st_streakSaid &&
+              (sess_streak==2||sess_streak==3||sess_streak==5||sess_streak==7||
                 (sess_streak>=10 && sess_streak%5==0)) &&
-              emit_ex(EV_STREAK, sess_streak>=5?0:-1, sess_streak,0,0));
+              emit_ex(EV_STREAK, sess_streak>=5?0:-1, sess_streak,0,0) &&
+              (st_streakSaid = sess_streak));
         (void)said;
         if(mw && st_oppChar>=0 && st_oppChar==sess_lastLossChar) sess_lastLossChar=-1;
       }
@@ -1969,12 +1980,8 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
   const char *nm;
   if(!fb || w <= 2 || h <= 0 || !cm_on) return;
   if(!face_built) build_faces();
-  battle = (p_mode == MD_BATTLE) || (st_lastFightF && cm_f - st_lastFightF < 600);
+  battle = (st_myChar >= 0 || st_oppChar >= 0);   /* 마지막 대진을 계속 — 메뉴에서도 안 갈아치운다 */
   {
-    /* st_myChar/st_oppChar 는 게임 로스터 번호(카즈키 0…)이고 아이콘 표는 화자
-       순서(하오마루 0…)다 — 그대로 쓰면 카즈키 그림에 샤를로트 이름이 붙는다
-       (미리보기 렌더로 잡았다). 이름은 로스터표, 그림은 이 변환을 거친다. */
-    static const signed char ROST2SPK[15] = {9,10,0,5,1,4,2,3,11,7,13,6,8,12,14};
     int rc;
     if(battle){
       rc = right ? st_oppChar : st_myChar;
