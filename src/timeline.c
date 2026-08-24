@@ -55,7 +55,7 @@ int main(void){
     ss2comm_set_ram(ram); ss2comm_set_enabled(1); ss2comm_set_speaker(0);
     ss2comm_reset(); memset(ram,0,sizeof ram);
     ram[BLK1]=8*(2*2+0);   /* 하오마루 */
-    ram[BLK2]=8*(2*3+0);   /* 겐주로 */
+    ram[BLK2]=8*(2*3+0); ram[0x17DF]=3;   /* 겐주로 */
 
     hold(180, 0xF0, 2, 128, 128);            /* 캐릭터 고르기 3초 */
     hold(180, 0xF0, 6, 128, 128);            /* VS 화면 3초 */

@@ -97,7 +97,7 @@ static void match(int spk,int me,int opp,const char *tag){
     phase=tag;
     ss2comm_reset(); memset(ram,0,sizeof ram); last[0]=0;
     ss2comm_set_speaker(spk);
-    ram[BLK1]=16*me; ram[BLK2]=16*opp;
+    ram[BLK1]=16*me; ram[BLK2]=16*opp; ram[0x17DF]=(unsigned char)(opp<0?19:opp);
     hold(150,0xF0,2,128,128);       /* 캐릭터 고르기 */
     hold(120,0xF0,6,128,128);       /* VS */
     for(r=0;r<2;r++){

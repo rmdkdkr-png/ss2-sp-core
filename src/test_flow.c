@@ -59,6 +59,7 @@ static void begin(const char *what)
     memset(ram, 0, sizeof(ram));
     ram[BLK1] = 8 * (2*2 + 0);      /* 하오마루 · 수라 */
     ram[BLK2] = 8 * (2*3 + 0);      /* 겐주로 · 수라 */
+    ram[0x17DF] = 3;                /* 상대 개체 번호 — 이제 정체는 이걸로 읽는다 */
     ram[SURV] = 0; ram[STG] = 0;
 }
 /* 낱말이 아니라 **그 이벤트의 대사표**와 대조한다.

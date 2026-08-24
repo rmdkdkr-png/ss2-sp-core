@@ -100,7 +100,7 @@ static void begin(const char *tag,int spk,int me,int opp){
     scen = tag; last[0]=0; fno=0;
     ss2comm_reset(); memset(ram,0,sizeof ram);
     ss2comm_set_speaker(spk);
-    ram[BLK1]=16*me; ram[BLK2]=16*opp;
+    ram[BLK1]=16*me; ram[BLK2]=16*opp; ram[0x17DF]=(unsigned char)(opp<0?19:opp);
 }
 /* 전투에 들어간 상태 만들기 */
 static void enter(void){ hold(60,0xF0,2,128,128); hold(90,0xF1,8,128,128); }

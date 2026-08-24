@@ -88,7 +88,7 @@ int main(int argc,char**argv){
     else ss2comm_test_ref_face(KTEST2_PX,KTEST2_A); }
   printf("band_h=%d ref_h=%d  버퍼 %dx%d\n", ss2comm_band_h(), ss2comm_ref_h(), W, TOT);
 
-  ram[BLK1]=16*2; ram[BLK2]=16*3;
+  ram[BLK1]=16*2; ram[BLK2]=16*3; ram[0x17DF]=3;
   hold(60,0xF0,2,128,128);
   hold(30,0xF1,0,128,128);   shot("문구(VS) 화면 — 심판 호명");
   hold(150,0xF1,0,128,128);
@@ -106,7 +106,7 @@ int main(int argc,char**argv){
   for(i=0;i<15;i++){
     char b[64];
     ss2comm_reset(); memset(ram,0,sizeof ram);
-    ram[BLK1]=16*2; ram[BLK2]=16*3;
+    ram[BLK1]=16*2; ram[BLK2]=16*3; ram[0x17DF]=3;
     ss2comm_set_speaker(i);
     hold(60,0xF0,2,128,128); hold(90,0xF1,8,128,128); hold(60,0xF1,8,128,100);
     snprintf(b,sizeof b,"화자 %d", i); shot(b);

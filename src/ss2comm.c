@@ -38,6 +38,11 @@ void ss2comm_set_ram(void *p) { (void)p; }
 #define OFF_PAD    0x2F82   /* 패드 레지스터 — 자동 전환(무입력 화면 넘김) 판별용 */
 #define OFF_JING   0x0000   /* 징글 명령. 라운드 인트로에서 2 가 되는 프레임 = 게임 「승부!」 글이 서는 프레임.
                                세이브스테이트 두 주행(무입력 +494 · 연타 +190)에서 정확히 일치 */
+#define OFF_OPPID  0x17DF   /* 상대 **개체 번호** — 정규 15명은 로스터 번호 그대로.
+                               보스전에서 BLK2 는 잔존값이라 겐주로(0x30)·아수라(0x88)로
+                               오인했다(실기 재현: 간다라전에 「겐주로냐…!」). 실측:
+                               간다라=8, 그림자 보스=19, 유가=14 */
+#define OFF_BOSS   0x17E3   /* 보스전 플래그 — 정규 스테이지 0, 간다라/그림자/유가전 1 */
 #define OFF_SEQTXT 0x17D1   /* 인트로 글 연출 카운터. 「자아」(15부터)·「N회전」(33부터)이 서기 4~10프레임
                                전에 돌기 시작한다 — 연타로 인트로가 줄어도 그대로 따라간다 */
 #define MD_BATTLE  241
@@ -397,7 +402,7 @@ void ss2comm_reset(void){
 static const char *const CHARFULL[15] = {
   "카자마 카즈키", "카자마 소게츠", "하오마루", "키바가미 겐주로",
   "나코루루", "리무루루", "핫토리 한조", "갈포드",
-  "아수라", "샤를로트 크리스틴 드 콜데", "모로즈미 타무리키", "타치바나 우쿄",
+  "아수라", "샤를로트 크리스틴 드 콜데", "모로즈미 타이잔", "타치바나 우쿄",
   "야규 쥬베이", "시키", "유가",
 };
 
@@ -695,6 +700,15 @@ static int blk_char(int blk){
      엉뚱한 관계 대사가 나갔다. 실사용 제보: 「간다라 못 알아보는 유가」. */
   return c;
 }
+/* 상대 정체 판독 — BLK2 가 아니라 개체 번호(OFF_OPPID)로 본다.
+   보스 플래그가 선 판은 유가(14)만 로스터로 인정하고 나머지(간다라 8·그림자 19)는
+   표 밖 마물(-1)로 떨어뜨린다 — 심판이 안 서고 마물 관계대사가 나간다. */
+static int opp_read(void){
+  int id = rd(OFF_OPPID);
+  if(id < 0 || id > 14) return -1;
+  if(id != 14 && rd(OFF_BOSS)) return -1;
+  return id;
+}
 /* 간다라는 로스터 밖 중간보스다. 해설자 15명에도 없다.
    따로 알아보게 해 둔다 — 유가만 제 물건이라 아는 척을 한다. */
 #define SS2_CHAR_GANDHARA 15
@@ -788,7 +802,7 @@ const char *ss2comm_frame(void){
      BLK 가 낡아서 「카즈키 대 카즈키」 같은 헛호명이 났다 — 호명은 이제 여기서만. */
   if(mode==MD_MENU && scr>=8 && !(p_mode==MD_MENU && p_scr>=8)){
     int nw  = (!st_lastFightF || cm_f - st_lastFightF > 180);   /* 격투를 오래 안 봤으면 새 매치 */
-    int me2 = blk_char(rd(OFF_BLK1)), op2 = blk_char(rd(OFF_BLK2));
+    int me2 = blk_char(rd(OFF_BLK1)), op2 = opp_read();
     intro_refok  = (op2 >= 0 && op2 != 14);
     intro_roundN = nw ? 1 : st_roundN + 1;
     plate_at = 0; plate2_at = 0;         /* 못 낸 팻말 호명이 남아 있으면 여기서 접는다 */
@@ -852,7 +866,7 @@ const char *ss2comm_frame(void){
       st_fb=st_longSaid=st_dblLow=0;
       flow_reset(1);                              /* v0.7 관전 기억 — 매치 통째로 */
       st_myChar  = blk_char(rd(OFF_BLK1));
-      st_oppChar = blk_char(rd(OFF_BLK2));
+      st_oppChar = opp_read();
       /* 판을 여는 건 **심판 하나**다. 예전에는 여기서 심판 구호 + EV_START(「하오마루 대
          겐주로…」) + 관계 대사가 한꺼번에 몰려, 두 칸짜리 대기열이 막히면서
          **흐름 대사가 통째로 버려졌다**(test_flow 6개 실패). 제보도 같았다 —
@@ -961,7 +975,7 @@ const char *ss2comm_frame(void){
        그 매치 내내 심판이 통째로 침묵했다(스테이트 재현으로 확인). BLK 는 전투 중에도
        살아 있으니 여기서 주워 담는다. 간다라(표 밖)는 그대로 -1 로 남는다. */
     st_myChar  = blk_char(rd(OFF_BLK1));
-    st_oppChar = blk_char(rd(OFF_BLK2));
+    st_oppChar = opp_read();
   }
   /* v0.5.6: 승부가 난 뒤의 승리 포즈도 액션ID가 0x180을 넘는다.
      그걸 필살기로 읽어 "온다! 비오의!" 를 뜬금없이 외치던 버그를 여기서 막는다.
