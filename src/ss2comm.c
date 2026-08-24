@@ -177,6 +177,14 @@ static unsigned char fl_said;             /* 라운드당 한 종류씩만 */
 #define FLS_CHASE 8
 #define FLS_SP    16
 static struct { const char *name; int n; } fl_mv[FLMV];
+/* 큐에 실렸다가 밀려나거나 삭아 버린 흐름 라인은 「말했다」 깃발을 되돌린다 —
+   임계는 여전히 넘어 있으니 다음 재시도 때 다시 실을 수 있게. (도배 방지는
+   깃발+쿨다운이 계속 지키고, 이건 증발 방지만 맡는다) */
+static void flow_unsay(int ev){
+  if(ev==EV_FLOWTRADE) fl_said&=(unsigned char)~FLS_TRADE;
+  else if(ev==EV_FLOWONE) fl_said&=(unsigned char)~FLS_ONE;
+  else if(ev==EV_FLOWCHASE) fl_said&=(unsigned char)~FLS_CHASE;
+}
 static char fl_rounds[10]; static int fl_nr;
 
 static char  outbuf[160];
@@ -505,8 +513,22 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   for(i=0;i<EVMAXV;i++) if(LINES[cm_spk][ev][i]) cand[n++]=LINES[cm_spk][ev][i];
   if(!n) return 0;
   if(vsel >= 0) fmt = cand[vsel < n ? vsel : n-1];
-  else          fmt = cand[rnd()%(unsigned)n];
-  if(strstr(fmt,"%s"))                 fill_name(outbuf,sizeof(outbuf),fmt,who);
+  else {
+    /* 이름 박힌 줄 우대 — 상대를 부르는 변형이 섞여 있으면 10번 중 6번은 그중에서
+       고른다. 표 안 비율(약 1/3)보다 귀에 자주 들리게 하려는 가중치다. 전부 %s인
+       표(기술명 계열)는 nn==n 이라 그대로 균등 추첨으로 떨어진다. */
+    const char *nm[EVMAXV]; int nn=0;
+    for(i=0;i<n;i++) if(strstr(cand[i],"%s")) nm[nn++]=cand[i];
+    if(nn && nn<n && (rnd()%10u)<6) fmt = nm[rnd()%(unsigned)nn];
+    else                            fmt = cand[rnd()%(unsigned)n];
+  }
+  if(strstr(fmt,"%s")){
+    /* 이름 인자가 없는 호출(emit)의 %s 는 **상대 이름**이다 — 전투 반응이 상대를
+       부르게 하려고 열었다 (제보: 「상대를 인지하고 뱉는 느낌이 없다. 모든 말에 엮어라」).
+       표 밖 개체(간다라류)면 「상대」라 부른다. 조사는 fill_name 이 받침 보고 고친다. */
+    if(!who) who = (st_oppChar>=0 && st_oppChar<15) ? CHARNAME[st_oppChar] : "상대";
+    fill_name(outbuf,sizeof(outbuf),fmt,who);
+  }
   else if(strstr(fmt,"%d")){
     const char *p = strstr(fmt,"%d");
     if(strstr(p+2,"%d"))               snprintf(outbuf,sizeof(outbuf),fmt,n1,n2);
@@ -514,7 +536,6 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   }
   else                                 snprintf(outbuf,sizeof(outbuf),"%s",fmt);
   if(said_recently(outbuf)) return 0;      /* 최근에 한 말은 다시 안 한다 */
-  cd[key] = cm_f + EVCD[ev].cool;
   { int slot;
     if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
     else {
@@ -538,6 +559,7 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
            한꺼번에 몰려올 때 먼저 온 둘만 남으면, 마지막에 오는 총평이 늘 밀린다. */
         if(ev_prio(q[worst].ev) > ev_prio(ev)) return 0;
       }
+      flow_unsay(q[worst].ev);            /* 밀려나는 흐름 라인은 재시도 대상으로 되돌린다 */
       slot = worst;
     }
     snprintf(q[slot].text,sizeof(q[slot].text),"%s",outbuf);
@@ -545,6 +567,7 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
     q[slot].ev = (short)ev;
     q[slot].spk = (short)cm_spk;
   }
+  cd[key] = cm_f + EVCD[ev].cool;   /* 실린 다음에만 — 큐에서 밀려난 말이 쿨다운까지 먹으면 재시도가 막힌다 */
   return 1;
 }
 static int emit(int ev){ return emit_ex(ev,-1,0,0,0); }
@@ -598,9 +621,12 @@ static int say_weap(int ch){
 }
 /* 쌓인 모양이 임계에 닿으면 한 마디. 한 번에 한 종류만 낸다. */
 static void flow_check(void){
-  if(fl_alt>=5 && !(fl_said&FLS_TRADE)){ fl_said|=FLS_TRADE; emitn(EV_FLOWTRADE, fl_alt); return; }
-  if(fl_hit>=6 && fl_tak==0 && !(fl_said&FLS_ONE)){ fl_said|=FLS_ONE; emitn(EV_FLOWONE, fl_hit); return; }
-  if(fl_tak>=6 && fl_hit==0 && !(fl_said&FLS_CHASE)){ fl_said|=FLS_CHASE; emitn(EV_FLOWCHASE, fl_tak); }
+  /* 큐가 꽉 차 못 실렸으면 깃발을 세우지 않는다 — 다음 타에 다시 시도.
+     (관계 대사+선제타가 큐 두 칸을 다 차지한 채로 흐름 라인이 오면 통째로
+      증발하던 것을 실측으로 잡았다. 성공했을 때만 「한 번 말했다」로 친다.) */
+  if(fl_alt>=5 && !(fl_said&FLS_TRADE)){ if(emitn(EV_FLOWTRADE, fl_alt)) fl_said|=FLS_TRADE; return; }
+  if(fl_hit>=6 && fl_tak==0 && !(fl_said&FLS_ONE)){ if(emitn(EV_FLOWONE, fl_hit)) fl_said|=FLS_ONE; return; }
+  if(fl_tak>=6 && fl_hit==0 && !(fl_said&FLS_CHASE)){ if(emitn(EV_FLOWCHASE, fl_tak)) fl_said|=FLS_CHASE; }
 }
 static int flow_mv_bump(const char *name){
   int i, free_i = -1;
@@ -1010,6 +1036,9 @@ const char *ss2comm_frame(void){
      (아래 pend_take 가 가져가기 전에 세야 한다). */
   if(hit2 && (p_hp2-hp2)>=4) flow_hit(pend_name);
   if(hit1 && (p_hp1-hp1)>=4) flow_take();
+  /* 큐가 붐벼서 못 실린 흐름 라인 재시도 — 임계는 이미 넘겼는데 깃발이 안 선 경우만.
+     연타가 한숨에 몰리면 그 사이 큐가 안 비므로, 큐가 빠질 시간을 두고 이따금 돈다. */
+  if((cm_f & 63)==0) flow_check();
   down2   = (a2>=0x13C && a2<=0x154) && !(p_a2>=0x13C && p_a2<=0x154);
   downed1 = (a1>=0x13C && a1<=0x154) && !(p_a1>=0x13C && p_a1<=0x154);
 
@@ -1162,6 +1191,7 @@ out:
     unsigned pr  = ev_prio(q[q_head].ev);
     unsigned lim = pr >= 2 ? Q_STALE_BIG : pr >= 1 ? Q_STALE_MID : Q_STALE;
     if(cm_f - q[q_head].at <= lim) break;
+    flow_unsay(q[q_head].ev);             /* 삭아 버려지는 흐름 라인도 재시도 대상 */
     q_head = (q_head+1)%QN; q_cnt--;
   }
 
