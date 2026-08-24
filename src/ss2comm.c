@@ -161,6 +161,26 @@ static unsigned last_input_f = 0;
 static unsigned hush_until = 0;           /* 결과 멘트 뒤 잡담을 잠그는 시점 */         /* 마지막 패드 입력 프레임 (자동 전환 판별용) */
 /* 세션 기록 — 코어가 살아 있는 동안만 (저장 안 함) */
 static int sess_wins, sess_games, sess_streak, sess_survBest, sess_lastLossChar = -1;
+static int st_fHp1, st_fHp2;   /* KO 전 마지막으로 본 두 체력 — 타임오버 라운드 판정용 */
+static int st_settled;         /* 이번 매치의 승패 정산(연승·전적)을 이미 했나 */
+static int blk_boot = -1, blk_moved;   /* 부팅 뒤 BLK1 이 한 번이라도 움직였나 — 기본값 썰 도배 방지 */
+/* KO 없이 끝난 라운드(타임오버) 정산 — 체력바가 안 비면 KO 갈래가 라운드를 못 세고,
+   그러면 판세 안내도 연승도 다 어긋난다 (제보: 「연승 카운트가 끊기지 않는다」).
+   마지막으로 본 체력으로 그 판의 주인을 정한다. 스냅샷은 한 번 쓰면 비운다 —
+   결과 화면과 다음 판 진입, 두 자리에서 불려도 두 번 세지 않게. */
+static void tk_round(void){
+  int h1 = st_fHp1, h2 = st_fHp2;
+  st_fHp1 = st_fHp2 = 0;
+  if(st_ko || h1 == h2) return;
+  if(h1 > h2){
+    st_myR++; st_won = 1; st_lost = 0;
+    if(st_myR >= 2 && !st_settled){ sess_streak++; sess_wins++; sess_games++; st_settled = 1; }
+  }else{
+    st_opR++; st_lost = 1; st_won = 0;
+    if(st_opR >= 2 && !st_settled){ sess_streak = 0; sess_lastLossChar = st_oppChar; sess_games++; st_settled = 1; }
+  }
+  st_ko = 1;
+}
 /* 기술 결합창 — 필살기가 나가면 450ms(27프레임) 기다렸다가 결과와 묶는다 */
 static const char *pend_name; static int pend_sup, pend_left;
 
@@ -364,6 +384,8 @@ void ss2comm_reset(void){
   st_ko=st_low1=st_low2=st_lead=st_rev=0;
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
+  st_fHp1=st_fHp2=0; st_settled=0;
+  blk_boot=-1; blk_moved=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
   ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
@@ -693,6 +715,9 @@ const char *ss2comm_current(int *age){
    글꼴에 없는 글자·잘림·줄바꿈은 표를 들여다봐서는 안 보이고 그려 봐야 보인다.
    배포 빌드에는 안 들어간다 (bandshot.c 만 이 매크로를 켠다). */
 #ifdef SS2COMM_TEST
+/* 연승 장부를 밖에서 본다 — 「끊길 자리에서 끊기나」를 대사가 아니라 숫자로 확인 */
+int ss2comm_test_streak(void){ return sess_streak; }
+int ss2comm_test_games(void){ return sess_games; }
 /* 심판은 이제 대사 흐름(ss2comm_frame)에 안 들어간다 — 아래 칸에 따로 선다.
    그래서 시뮬레이터가 심판을 놓친다. 세워진 구호를 한 번만 돌려주는 창구를 둔다. */
 const char *ss2comm_test_ref_take(void){
@@ -855,6 +880,7 @@ const char *ss2comm_frame(void){
   /* ── 전투측 화면 전환: 승패 결과 이름 화면 · 스토리 사담 ── */
   if(mode==MD_BATTLE && scr!=p_scr){
     if(p_scr>=8 && (scr==0 || scr==2)){
+      tk_round();   /* 매치를 가른 판이 타임오버였으면 여기서 정산해야 결과 멘트가 선다 */
       /* 매치가 실제로 끝났을 때만 결과 멘트를 낸다(2선승). 라운드 하나 이긴 것으로는 말하지 않는다.
          승패 화면에서는 **두 줄까지** — 결과 한 마디 + 한마디 더. 그 뒤 잡담은 잠시 잠근다.
          (제보: "대전 사이 승부 난 뒤 대사가 어색하다" — 여러 줄이 몰리고 잡담이 끼어들었다) */
@@ -892,12 +918,21 @@ const char *ss2comm_frame(void){
 
   /* ── 전투 진입 ── */
   if(mode==MD_BATTLE && p_mode!=MD_BATTLE && hp1>0 && hp2>0){
+    tk_round();   /* 직전 판이 타임오버로 끝났으면 다음 판이 서기 전에 정산 */
     st_ko=0; st_low1=st_low2=0; st_lead=0; st_rev=0;
     st_won=st_lost=st_resultDone=0;
     st_actAt=cm_f; st_roundStart=cm_f;
     cd[CK_KO]=0; cd[CK_REV]=0;
     if(!st_lastFightF || cm_f-st_lastFightF > 180 || opp_read() != st_oppChar){   /* 새 매치 — 시간 또는 상대 교체 */
       const char *rel;
+      /* 전판 정산 — 2선승 결말을 못 본 채 떠난 매치(무한대전 1라운드제·타임오버·중도 이탈).
+         진 채로 떠났으면 연승은 여기서 끊는다 (제보: 「연승 카운트가 끊기거나 줄지 않는다」 —
+         지금까지는 한 매치에서 KO 두 번 진 경우에만 0으로 돌아갔다). */
+      if(!st_settled && (st_myR || st_opR)){
+        if(st_opR > st_myR){ sess_streak=0; sess_lastLossChar=st_oppChar; sess_games++; }
+        else if(st_myR > st_opR){ sess_streak++; sess_wins++; sess_games++; }
+      }
+      st_settled=0;
       st_myR=st_opR=0; st_roundN=1;
       st_fb=st_longSaid=st_dblLow=0;
       flow_reset(1);                              /* v0.7 관전 기억 — 매치 통째로 */
@@ -974,6 +1009,9 @@ const char *ss2comm_frame(void){
       else if(scr==6)            emit(EV_CARDSEL);
     }
     if(mode!=MD_BATTLE){
+      { int bv = rd(OFF_BLK1);                       /* 커서가 실제로 움직였는지 본다 */
+        if(blk_boot < 0) blk_boot = bv;
+        else if(bv != blk_boot) blk_moved = 1; }
       /* 메뉴에서 **7초마다** 한 마디. 예전에는 캐릭터 선택(scr 2)만 사담이 있었고
          나머지 화면은 15초짜리 「고민이 길구나」 하나뿐이었다. 그래서 카드 그림을
          한참 들여다보는 동안 통째로 조용했다 — 제보: 「카드 고를 때 왜 닥치고 있노」.
@@ -989,7 +1027,11 @@ const char *ss2comm_frame(void){
           said = (st_selChatN & 1) ? emit(EV_CHARSELCHAT) : 0;
           if(!said){
             int me = blk_char(rd(OFF_BLK1));
-            if(!say_anec(me)) emit(EV_CHARSELCHAT);
+            /* 부팅 직후 BLK 는 아무도 안 고른 기본값이다(카즈키 자리) — 그걸 믿고
+               오프닝 내내 카즈키 썰만 풀었다(제보). 값이 한 번이라도 움직였거나
+               실전을 본 뒤에만 「지금 고른 캐릭터」로 친다. */
+            if(!blk_moved && !st_lastFightF) me = -1;
+            if(me < 0 || !say_anec(me)) emit(EV_CHARSELCHAT);
           }
         }
       }else if(scr<8 && cm_f > hush_until && cm_f - st_menuAt > 420){
@@ -1008,7 +1050,10 @@ const char *ss2comm_frame(void){
   }
 
   /* ── 전투 중 ── */
-  if(scr>=8) st_lastFightF = cm_f;   /* 진짜 격투 프레임 — 문구·스토리(F1/scr0)는 안 친다 */
+  if(scr>=8){
+    st_lastFightF = cm_f;   /* 진짜 격투 프레임 — 문구·스토리(F1/scr0)는 안 친다 */
+    if(!st_ko){ st_fHp1 = hp1; st_fHp2 = hp2; }   /* 타임오버 판정용 마지막 체력 — KO 뒤엔 안 덮는다 */
+  }
   if(scr>=8 && (st_myChar<0 || st_oppChar<0)){
     /* 세이브스테이트를 전투 중간에 불러오면 매치 진입 에지가 없어 캐릭터를 모른다 —
        그 매치 내내 심판이 통째로 침묵했다(스테이트 재현으로 확인). BLK 는 전투 중에도
@@ -1047,11 +1092,11 @@ const char *ss2comm_frame(void){
     if(hit2 && !hit1 && st_roundN==1 && hp2>0 && !pend_name && (p_hp2-hp2)>=4) (((rnd()&1) && say_weap(st_oppChar)) || emit(EV_FIRSTBLOOD));
   }
 
-  if(hit1 && hit2 && hp1<=0 && hp2<=0 && !st_ko){ st_ko=1; pend_take(0); flow_round('d'); emit(EV_DKO); }
+  if(hit1 && hit2 && hp1<=0 && hp2<=0 && !st_ko){ st_ko=1; st_fHp1=st_fHp2=0; pend_take(0); flow_round('d'); emit(EV_DKO); }
   else{
     if(hit2 && hp2<=0 && !st_ko){
       int sup; const char *nm = pend_take(&sup);
-      st_ko=1; st_won=1; st_lost=0;
+      st_ko=1; st_fHp1=st_fHp2=0; st_won=1; st_lost=0;
       if(nm) emit_ex(EV_MOVEKO,-1,0,0,nm); else emit(EV_KO);
       st_myR++; flow_round('w');
       /* 체력바가 벌어지는 그 순간 — 심판이 먼저 찍는다. 매치가 갈렸으면 「승부 결정!」 */
@@ -1060,7 +1105,7 @@ const char *ss2comm_frame(void){
         plate_at = cm_f + 180; plate_char = st_myChar;   /* 본명은 3초 뒤 — 팻말(KO+390)엔 「훌륭하오!」 */
       }
       { int mw = (st_myR>=2); int said;
-        if(mw){ sess_streak++; sess_wins++; sess_games++; }
+        if(mw && !st_settled){ sess_streak++; sess_wins++; sess_games++; st_settled=1; }
         said =
         (st_low1 && emit(EV_COMEBACK)) ||
         (hp1>=128 && emit(EV_PERFECT)) ||
@@ -1090,7 +1135,7 @@ const char *ss2comm_frame(void){
     if(hit1){
       int d = p_hp1 - hp1;
       if(hp1<=0 && !st_ko){
-        st_ko=1; st_lost=1; st_won=0;
+        st_ko=1; st_fHp1=st_fHp2=0; st_lost=1; st_won=0;
         emit(EV_KOED);
         if(surv>0) emitn(EV_SURVEND, surv);
         st_opR++; flow_round('l');
@@ -1098,7 +1143,7 @@ const char *ss2comm_frame(void){
           ref_shout(st_opR>=2 ? "승부 결정!" : "한 판!");
           plate_at = cm_f + 180; plate_char = st_oppChar;
         }
-        if(st_opR>=2){ sess_streak=0; sess_lastLossChar=st_oppChar; sess_games++; }
+        if(st_opR>=2 && !st_settled){ sess_streak=0; sess_lastLossChar=st_oppChar; sess_games++; st_settled=1; }
       }
       else if(d>=12) emit(EV_TAKEN);
     }
@@ -1815,12 +1860,20 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
     draw_ref_strip(fb, pitch_px, w, h, bandTop);   /* 심판이 먼저 — 해설창을 같이 쓴다 */
     if(ref_drawn_now) return;                      /* 이 프레임의 창은 쿠로코의 것 */
   }
-  if(!line || age > CM_TTL) return;            /* 2.5초만 표시 */
+  if(!line || age > CM_TTL){
+    /* 예전에는 여기서 창을 통째로 꺼 버렸다 — 화자는 그대로인데 2.5초마다
+       껌뻑인다는 제보. 띠 모드는 **마지막 말을 흐린 글씨로 계속 걸어 두고**
+       새 말이 오면 그때 갈아끼운다. 화면 안 상자는 게임을 가리므로 예전대로 진다. */
+    if(!band) return;
+    if(!line) line = "";                       /* 아직 아무 말도 없다 — 초상과 틀만 */
+    age = CM_TTL + 1;
+  }
 
   end  = line + strlen(line);
   mood = (cur_ev>=0 && cur_ev<EV_N) ? EVMOOD[cur_ev] : 0;
   hit  = (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev]  : 0;
   col  = hit ? COL_GOLD : COL_WHITE;
+  if(age > CM_TTL){ col = 0x8410; hit = 0; mood = 0; }   /* 지난 말 — 흐린 회색으로 걸어만 둔다 */
   spk = (cur_spk >= 0 && cur_spk < SS2COMM_SPK_N) ? cur_spk : cm_spk;
   if(!face_built) build_faces();
   show = 2 + (int)age*2;                       /* 타자 연출: 프레임당 두 글자 */
@@ -1901,5 +1954,80 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
       ? draw_line  (fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh + 1, top, bot, show, col, hit)
       : draw_line11(fb,pitch_px,tx0,x1,seg[i],seg[i+1], ty + i*lh,     top, bot, show, col, 0);
     show -= drawn;
+  }
+}
+
+/* ── 양옆 아트웍 기둥 — 넓은 화면에서 게임 좌우의 빈 공간을 채운다
+   (제보: 「양쪽 아트웍 있으면 이쁘겠다」 — 실기 사진의 검은 기둥).
+   그림은 전부 실행 중에 사용자 롬에서 굽는다(선택 아이콘·심판 초상) —
+   배포물에는 주소와 팔레트뿐, 그림은 없다.
+   전투 중: 왼쪽 = 내 캐릭터, 오른쪽 = 상대 (표 밖 개체는 「마물」 글자만).
+   그 밖:   왼쪽 = 해설자, 오른쪽 = 심판.
+   한 번에 기둥 하나를 그린다 — 32비트 화면은 기둥별로 변환해 얹기 좋게. */
+void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
+  int x, y, ch, battle;
+  const char *nm;
+  if(!fb || w <= 2 || h <= 0 || !cm_on) return;
+  if(!face_built) build_faces();
+  battle = (p_mode == MD_BATTLE) || (st_lastFightF && cm_f - st_lastFightF < 600);
+  {
+    /* st_myChar/st_oppChar 는 게임 로스터 번호(카즈키 0…)이고 아이콘 표는 화자
+       순서(하오마루 0…)다 — 그대로 쓰면 카즈키 그림에 샤를로트 이름이 붙는다
+       (미리보기 렌더로 잡았다). 이름은 로스터표, 그림은 이 변환을 거친다. */
+    static const signed char ROST2SPK[15] = {9,10,0,5,1,4,2,3,11,7,13,6,8,12,14};
+    int rc;
+    if(battle){
+      rc = right ? st_oppChar : st_myChar;
+      nm = (rc >= 0) ? CHARNAME[rc] : (right ? "마물" : 0);
+      ch = (rc >= 0 && rc < 15) ? ROST2SPK[rc] : -1;
+    }else{
+      if(right){ ch = -2; nm = "심판"; }                  /* -2 = 쿠로코 초상 */
+      else     { ch = cm_spk; nm = SPK_NAME[cm_spk]; }
+    }
+  }
+  /* 바탕 — 짙은 바탕에 성근 마름모 격자. 게임보다 어두워야 눈을 안 뺏는다 */
+  for(y = 0; y < h; y++)
+    for(x = 0; x < w; x++){
+      uint16_t v = 0x0841;
+      if(((x + y) & 15) == 7 || ((x - y) & 15) == 7) v = 0x18E3;
+      fb[y*pitch_px + x] = v;
+    }
+  /* 게임과 맞닿는 모서리에 금줄 */
+  { int gx  = right ? 0 : w - 1;
+    int gx2 = right ? 1 : w - 2;
+    for(y = 0; y < h; y++){
+      fb[y*pitch_px + gx]  = COL_GOLD;
+      fb[y*pitch_px + gx2] = 0x4200;
+    }
+  }
+  /* 초상 — 32x32 아이콘을 기둥 폭에 맞춰 키운다(보통 2배 = 64) */
+  { const uint16_t *px = 0; const unsigned char *al = 0;
+    int size, ox, oy;
+    if(ch >= 0 && ch < SS2COMM_SPK_N && icon_ok[ch]){ px = icon_px[ch]; al = icon_a[ch]; }
+    else if(ch == -2 && ref_ok){ px = ref_px; al = ref_a; }
+    size = w - 8; if(size > 64) size = 64;
+    ox = (w - size) / 2; oy = 14;
+    if(px){
+      for(y = 0; y < size && oy + y < h; y++)
+        for(x = 0; x < size; x++){
+          int p = (y*32/size)*32 + (x*32/size);
+          if(al[p]) fb[(oy + y)*pitch_px + ox + x] = px[p];
+        }
+      /* 얇은 틀 — 카드가 바탕에서 뜬다 */
+      for(x = ox - 1; x <= ox + size; x++){
+        if(x < 0 || x >= w) continue;
+        if(oy - 1 >= 0)      fb[(oy - 1)*pitch_px + x]    = 0x8C40;
+        if(oy + size < h)    fb[(oy + size)*pitch_px + x] = 0x8C40;
+      }
+      for(y = oy - 1; y <= oy + size && y < h; y++){
+        if(y < 0) continue;
+        if(ox - 1 >= 0)      fb[y*pitch_px + ox - 1]    = 0x8C40;
+        if(ox + size < w)    fb[y*pitch_px + ox + size] = 0x8C40;
+      }
+    }
+    /* 이름 — 초상(또는 그 자리) 아래 */
+    if(nm && *nm)
+      draw_line11(fb, pitch_px, 2, w - 2, nm, nm + strlen(nm),
+                  oy + size + 6, 0, h, 99, COL_GOLD, 0);
   }
 }

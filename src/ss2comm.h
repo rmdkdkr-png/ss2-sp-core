@@ -36,6 +36,7 @@ int         ss2comm_impact(void);            /* 지금 줄이 강조인가 — �
 int         ss2comm_thump(void);             /* 심판 구령(승부!·한 판!)이 선 프레임에 1 — 진동 한 번용, 읽으면 지워짐 */
 int         ss2comm_drawing(void);           /* 1이면 코어가 직접 그린다(알림 불필요) */
 void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h); /* 화면에 직접 그리기 */
+void        ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right); /* 양옆 아트웍 기둥 한 짝 */
 
 #ifdef __cplusplus
 }
