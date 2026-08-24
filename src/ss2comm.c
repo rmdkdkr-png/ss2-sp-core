@@ -45,6 +45,7 @@ void ss2comm_set_ram(void *p) { (void)p; }
 #define OFF_BOSS   0x17E3   /* 보스전 플래그 — 정규 스테이지 0, 간다라/그림자/유가전 1 */
 #define OFF_SEQTXT 0x17D1   /* 인트로 글 연출 카운터. 「자아」(15부터)·「N회전」(33부터)이 서기 4~10프레임
                                전에 돌기 시작한다 — 연타로 인트로가 줄어도 그대로 따라간다 */
+#define ACT_HEAVY(a) ((a) >= 0x60 && (a) <= 0x6F)   /* 강베기 액션대 — 실측 0x60/0x64/0x68, 피해 30 */
 #define MD_BATTLE  241
 #define MD_MENU    240
 #define MD_QUOTE   197
@@ -542,12 +543,12 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   if(!n) return 0;
   if(vsel >= 0) fmt = cand[vsel < n ? vsel : n-1];
   else {
-    /* 이름 박힌 줄 우대 — 상대를 부르는 변형이 섞여 있으면 10번 중 6번은 그중에서
-       고른다. 표 안 비율(약 1/3)보다 귀에 자주 들리게 하려는 가중치다. 전부 %s인
+    /* 이름 박힌 줄 우대 — 상대를 부르는 변형이 섞여 있으면 10번 중 8번은 그중에서
+       고른다 (제보 「여전히 이름을 잘 안 부른다」로 6→8). 전부 %s인
        표(기술명 계열)는 nn==n 이라 그대로 균등 추첨으로 떨어진다. */
     const char *nm[EVMAXV]; int nn=0;
     for(i=0;i<n;i++) if(strstr(cand[i],"%s")) nm[nn++]=cand[i];
-    if(nn && nn<n && (rnd()%10u)<6) fmt = nm[rnd()%(unsigned)nn];
+    if(nn && nn<n && (rnd()%10u)<8) fmt = nm[rnd()%(unsigned)nn];
     else                            fmt = cand[rnd()%(unsigned)n];
   }
   if(strstr(fmt,"%s")){
@@ -617,13 +618,25 @@ static void flow_reset(int newMatch){
    캐릭터별**이다 — 누가 해설하든 그 사람에 대한 이야기는 같다.
    캐릭터마다 어디까지 풀었는지 기억해 두고 차례로 낸다. 같은 판에서 같은 썰이
    두 번 나오면 썰이 아니라 소음이다. */
+/* 설명 대사(썰·무기 소회)에 주어가 없으면 누구 얘기인지 모른다
+   (제보: 「캐릭터 설명할 때도 누구 설명인지 명사를 넣어야지 툭 내뱉고 치운다」).
+   문장에 그 캐릭터 이름이 이미 있으면 그대로, 없으면 「이름 — 」을 앞에 박는다. */
+static int say_about(int ch, const char *t){
+  char b[192];
+  if(!t) return 0;
+  if(ch >= 0 && ch < 15 && !strstr(t, CHARNAME[ch])){
+    snprintf(b, sizeof b, "%s — %s", CHARNAME[ch], t);
+    return emits(EV_LORE, b);
+  }
+  return emits(EV_LORE, t);
+}
 static int say_anec(int ch){
   int i, n = 0;
   if(ch < 0 || ch >= 15) return 0;
   /* 첫 마디는 화자 목소리로 (제보: 「상대방 읊는 건 말투가 다 같네, 책 읽듯이」 —
      무기 소회와 같은 원리다). 그 뒤로는 썰 뱅크 회전으로 사실을 잇는다. */
   if(!anecv_used[ch] && ANECV[cm_spk][ch]){
-    if(emits(EV_LORE, ANECV[cm_spk][ch])){ anecv_used[ch] = 1; return 1; }
+    if(say_about(ch, ANECV[cm_spk][ch])){ anecv_used[ch] = 1; return 1; }
   }
   for(i = 0; i < SS2COMM_ANEC_N; i++) if(ANEC[ch][i]) n++;
   if(!n) return 0;
@@ -631,7 +644,7 @@ static int say_anec(int ch){
     const char *t = ANEC[ch][(anec_at[ch] + i) % n];
     if(!t) continue;
     anec_at[ch] = (unsigned char)((anec_at[ch] + i + 1) % n);
-    return emits(EV_LORE, t);
+    return say_about(ch, t);
   }
   return 0;
 }
@@ -641,12 +654,12 @@ static int say_weap(int ch){
   /* 화자 목소리로 쓴 줄이 먼저다. 사실은 같아도 느낌이 달라야 한다 —
      같은 「피 밴 검」이 겐주로에겐 당연하고, 나코루루에겐 무섭고, 유가에겐 취향이다.
      (예전에는 WEAP[상대] 하나뿐이라 누가 해설하든 같은 문장이 나왔다) */
-  if(WEAPV[cm_spk][ch]) return emits(EV_LORE, WEAPV[cm_spk][ch]);
+  if(WEAPV[cm_spk][ch]) return say_about(ch, WEAPV[cm_spk][ch]);
   for(i = 0; i < SS2COMM_WEAP_N; i++) if(WEAP[ch][i]) n++;
   if(!n) return 0;
   { const char *t = WEAP[ch][weap_at[ch] % n];
     weap_at[ch] = (unsigned char)((weap_at[ch] + 1) % n);
-    return t ? emits(EV_LORE, t) : 0; }
+    return t ? say_about(ch, t) : 0; }
 }
 /* 쌓인 모양이 임계에 닿으면 한 마디. 한 번에 한 종류만 낸다. */
 static void flow_check(void){
@@ -968,7 +981,7 @@ const char *ss2comm_frame(void){
       /* 관계 대사는 해설창(밴드) — 심판의 「승부!」와 칸이 달라 겹치지 않는다 */
       if(rel) emits(EV_REL, rel);
       else if(st_oppChar>=0){
-        if(ANECV[cm_spk][st_oppChar]) emits(EV_LORE, ANECV[cm_spk][st_oppChar]);
+        if(ANECV[cm_spk][st_oppChar]) say_about(st_oppChar, ANECV[cm_spk][st_oppChar]);
         else if(LORE[st_oppChar]){
           char t[160];
           snprintf(t,sizeof(t),"%s — %s",CHARNAME[st_oppChar],LORE[st_oppChar]);
@@ -1109,6 +1122,7 @@ const char *ss2comm_frame(void){
   else{
     if(hit2 && hp2<=0 && !st_ko){
       int sup; const char *nm = pend_take(&sup);
+      if(!nm && (ACT_HEAVY(a1) || ACT_HEAVY(p_a1))) nm = "강베기";   /* 시그니처 한 방 호명 */
       st_ko=1; st_fHp1=st_fHp2=0; st_won=1; st_lost=0;
       if(nm) emit_ex(EV_MOVEKO,-1,0,0,nm); else emit(EV_KO);
       st_myR++; flow_round('w');
@@ -1135,6 +1149,7 @@ const char *ss2comm_frame(void){
     }
     else if(down2){
       int sup; const char *nm = pend_take(&sup);
+      if(!nm && (ACT_HEAVY(a1) || ACT_HEAVY(p_a1))) nm = "강베기";
       if(nm) emit_ex(EV_MOVEDOWN,-1,0,0,nm);
       else if(pend_left>0) emit_ex(EV_MOVEDOWNA,-1,0,0,0);
       else if(cm_f - st_hitAt > 42) emit(EV_DOWN);
@@ -1143,6 +1158,7 @@ const char *ss2comm_frame(void){
       int d = p_hp2 - hp2;
       if(d>=4){
         int sup; const char *nm = pend_take(&sup);
+        if(!nm && (ACT_HEAVY(a1) || ACT_HEAVY(p_a1))) nm = "강베기";
         if(nm){ emit_ex(d>=12?EV_MOVEHIT:EV_MOVEHITL, -1, 0,0, nm); st_hitAt=cm_f; }
         else if(d>=12){ emit(EV_HIT); st_hitAt=cm_f; }
       }
@@ -1202,7 +1218,12 @@ out:
                                                       busy 검사보다 먼저 해야 교착이 없다 */
   /* 심판이 말하는 동안(서 있거나 곧 선다) 캐릭터챗은 후순위 — 팝도 혼잣말도 쉰다 */
   { int ref_busy = ref_enabled && (ref_has ||
-        (ref_shown && cm_f - ref_shown <= (unsigned)(ref_ttl>0?ref_ttl:180)));
+        (ref_shown && cm_f - ref_shown <= (unsigned)(ref_ttl>0?ref_ttl:180)) ||
+        plate_at || plate2_at ||                     /* 팻말 호명(이름→훌륭하오)이 남아 있다 */
+        (mode==MD_MENU && scr>=8 && intro_refok));   /* 인트로 안무(호명~승부!) 화면 전체 */
+    /* 제보: 「심판 있을 때는 심판 코멘트 사이에 끼지 마라」 — 구호와 구호 **사이 틈**
+       (호명→자아→N회전, 한 판!→이름→훌륭하오)에 캐릭터 줄이 비집고 들어왔다.
+       안무가 도는 동안은 통째로 심판의 칸이다. 캐릭터 줄은 큐에서 기다렸다 뒤에 나온다. */
     if(ref_busy) return 0; }
   /* 아무도 말하지 않고 조용하면 화자가 혼잣말 — 전투 6초 / 그 밖 3초 */
   if(!q_cnt && cm_f >= q_next){
