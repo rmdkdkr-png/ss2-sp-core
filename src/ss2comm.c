@@ -1583,15 +1583,16 @@ static const signed char SS2_SHAKE[6] = { 2, -2, 1, -1, 1, 0 };
 int ss2comm_impact(void){ return (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev] : 0; }
 
 /* ── 심판 칸 ─────────────────────────────────────────────────────
-   전용 자리를 차지하지 않는다. **게임 화면 맨 아래 32줄에 오버레이**로 얹는다 —
-   대사가 서 있는 동안만 검은 상자가 뜨고, 끝나면 게임이 그대로 보인다.
-   (예전에는 해설창 아래 별도 칸이었다. 제보: 「추가 대화 공간 날려줘」) */
+   전용 자리를 차지하지 않는다. **게임 화면 맨 위 32줄에 오버레이**로 얹는다 —
+   해설창 바로 아래 자리라 시선이 한 곳에 모인다. 대사가 서 있는 동안만
+   검은 상자가 뜨고, 끝나면 게임이 그대로 보인다.
+   (예전에는 별도 칸이었다. 제보: 「추가 대화 공간 날려줘」「화면 위쪽으로」) */
 static int ref_drawn_now;                        /* 이번 프레임에 실제로 그렸나 — 앱 32비트 경로가 묻는다 */
 static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h, int bandTop){
   const char *seg[BOX_MAXL+1], *t, *end;
   int x, y, top, bot, tx0, x1, maxw, nl, i, lh, ty, show;
   ref_drawn_now = 0;
-  top = (bandTop ? SS2_BAND_H : 0) + h - SS2_REF_H;  /* 게임 자리의 마지막 32줄 */
+  top = bandTop ? SS2_BAND_H : 0;   /* 게임 자리의 첫 32줄 — 해설창 바로 아래 */
   bot = top + SS2_REF_H;
   if(!ref_has && !ref_shown) return;
   if(ref_has){                                   /* 이번 프레임에 세운다 */
