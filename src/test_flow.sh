@@ -10,5 +10,5 @@ cd "$(dirname "$0")"
 # 그래서 여기서 먼저 막는다. 이게 실패하면 나머지는 볼 것도 없다.
 python3 check_glyph.py . || exit 1
 
-cc -O1 -DSS2SP_RAM_POINTER -I. -o /tmp/ss2_test_flow test_flow.c ss2comm.c
+cc -O1 -DSS2SP_RAM_POINTER -DSS2COMM_TEST -I. -o /tmp/ss2_test_flow test_flow.c ss2comm.c
 /tmp/ss2_test_flow

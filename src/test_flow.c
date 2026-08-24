@@ -222,6 +222,36 @@ int main(void)
         check("흐름 라인은 라운드당 한 번", n == 1);
     }
 
+    /* ── 온오프 조합: 캐릭터챗과 심판을 따로 끈다 ── */
+    {
+        extern void ss2comm_set_chat(int);
+        extern void ss2comm_set_ref(int);
+        extern const char *ss2comm_test_ref_take(void);
+        const char *rl;
+        int refSeen, bandSeen;
+
+        /* 캐릭터챗 오프 — 심판 구령은 서고 밴드는 침묵 */
+        begin("chatOff"); ss2comm_set_chat(0);
+        idle(200); step(0xF1, 8, 128, 128, 8, 8);
+        refSeen = 0;
+        { int i2; for(i2=0;i2<200;i2++){ step(0xF1,8,128,120,8,8);
+            rl = ss2comm_test_ref_take(); if(rl && strstr(rl,"승부")) refSeen=1; } }
+        check("캐릭터챗 오프 — 밴드 침묵", nseen == 0);
+        check("캐릭터챗 오프 — 심판은 선다", refSeen == 1);
+        ss2comm_set_chat(1);
+
+        /* 심판 오프 — 구령 없음, 밴드는 산다 */
+        begin("refOff"); ss2comm_set_ref(0);
+        idle(200); step(0xF1, 8, 128, 128, 8, 8);
+        refSeen = 0;
+        { int i2; for(i2=0;i2<300;i2++){ step(0xF1,8,128,120,8,8);
+            rl = ss2comm_test_ref_take(); if(rl) refSeen=1; } }
+        bandSeen = nseen;
+        check("심판 오프 — 구령 없음", refSeen == 0);
+        check("심판 오프 — 캐릭터챗은 산다", bandSeen > 0);
+        ss2comm_set_ref(1);
+    }
+
     /* ── 열다섯 명이 서로 다른 말을 한다 (총평 기준) ── */
     {
         char lines[16][160];

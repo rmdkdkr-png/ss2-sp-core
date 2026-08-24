@@ -211,13 +211,17 @@ static unsigned char anec_at[15], weap_at[15];  /* 썰·무기 소회를 어디�
 static unsigned ref_next;                       /* 심판끼리의 최소 간격 */
 static unsigned ref_shown;                      /* 아래 칸에 세운 시각 (0 = 아직) */
 static char     ref_text[160];
+static int ref_enabled = 1;       /* 심판 온오프 — 끄면 쿠로코가 아예 안 선다 (설정에서 토글) */
 static unsigned char ref_flash;   /* 반짝이 — 「승부!」「한 판!」 같은 구령은 게임 연출처럼 깜빡인다 */
 static int ref_ttl;               /* 이 줄의 수명 — 구령은 짧게 */
-static unsigned char intro_line2_wait; /* 「정정당당히 — N회전!」 — 인트로 글 연출이 돌기 시작하면 낸다 */
+static unsigned char intro_beat1_done; /* 「자아 — 정정당당히!」 (연출 카운터 시동값 15) */
+static unsigned char intro_beat2_done; /* 「N회전!」 (시동값 33 — 2·3회전 인트로는 이것만 온다) */
 static unsigned char intro_shout_done; /* 이 인트로에서 「승부!」를 이미 외쳤나 (징글 + F1 이중 발성 방지) */
 static int      intro_roundN;     /* 그때 부를 판 번호 (게임 표기와 같은 N회전) */
 static unsigned char intro_refok; /* 이 판에 심판이 서나 (인트로 진입 때 판정) */
+static unsigned plate2_at;        /* 팻말 둘째 마디 「훌륭하오!」 시각 (이름…! 다음) */
 static unsigned char ref_thump_pend;   /* 구령이 선 프레임 — 앱이 진동 한 번으로 받아 간다 */
+static int chat_enabled = 1;      /* 캐릭터챗 온오프 — 쿠로코와 따로 끈다 (셋 다 조합 가능) */
 static unsigned plate_at;         /* 승자 팻말 호명 시각 (0 = 없음) */
 static int      plate_char;       /* 팻말에 오를 승자 */
 
@@ -347,7 +351,7 @@ void ss2comm_reset(void){
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
-  ref_next=0; intro_line2_wait=0; intro_shout_done=0; plate_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
+  ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
   curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk;
@@ -401,7 +405,7 @@ static const char *const CHARFULL[15] = {
    같은 칸을 쓰게 했더니 승부가 갈리는 순간 구호가 총평을 밀어냈다 —
    둘 다 나와야 하는 자리다. 구호가 먼저, 해설이 그 뒤. */
 static void ref_say3(const char *text, int force, int flash, int ttl){
-  if(!cm_on || !text || !*text) return;
+  if(!cm_on || !ref_enabled || !text || !*text) return;
   if(!force && said_recently(text)) return;
   snprintf(ref_text, sizeof ref_text, "%s", text);
   ref_shown = 0;
@@ -743,29 +747,40 @@ const char *ss2comm_frame(void){
   /* ── 심판 안무 — 게임 마커로 구동한다. 시계 예약은 연타로 인트로가 줄면 어긋난다
         (세이브스테이트 실측: 새 매치 인트로 518 → 연타 시 214 프레임) ── */
   if(mode==MD_MENU && scr>=8){
-    /* 인트로 글 연출 카운터가 돌기 시작하면 = 게임의 「자아/N회전」 글이 선다 */
-    if(intro_line2_wait && rd(OFF_SEQTXT) != p_seqtxt){
-      intro_line2_wait = 0;
-      if(intro_refok){
-        char t[64];
-        snprintf(t, sizeof t, "정정당당히 — %d회전!", intro_roundN);
-        ref_say3(t, 1, 0, 180);
-      }
-    }
+    /* 인트로 글 연출 카운터의 **시동값**이 어느 글인지 알려준다(0→값 에지):
+       15 = 「자아」, 30 = 「정정당당히」(자아와 한 박자로 묶는다), 33 = 「N회전」.
+       라운드1 실측 +322(15)/+354(30)/+422(33), 2회전 인트로는 +18(33)뿐. */
+    { int seqv = rd(OFF_SEQTXT);
+      if(p_seqtxt == 0 && seqv >= 10 && intro_refok){
+        if(seqv == 15 && !intro_beat1_done){
+          intro_beat1_done = 1;
+          ref_say3("자아 — 정정당당히!", 1, 0, 120);
+        }else if(seqv == 33 && !intro_beat2_done){
+          intro_beat2_done = 1;
+          char t[32];
+          snprintf(t, sizeof t, "%d회전!", intro_roundN);
+          ref_say3(t, 1, 0, 120);
+        }
+      } }
     /* 징글 2 = 게임 「승부!」 글이 서는 그 프레임 — F1 보다 24프레임 빠르다 */
     if(!intro_shout_done && rd(OFF_JING)==2 && p_jing!=2){
       intro_shout_done = 1;
-      intro_line2_wait = 0;              /* 글을 건너뛴 판이면 회전 구호도 접는다 */
       if(intro_refok) ref_shout("승부!");
     }
   }
+  /* 팻말 2연타: 「카자마 카즈키…!」 → 「훌륭하오!」 (제보: 각각 대사로 이어서) */
   if(plate_at && cm_f >= plate_at){
     plate_at = 0;
     if(plate_char >= 0 && plate_char < 15 && ref_stands()){
       char t[96];
-      snprintf(t, sizeof t, "%s — 훌륭하오!", CHARFULL[plate_char]);
-      ref_say3(t, 1, 0, 180);
+      snprintf(t, sizeof t, "%s…!", CHARFULL[plate_char]);
+      ref_say3(t, 1, 0, 64);
+      plate2_at = cm_f + 66;
     }
+  }
+  if(plate2_at && cm_f >= plate2_at){
+    plate2_at = 0;
+    if(ref_stands()) ref_say3("훌륭하오!", 1, 0, 120);
   }
 
   /* ── 라운드 인트로 진입: mode F0 + scr 8 — 선수들이 서고 「자아…승부!」가 도는 구간 ──
@@ -776,14 +791,14 @@ const char *ss2comm_frame(void){
     int me2 = blk_char(rd(OFF_BLK1)), op2 = blk_char(rd(OFF_BLK2));
     intro_refok  = (op2 >= 0 && op2 != 14);
     intro_roundN = nw ? 1 : st_roundN + 1;
-    plate_at = 0;                        /* 못 낸 팻말 호명이 남아 있으면 여기서 접는다 */
+    plate_at = 0; plate2_at = 0;         /* 못 낸 팻말 호명이 남아 있으면 여기서 접는다 */
     if(nw && intro_refok && me2 >= 0){
       char t[96];
       snprintf(t, sizeof t, "%s 대 %s!", CHARFULL[me2], CHARFULL[op2]);
       ref_say3(t, 1, 0, 180);
     }
     /* 다음 구호들은 시계가 아니라 게임 마커에 맞춘다 — 위 집행부 참조 */
-    intro_line2_wait = 1;
+    intro_beat1_done = intro_beat2_done = 0;
     intro_shout_done = 0;
   }
 
@@ -1062,6 +1077,17 @@ store:
   p_surv=surv; p_stage=stage; p_jing=rd(OFF_JING); p_seqtxt=rd(OFF_SEQTXT);
 
 out:
+  if(!chat_enabled){                               /* 캐릭터챗 오프 — 쿠로코만 남는다 */
+    q_head = q_cnt = 0; curline[0] = 0;
+    if(ref_has && cm_f - ref_at > 90) ref_has = 0;
+    return 0;                                      /* 혼잣말·팝도 전부 접는다 */
+  }
+  if(ref_has && cm_f - ref_at > 90) ref_has = 0;   /* 묵은 구호 — 1.5초 안에 못 세우면 버린다.
+                                                      busy 검사보다 먼저 해야 교착이 없다 */
+  /* 심판이 말하는 동안(서 있거나 곧 선다) 캐릭터챗은 후순위 — 팝도 혼잣말도 쉰다 */
+  { int ref_busy = ref_enabled && (ref_has ||
+        (ref_shown && cm_f - ref_shown <= (unsigned)(ref_ttl>0?ref_ttl:180)));
+    if(ref_busy) return 0; }
   /* 아무도 말하지 않고 조용하면 화자가 혼잣말 — 전투 6초 / 그 밖 3초 */
   if(!q_cnt && cm_f >= q_next){
     unsigned quiet = cm_f - (last_line_f > cur_f ? last_line_f : cur_f);
@@ -1118,10 +1144,6 @@ out:
      다만 **제 간격은 지킨다.** 안 그러면 판이 몰릴 때 심판이 연달아 네 번 떠들면서
      KO·총평을 통째로 굶긴다. 몰린 구호는 ref_text 가 덮어써서 **최신 것 하나로 합쳐진다** —
      세 판이 순식간에 지나가면 「셋째 판」만 나오는 게 맞다. */
-  /* 심판은 **화면 아래 레터박스**에 따로 선다(SS2_REF_H). 해설창과 자리를 나누므로
-     대기열을 두고 다툴 일이 없다 — 구호가 뜨는 동안에도 위에서는 해설이 제 말을 한다.
-     여기서는 묵은 구호만 지운다. 그리는 것은 ss2comm_draw 가 한다. */
-  if(ref_has && cm_f - ref_at > 90) ref_has = 0;   /* 1.5초 안에 못 세우면 버린다 */
 
   if(q_cnt && cm_f >= q_next){
     /* 등급이 높은 것부터. 같은 등급이면 **제일 최근 것**을 낸다.
@@ -1638,22 +1660,23 @@ static const signed char SS2_SHAKE[6] = { 2, -2, 1, -1, 1, 0 };
 /* 지금 보여 주는 줄이 강조인가 — 진동처럼 그리기 밖에서 쓰려고 열어 둔다 */
 int ss2comm_impact(void){ return (cur_ev>=0 && cur_ev<EV_N) ? EVHIT[cur_ev] : 0; }
 
-/* ── 심판 칸 ─────────────────────────────────────────────────────
-   전용 자리를 차지하지 않는다. **게임 화면 맨 위 32줄에 오버레이**로 얹는다 —
-   해설창 바로 아래 자리라 시선이 한 곳에 모인다. 대사가 서 있는 동안만
-   검은 상자가 뜨고, 끝나면 게임이 그대로 보인다.
-   (예전에는 별도 칸이었다. 제보: 「추가 대화 공간 날려줘」「화면 위쪽으로」) */
+/* ── 심판 ────────────────────────────────────────────────────────
+   **해설창을 같이 쓴다** — 별도 칸도, 게임 위 오버레이도 없다. 심판이 말할 동안
+   해설창은 쿠로코의 것이고, 캐릭터챗은 후순위로 기다린다(팝 정지 + 현재 줄 양보).
+   (제보 이력: 별도 칸 → 오버레이 → 「둘 다 나오니 정신사납다. 쿠로코를 올리고
+   온오프 하자. 쿠로코 온이면 캐릭터챗은 후순위」) */
 static int ref_drawn_now;                        /* 이번 프레임에 실제로 그렸나 — 앱 32비트 경로가 묻는다 */
 static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h, int bandTop){
   const char *seg[BOX_MAXL+1], *t, *end;
   int x, y, top, bot, tx0, x1, maxw, nl, i, lh, ty, show;
   ref_drawn_now = 0;
-  top = bandTop ? SS2_BAND_H : 0;   /* 게임 자리의 첫 32줄 — 해설창 바로 아래 */
+  top = bandTop ? 0 : h;            /* 해설창 그 자리 — 심판이 말할 동안은 쿠로코의 창이다 */
   bot = top + SS2_REF_H;
   if(!ref_has && !ref_shown) return;
   if(ref_has){                                   /* 이번 프레임에 세운다 */
     if(cm_f < ref_next) return;
     ref_has = 0; ref_shown = cm_f; ref_next = cm_f + 150;
+    curline[0] = 0;                              /* 캐릭터챗은 후순위 — 하던 말을 접는다 */
   }
   if(cm_f - ref_shown > (unsigned)(ref_ttl>0?ref_ttl:REF_TTL)){ ref_shown = 0; return; }
   t = ref_text; if(!*t) return;
@@ -1702,9 +1725,16 @@ static void draw_ref_strip(uint16_t *fb, int pitch_px, int w, int h, int bandTop
 /* 구령이 선 프레임 — 앱이 이걸 보고 40ms 진동 한 번(쿵)을 울린다. 읽으면 지워진다. */
 int ss2comm_thump(void){ int t = ref_thump_pend; ref_thump_pend = 0; return t; }
 
-/* 이번 프레임에 심판 오버레이가 그려졌으면 높이(32)를 돌려준다.
-   32비트 화면 경로가 이걸 보고 게임 자리 맨 아래 32줄만 다시 변환한다. */
-int ss2comm_ref_overlay(void){ return ref_drawn_now ? SS2_REF_H : 0; }
+/* 예전 게임-위-오버레이 시절의 조회 — 심판이 해설창으로 올라와서 이제 항상 0.
+   (앱의 밴드 32줄 변환이 심판까지 그대로 덮는다.) ABI 는 남겨 둔다. */
+int ss2comm_ref_overlay(void){ return 0; }
+/* 심판 온오프 — 앱 설정에서 토글한다. 끄면 서 있던 줄도 접는다. */
+void ss2comm_set_ref(int on){
+  ref_enabled = !!on;
+  if(!ref_enabled){ ref_has = 0; ref_shown = 0; }
+}
+/* 캐릭터챗 온오프 — 심판과 따로 끈다. 조합 넷: 둘 다 / 캐릭터만 / 쿠로코만 / 무음 */
+void ss2comm_set_chat(int on){ chat_enabled = !!on; }
 
 void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   const char *line, *end, *seg[BOX_MAXL+1];
@@ -1724,7 +1754,10 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   }
   /* 초상 굽기가 먼저다. 심판 칸을 먼저 그리면 **첫 프레임에 쿠로코 얼굴이 빈다** */
   if(!face_built) build_faces();
-  if(band) draw_ref_strip(fb, pitch_px, w, h, bandTop);   /* 심판 오버레이 — 대사가 서 있을 때만 그린다 */
+  if(band){
+    draw_ref_strip(fb, pitch_px, w, h, bandTop);   /* 심판이 먼저 — 해설창을 같이 쓴다 */
+    if(ref_drawn_now) return;                      /* 이 프레임의 창은 쿠로코의 것 */
+  }
   if(!line || age > CM_TTL) return;            /* 2.5초만 표시 */
 
   end  = line + strlen(line);
