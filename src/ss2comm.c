@@ -168,6 +168,8 @@ static int st_fHp1, st_fHp2;   /* KO 전 마지막으로 본 두 체력 — 타�
 static int st_settled;         /* 이번 매치의 승패 정산(연승·전적)을 이미 했나 */
 static int blk_boot = -1, blk_moved;   /* 부팅 뒤 BLK1 이 한 번이라도 움직였나 — 기본값 썰 도배 방지 */
 static int st_survSaid = -1, st_streakSaid = -1;   /* 이미 낭독한 연승 값 — 같은 값 반복 금지 */
+static int surv_seen = -1, surv_live;   /* 무한대전 카운터가 이번 세션에 실제로 움직였나 —
+                                           스토리는 이 값을 안 지워서(실기 검증) 잔존 15가 판마다 읽혔다 */
 /* KO 없이 끝난 라운드(타임오버) 정산 — 체력바가 안 비면 KO 갈래가 라운드를 못 세고,
    그러면 판세 안내도 연승도 다 어긋난다 (제보: 「연승 카운트가 끊기지 않는다」).
    마지막으로 본 체력으로 그 판의 주인을 정한다. 스냅샷은 한 번 쓰면 비운다 —
@@ -389,7 +391,7 @@ void ss2comm_reset(void){
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   st_fHp1=st_fHp2=0; st_settled=0;
-  blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1;
+  blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1; surv_seen=-1; surv_live=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
   ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
@@ -798,6 +800,8 @@ const char *ss2comm_frame(void){
   hp1   = rd(OFF_HP1);   hp2  = rd(OFF_HP2);
   a1    = rd16(OFF_ACT1);a2   = rd16(OFF_ACT2);
   surv  = rd(OFF_SURV);  stage= rd(OFF_STAGE);
+  if(surv_seen < 0) surv_seen = surv;
+  else if(surv != surv_seen){ surv_live = 1; surv_seen = surv; }
   pad   = rd(OFF_PAD);
   if(pad) last_input_f = cm_f;
   if(pend_left > 0 && --pend_left == 0){        /* 결합창이 그냥 닫혔다 — 비오의면 한 마디 */
@@ -996,7 +1000,7 @@ const char *ss2comm_frame(void){
     if(surv >= 1){
       int rec = (surv > sess_survBest && surv >= 3);
       if(surv > sess_survBest) sess_survBest = surv;
-      if(surv != st_survSaid &&
+      if(surv_live && surv != st_survSaid &&
          emit_ex(EV_SURV, rec?0:(surv>=10?1:(surv>=7?2:(surv>=3?3:-1))), surv, 0, 0))
         st_survSaid = surv;
     }else if(stage>=1 && stage<=14 && stage > st_lastStage){
@@ -1148,7 +1152,7 @@ const char *ss2comm_frame(void){
       if(hp1<=0 && !st_ko){
         st_ko=1; st_fHp1=st_fHp2=0; st_lost=1; st_won=0;
         emit(EV_KOED);
-        if(surv>0) emitn(EV_SURVEND, surv);
+        if(surv>0 && surv_live) emitn(EV_SURVEND, surv);
         st_opR++; flow_round('l');
         if(ref_stands()){
           ref_shout(st_opR>=2 ? "승부 결정!" : "한 판!");
@@ -1988,8 +1992,7 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
       nm = (rc >= 0) ? CHARNAME[rc] : (right ? "마물" : 0);
       ch = (rc >= 0 && rc < 15) ? ROST2SPK[rc] : -1;
     }else{
-      if(right){ ch = -2; nm = "심판"; }                  /* -2 = 쿠로코 초상 */
-      else     { ch = cm_spk; nm = SPK_NAME[cm_spk]; }
+      ch = -1; nm = 0;   /* 아직 아무 판도 못 봤다 — 무늬만. 해설자를 바꿔도 기둥은 안 바뀐다 */
     }
   }
   /* 바탕 — 짙은 바탕에 성근 마름모 격자. 게임보다 어두워야 눈을 안 뺏는다 */
