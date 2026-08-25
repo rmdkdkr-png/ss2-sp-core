@@ -39,7 +39,7 @@ else ifneq ($(findstring MINGW,$(shell uname -a)),)
 endif
 
 TARGET_NAME := 2048
-GIT_VERSION ?= " $(shell git rev-parse --short HEAD || echo unknown)"
+GIT_VERSION ?= " $(shell git -C $(dir $(lastword $(MAKEFILE_LIST))) rev-parse --short HEAD || echo unknown)"
 ifneq ($(GIT_VERSION)," unknown")
 	CFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 endif
@@ -76,8 +76,8 @@ LIBRETRO_DIR := libretro
 
 TARGET_NAME := mednafen_ngp
 
-# GIT HASH
-GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"
+# GIT HASH — pinned to this makefile's own tree so the stamp cannot follow the caller's cwd
+GIT_VERSION := " $(shell git -C $(dir $(lastword $(MAKEFILE_LIST))) rev-parse --short HEAD || echo unknown)"
 ifneq ($(GIT_VERSION)," unknown")
    FLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 endif

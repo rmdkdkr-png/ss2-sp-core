@@ -19,7 +19,9 @@ include $(CORE_DIR)/Makefile.common
 COREFLAGS := -funroll-loops $(INCFLAGS) -DMEDNAFEN_VERSION_NUMERIC=926 -D__LIBRETRO__ -DINLINE="inline" $(FLAGS)
 COREFLAGS += -DWANT_NGP_EMU
 
-GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"
+# ndk-build inherits the caller's cwd, so an unqualified `git rev-parse` stamps
+# whichever repository the invoking shell stood in. Pin it to the core tree.
+GIT_VERSION := " $(shell git -C $(CORE_DIR) rev-parse --short HEAD || echo unknown)"
 ifneq ($(GIT_VERSION)," unknown")
   COREFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 endif
