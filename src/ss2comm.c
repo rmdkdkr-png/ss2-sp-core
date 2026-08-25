@@ -2511,59 +2511,13 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
           fb[y*pitch_px + x] = v;
         }
       }
-      /* 금줄 다시 — 일러가 덮었다. 매치포인트 쪽은 **숨쉬는 금테** —
-         1픽셀 깜빡임은 어설프다는 제보로 교체: 2픽셀 틀이 삼각파로 밝아졌다
-         어두워지고(점멸 아님), 모서리에 쐐기를 둬 틀이 그림에서 또렷이 뜬다 */
+      /* 금줄 다시 — 일러가 덮었다. (매치포인트 금테·집중선 장식은 제보로 폐지 —
+         전황은 빈사 틴트·KO 흑백·히트 충격만 말한다) */
       { int gx  = right ? 0 : w - 1;
         int gx2 = right ? 1 : w - 2;
-        int mp  = live && !st_ko && (right ? st_opR : st_myR) >= 1;
         for(y = 0; y < h; y++){
           fb[y*pitch_px + gx]  = COL_GOLD;
           fb[y*pitch_px + gx2] = 0x4200;
-        }
-        if(mp){
-          int ph = cm_f & 31; if(ph > 15) ph = 31 - ph;         /* 0..15..0 */
-          int r5 = 19 + ph*12/15, g6 = 27 + ph*26/15, t, k;
-          uint16_t gold = (uint16_t)((r5 << 11) | (g6 << 5));
-          /* 만화 집중선 — **위치·길이 고정**(회전시키지 말라는 제보. 밝기 박동만 남긴다).
-             금 아래 어두운 심을 깔아 밝은 그림 위에서도 선이 또렷하다.
-             바깥쪽 2/3는 굵고 안쪽으로 갈수록 가늘어지는 쐐기꼴. */
-          { int cxx = w/2, cyy = (h*2)/5, per = 2*(w + h);
-            for(k = 0; k < 24; k++){
-              int pp = ((k*per)/24 + (k*37)%9) % per;
-              int ex, ey, dx, dy, ax, ay, n, len, s, steep;
-              if(pp < w)            { ex = pp;              ey = 0;    }
-              else if(pp < w+h)     { ex = w-1;             ey = pp-w; }
-              else if(pp < 2*w+h)   { ex = 2*w+h-1-pp;      ey = h-1;  }
-              else                  { ex = 0;               ey = per-1-pp; }
-              dx = cxx-ex; dy = cyy-ey;
-              ax = dx<0?-dx:dx; ay = dy<0?-dy:dy;
-              n = ax>ay?ax:ay; if(!n) continue;
-              steep = (ay >= ax);                       /* 세로에 가까운 선인가 */
-              len = n * (24 + (k*53)%18) / 100;         /* 24~41% — 선마다 고정 */
-              for(s = 0; s <= len; s++){
-                int px2 = ex + dx*s/n, py2 = ey + dy*s/n;
-                if(px2 < 1 || px2 >= w-1 || py2 < 1 || py2 >= h-1) continue;
-                if(steep) fb[py2*pitch_px + px2+1] = 0x2104;   /* 어두운 심 */
-                else      fb[(py2+1)*pitch_px + px2] = 0x2104;
-                fb[py2*pitch_px + px2] = gold;
-                if(s*3 <= len*2){                       /* 바깥 2/3 = 2픽셀 */
-                  if(steep) fb[py2*pitch_px + px2-1] = gold;
-                  else      fb[(py2-1)*pitch_px + px2] = gold;
-                }
-              }
-            }
-          }
-          for(t = 0; t < 2; t++){
-            for(x = 0; x < w; x++){
-              fb[t*pitch_px + x] = gold;
-              fb[(h-1-t)*pitch_px + x] = gold;
-            }
-            for(y = 0; y < h; y++){
-              fb[y*pitch_px + t] = gold;
-              fb[y*pitch_px + (w-1-t)] = gold;
-            }
-          }
         }
       }
       /* 이름표 없음 — 일러만 (제보: 「이름 빼」) */
