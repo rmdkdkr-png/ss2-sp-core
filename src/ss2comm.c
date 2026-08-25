@@ -1795,6 +1795,8 @@ extern const char *ss2sp_move_name(int style, int i);
 extern int  ss2sp_move_notation(int style, int i, char *out, int cap);
 extern int  ss2sp_get_slot(int style, int slot);
 extern void ss2sp_set_slot(int style, int slot, int mv);
+extern int  ss2sp_move_flags(int style, int i);
+extern void ss2sp_reset_slots(void);
 static unsigned char ov_page = 0;   /* 0=빠른 설정, 1=SP 배치, 2=기술 고르기 */
 static int ov_spstyle = 0;          /* 마지막으로 본 유파 — 전투 밖에서 열었을 때 대비 */
 static int ov_pickslot = 0;         /* 고르는 중인 슬롯 */
@@ -1830,7 +1832,7 @@ static void ov_stylelabel(int st, char *out, int cap){
     if((int)strlen(NM[i].id) == bl && !strncmp(NM[i].id, id, bl)){ ko = NM[i].ko; break; }
   snprintf(out, cap, "%s·%s", ko, (cut && !strcmp(cut, "_bst")) ? "나찰" : "수라");
 }
-static int ov_sp_rows(void){ return 2 + ss2sp_slot_count(); }  /* 캐릭터 + 슬롯들 + 돌아가기 */
+static int ov_sp_rows(void){ return 3 + ss2sp_slot_count(); }  /* 캐릭터 + 슬롯들 + 초기화 + 돌아가기 */
 #endif
 int  ss2comm_overlay_active(void){ return ov_on; }
 void ss2comm_overlay_toggle(void){
@@ -1874,6 +1876,8 @@ int ss2comm_overlay_input(int k){
       ov_pickslot = ov_cur - 1;
       ov_page = 2;
       ov_cur = (unsigned char)(ss2sp_get_slot(ov_spstyle, ov_pickslot) + 1);
+    }else if(ov_cur == ss2sp_slot_count() + 1){        /* 기본 배치로 되돌리기 */
+      ss2sp_reset_slots();
     }else{                                             /* ← 돌아가기 */
       ov_page = 0; ov_cur = 0;
     }
@@ -1933,7 +1937,8 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
         char nt[16], ar[48];
         ss2sp_move_notation(ov_spstyle, i - 1, nt, sizeof nt);
         ov_nota_arrows(nt, ar, sizeof ar);
-        snprintf(buf, sizeof buf, "%s %s", ar, ss2sp_move_name(ov_spstyle, i - 1));
+        snprintf(buf, sizeof buf, "%s %s%s", ar, ss2sp_move_name(ov_spstyle, i - 1),
+                 (ss2sp_move_flags(ov_spstyle, i - 1) & 4) ? "(공중)" : "");
       }
       draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
                   (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
@@ -1956,10 +1961,12 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
           char nt[16], ar[48];
           ss2sp_move_notation(ov_spstyle, mv, nt, sizeof nt);
           ov_nota_arrows(nt, ar, sizeof ar);
-          snprintf(buf, sizeof buf, "%s : %s %s", ov_slotname(i - 1), ar,
-                   ss2sp_move_name(ov_spstyle, mv));
+          snprintf(buf, sizeof buf, "%s:%s %s%s", ov_slotname(i - 1), ar,
+                   ss2sp_move_name(ov_spstyle, mv),
+                   (ss2sp_move_flags(ov_spstyle, mv) & 4) ? "(공중)" : "");
         }
-      }else snprintf(buf, sizeof buf, "← 빠른 설정으로");
+      }else if(i == ss2sp_slot_count() + 1) snprintf(buf, sizeof buf, "기본 배치로 되돌리기");
+      else snprintf(buf, sizeof buf, "← 빠른 설정으로");
       draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
                   (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
     }
@@ -2518,26 +2525,32 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
           int ph = cm_f & 31; if(ph > 15) ph = 31 - ph;         /* 0..15..0 */
           int r5 = 19 + ph*12/15, g6 = 27 + ph*26/15, t, k;
           uint16_t gold = (uint16_t)((r5 << 11) | (g6 << 5));
-          /* 만화 집중선 — 테만으론 심심하다는 제보. 가장자리에서 얼굴 쪽으로
-             달려드는 금빛 속도선. 선마다 길이가 다르고 프레임 따라 일렁인다 */
+          /* 만화 집중선 — **위치·길이 고정**(회전시키지 말라는 제보. 밝기 박동만 남긴다).
+             금 아래 어두운 심을 깔아 밝은 그림 위에서도 선이 또렷하다.
+             바깥쪽 2/3는 굵고 안쪽으로 갈수록 가늘어지는 쐐기꼴. */
           { int cxx = w/2, cyy = (h*2)/5, per = 2*(w + h);
-            for(k = 0; k < 26; k++){
-              int pp = (k*per)/26 + (int)((cm_f >> 2) % 7);
-              int ex, ey, dx, dy, dist, len, s;
-              pp %= per;
+            for(k = 0; k < 24; k++){
+              int pp = ((k*per)/24 + (k*37)%9) % per;
+              int ex, ey, dx, dy, ax, ay, n, len, s, steep;
               if(pp < w)            { ex = pp;              ey = 0;    }
               else if(pp < w+h)     { ex = w-1;             ey = pp-w; }
               else if(pp < 2*w+h)   { ex = 2*w+h-1-pp;      ey = h-1;  }
               else                  { ex = 0;               ey = per-1-pp; }
               dx = cxx-ex; dy = cyy-ey;
-              dist = (dx<0?-dx:dx) + (dy<0?-dy:dy); if(!dist) continue;
-              len = dist * (22 + (int)((k*7 + (cm_f>>3)*3) % 16)) / 100;
-              for(s = 0; s < len; s++){
-                int px2 = ex + dx*s/dist, py2 = ey + dy*s/dist;
-                if(px2 < 0 || px2 >= w || py2 < 0 || py2 >= h) continue;
+              ax = dx<0?-dx:dx; ay = dy<0?-dy:dy;
+              n = ax>ay?ax:ay; if(!n) continue;
+              steep = (ay >= ax);                       /* 세로에 가까운 선인가 */
+              len = n * (24 + (k*53)%18) / 100;         /* 24~41% — 선마다 고정 */
+              for(s = 0; s <= len; s++){
+                int px2 = ex + dx*s/n, py2 = ey + dy*s/n;
+                if(px2 < 1 || px2 >= w-1 || py2 < 1 || py2 >= h-1) continue;
+                if(steep) fb[py2*pitch_px + px2+1] = 0x2104;   /* 어두운 심 */
+                else      fb[(py2+1)*pitch_px + px2] = 0x2104;
                 fb[py2*pitch_px + px2] = gold;
-                /* 바깥쪽 절반은 2픽셀 굵기 — 쐐기꼴로 가늘어진다 */
-                if(s < len/2 && py2+1 < h) fb[(py2+1)*pitch_px + px2] = gold;
+                if(s*3 <= len*2){                       /* 바깥 2/3 = 2픽셀 */
+                  if(steep) fb[py2*pitch_px + px2-1] = gold;
+                  else      fb[(py2-1)*pitch_px + px2] = gold;
+                }
               }
             }
           }
