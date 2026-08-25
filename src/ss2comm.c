@@ -1791,8 +1791,22 @@ extern void ss2sp_set_slot(int style, int slot, int mv);
 static unsigned char ov_page = 0;   /* 0=빠른 설정, 1=SP 배치 */
 static int ov_spstyle = 0;          /* 마지막으로 본 유파 — 전투 밖에서 열었을 때 대비 */
 static const char *ov_slotname(int i){
-  static const char *nm[7] = {"기본","→ 앞","← 뒤","↓ 아래","↘","↙","공중"};
+  static const char *nm[7] = {"기본","→ 앞","← 뒤","↓","↘","↙","공중"};
   return (i >= 0 && i < 7) ? nm[i] : "?";
+}
+/* 넘패드 표기(236+A)를 화살표(↓↘→+A)로 — 커맨드도 화살표로 보라는 제보 */
+static void ov_nota_arrows(const char *nt, char *out, int cap){
+  static const struct { char d; const char *a; } M[9] = {
+    {'8',"↑"},{'2',"↓"},{'4',"←"},{'6',"→"},
+    {'9',"↗"},{'7',"↖"},{'3',"↘"},{'1',"↙"},{'5',"·"}};
+  int n = 0, i; const char *p;
+  for(p = nt; *p && n < cap - 4; p++){
+    const char *rep = 0;
+    for(i = 0; i < 9; i++) if(M[i].d == *p){ rep = M[i].a; break; }
+    if(rep){ int l = (int)strlen(rep); memcpy(out + n, rep, l); n += l; }
+    else out[n++] = *p;
+  }
+  out[n] = 0;
 }
 static void ov_stylelabel(int st, char *out, int cap){
   static const struct { const char *id, *ko; } NM[15] = {
@@ -1898,8 +1912,10 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
         int mv = ss2sp_get_slot(ov_spstyle, i - 1);
         if(mv < 0) snprintf(buf, sizeof buf, "%s : — 비움 —", ov_slotname(i - 1));
         else{
-          char nt[16]; ss2sp_move_notation(ov_spstyle, mv, nt, sizeof nt);
-          snprintf(buf, sizeof buf, "%s : %s %s", ov_slotname(i - 1), nt,
+          char nt[16], ar[48];
+          ss2sp_move_notation(ov_spstyle, mv, nt, sizeof nt);
+          ov_nota_arrows(nt, ar, sizeof ar);
+          snprintf(buf, sizeof buf, "%s : %s %s", ov_slotname(i - 1), ar,
                    ss2sp_move_name(ov_spstyle, mv));
         }
       }else snprintf(buf, sizeof buf, "← 빠른 설정으로");
