@@ -2200,6 +2200,25 @@ static int art_bake(int side, int ch, int var){
       }
     }
   }
+  /* 간다라(슬롯 60)만 두 겹이다 — 몸은 스크롤면, 얼굴은 스프라이트라
+     바탕을 다 깐 뒤 얼굴을 색인0 투명으로 덧그린다 (검은 상자 방지) */
+  if(slot == 60){
+    for(i = 0; i < 144; i++){
+      unsigned a = SS2ART_GAND_OV[i].a; int pn = SS2ART_GAND_OV[i].pf >> 2;
+      int vf = (SS2ART_GAND_OV[i].pf >> 1) & 1, hf = SS2ART_GAND_OV[i].pf & 1;
+      int ty = i / 12, tx = i % 12;
+      if(a < 4096 || a + 16 > cm_romlen) continue;
+      for(ry = 0; ry < 8; ry++){
+        int sy = vf ? 7 - ry : ry;
+        unsigned w2 = cm_rom[a + sy*2] | (cm_rom[a + sy*2 + 1] << 8);
+        for(rx = 0; rx < 8; rx++){
+          int sx = hf ? 7 - rx : rx;
+          int ci = (w2 >> ((7 - sx) * 2)) & 3;
+          if(ci) art_px[side][(ty*8 + ry)*96 + tx*8 + rx] = pal12_to565(A->pal[pn][ci]);
+        }
+      }
+    }
+  }
   return 1;
 }
 static const uint16_t *art_get(int side, int ch, int *fx_out){
