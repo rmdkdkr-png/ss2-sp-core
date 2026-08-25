@@ -1401,7 +1401,7 @@ out:
    화면 아래에 띠를 덧붙이고 초상 + 8x8 갈무리 글리프 + 연출을 찍는다. 폰트 의존 0. */
 #include "ss2comm_font.h"
 
-static int cm_draw = 1;
+static int cm_draw = 4;   /* 기본: 화면 밖 위 띠 (아래는 어색하다는 제보로 상방 기본) */
 void ss2comm_draw_enable(int mode){ cm_draw = mode; }
 /* 0 끔 / 1 화면 밖 아래 띠 / 2 화면 안 위 / 3 화면 안 아래 / 4 화면 밖 위 띠 */
 

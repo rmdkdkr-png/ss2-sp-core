@@ -508,7 +508,7 @@ static void check_variables(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       int prev = ss2comm_band_h() | (ss2comm_band_top() << 8);
-      int mode = 1;                                  /* 기본: 화면 밖 아래 띠 */
+      int mode = 4;                                  /* 기본: 화면 밖 **위** 띠 (아래는 어색하다는 제보) */
       if      (!strcmp(var.value, "disabled"))     mode = 0;
       else if (!strcmp(var.value, "above"))        mode = 4;
       else if (!strcmp(var.value, "inside_top"))   mode = 2;

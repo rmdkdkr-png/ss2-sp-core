@@ -129,14 +129,14 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       NULL,
       "video",
       {
-         { "enabled",       "Outside the screen, below" },
          { "above",         "Outside the screen, above" },
-         { "inside_bottom", "Inside the screen, bottom" },
+         { "enabled",       "Outside the screen, below" },
          { "inside_top",    "Inside the screen, top" },
+         { "inside_bottom", "Inside the screen, bottom" },
          { "disabled",      "Frontend notification only" },
          { NULL, NULL},
       },
-      "enabled",
+      "above",
    },
    {
       "ngp_ss2sp_sides",
