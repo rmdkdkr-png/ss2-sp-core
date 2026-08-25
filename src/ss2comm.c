@@ -170,6 +170,7 @@ static int st_settled;         /* 이번 매치의 승패 정산(연승·전적)
 static int blk_boot = -1, blk_moved;   /* 부팅 뒤 BLK1 이 한 번이라도 움직였나 — 기본값 썰 도배 방지 */
 static int st_oppGand;   /* 지금 상대가 간다라인가 — 이름은 「간다라」로 부른다(제보: 게임 명패는 수라라 떠도) */
 static unsigned char side_bg_ok, side_bg_want;   /* 기둥 타일 배경 캐시 상태 (정의부는 아래 기둥 절) */
+static unsigned char side_bg_mode;               /* 0=자동(창 바깥) 1..6=고정 구간 9=격자 (제보: 돌려 바꿀 수 있게) */
 static int st_survSaid = -1, st_streakSaid = -1;   /* 이미 낭독한 연승 값 — 같은 값 반복 금지 */
 static int surv_seen = -1, surv_live;   /* 무한대전 카운터가 이번 세션에 실제로 움직였나 —
                                            스토리는 이 값을 안 지워서(실기 검증) 잔존 15가 판마다 읽혔다 */
@@ -2069,13 +2070,20 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
 #define SIDE_BG_H 216
 static uint16_t      side_bg[2][SIDE_BG_W * SIDE_BG_H];
 int ss2comm_side_wantbake(void){ return side_bg_want; }
+void ss2comm_side_bgmode(int m){
+  if(m < 0) m = 0;
+  if(side_bg_mode == (unsigned char)m) return;
+  side_bg_mode = (unsigned char)m; side_bg_want = 1;   /* 바뀌면 다시 굽는다 */
+}
 void ss2comm_side_tiles(const unsigned char *map2, const unsigned char *charram,
                         const unsigned char *pal, int sx, int sy){
   int side, x, y;
   side_bg_want = 0;
-  if(!map2 || !charram || !pal){ side_bg_ok = 0; return; }
+  if(!map2 || !charram || !pal || side_bg_mode == 9){ side_bg_ok = 0; return; }   /* 9 = 격자무늬로 */
   for(side = 0; side < 2; side++){
-    int base = (sx >> 3) + (side ? 20 : -8);   /* 보이는 창(20칸) 좌/우 바깥 8칸 */
+    int base = side_bg_mode
+      ? (side_bg_mode - 1) * 4 + (side ? 8 : 0)   /* 고정 구간 — 평면을 4칸씩 돌려 가며 고른다 */
+      : (sx >> 3) + (side ? 20 : -8);             /* 자동 — 보이는 창(20칸) 좌/우 바깥 8칸 */
     for(y = 0; y < SIDE_BG_H; y++){
       int line = (sy + y - (SIDE_BG_H - 152)) & 0xFF;
       int trow = (line >> 3) & 31, prow = line & 7;
@@ -2151,7 +2159,8 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
       for(y = 0; y < size && oy + y < h; y++)
         for(x = 0; x < size; x++){
           int p = (y*32/size)*32 + (x*32/size);
-          if(al[p]) fb[(oy + y)*pitch_px + ox + x] = px[p];
+          /* 카드는 불투명 — 투명 픽셀은 검정 바탕으로 (뒤 타일이 비쳤다는 제보) */
+          fb[(oy + y)*pitch_px + ox + x] = al[p] ? px[p] : 0x0000;
         }
       /* 얇은 틀 — 카드가 바탕에서 뜬다 */
       for(x = ox - 1; x <= ox + size; x++){

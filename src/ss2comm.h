@@ -38,6 +38,7 @@ int         ss2comm_drawing(void);           /* 1이면 코어가 직접 그린�
 void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h); /* 화면에 직접 그리기 */
 void        ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right); /* 양옆 아트웍 기둥 한 짝 */
 int         ss2comm_side_wantbake(void); /* 기둥 배경을 다시 구울 때인가 */
+void        ss2comm_side_bgmode(int m); /* 기둥 배경 고르기 — 0 자동 / 1..6 고정 구간 / 9 격자 */
 void        ss2comm_side_tiles(const unsigned char *scr2map, const unsigned char *charram,
                                const unsigned char *pal, int scroll2x, int scroll2y); /* 스테이지 타일로 굽기 */
 
