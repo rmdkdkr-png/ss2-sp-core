@@ -978,7 +978,7 @@ const char *ss2comm_frame(void){
         char who[64];
         snprintf(who,sizeof(who),"%s 대 %s",CHARNAME[me],CHARNAME[op]);
         if(!emits(EV_START, who)) emit(EV_VSQ);
-      }else if(!emits(EV_START, "한판")) emit(EV_VSQ);
+      }else emit(EV_VSQ);   /* 상대 미상 — 이름 채움("한판" 따위) 금지(제보: 「한판라…」) */
     }
     else if((scr==0||scr==2) && p_mode==MD_BATTLE && cm_f > hush_until) emit(EV_STORYCHAT);
   }
@@ -1089,6 +1089,12 @@ const char *ss2comm_frame(void){
          한참 들여다보는 동안 통째로 조용했다 — 제보: 「카드 고를 때 왜 닥치고 있노」.
          고르는 화면(2 캐릭터 · 4 검질 · 6 카드)에서는 사담과 **썰**을 번갈아 낸다.
          카드 그림을 보고 있을 때 제 캐릭터 이야기를 듣는 게 제일 어울린다. */
+      /* 다음 상대 화면(메뉴 scr>=8)에서는 BLK 가 벌써 새 대진을 안다 —
+         기둥 아트를 여기서 미리 갈아 준다(제보: 「인지 가능하면 더 빨리 바뀌어야」). */
+      if(mode==MD_MENU && scr>=8){
+        int me2 = blk_char(rd(OFF_BLK1)), op2 = blk_char(rd(OFF_BLK2));
+        if(me2>=0 && op2>=0){ st_myChar = me2; st_oppChar = op2; st_oppGand = 0; }
+      }
       int picking = (mode==MD_MENU) && (scr==2 || scr==4);   /* 문구·카드 화면은 제외 — 카드 땐 쉰다(제보) */
       if(!st_selChatAt) st_selChatAt=cm_f;
       if(!st_menuAt)    st_menuAt=cm_f;
@@ -2277,20 +2283,24 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
   { const uint16_t *px = 0; const unsigned char *al = 0;
     const uint16_t *art = 0;
     int size, ox, oy;
-    { int rc2 = -1;
-      if(battle) rc2 = right ? st_oppChar : st_myChar;
-      if(rc2 >= 0 && rc2 < 15){
-        if(!art_try[rc2]) build_art(rc2);
-        if(art_ok[rc2]) art = art_px[rc2];
-      } }
+    int rc2 = -1;
+    if(battle) rc2 = right ? st_oppChar : st_myChar;
+    if(rc2 >= 0 && rc2 < 15){
+      if(!art_try[rc2]) build_art(rc2);
+      if(art_ok[rc2]) art = art_px[rc2];
+    }
     if(ch >= 0 && ch < SS2COMM_SPK_N && icon_ok[ch]){ px = icon_px[ch]; al = icon_a[ch]; }
     else if(ch == -2 && ref_ok){ px = ref_px; al = ref_a; }
     size = w - 8; if(size > 64) size = 64;
     ox = (w - size) / 2; oy = 14;
     if(art){
-      /* 세로샷 — 2배 확대해 기둥을 위아래로 꽉 채우고 가로는 얼굴 중심 크롭 */
+      /* 세로샷 — 2배 확대해 기둥을 위아래로 꽉 채우고 가로는 **얼굴 초점** 크롭
+         (일괄 중앙이면 얼굴이 잘린다는 제보 — 그림마다 초점 x가 다르다) */
+      static const unsigned char art_fx[15] = {49,48,44,58,42,48,62,51,50,52,26,39,62,59,52};
+      int fc = (rc2 >= 0 && rc2 < 15) ? art_fx[rc2] : 48;
       int sc = 2, aw = 96*sc, ah = 96*sc;
-      int cx = (aw - w) / 2, cy = (ah - h) / 2;
+      int cx = fc*sc - w/2, cy = (ah - h) / 2;
+      if(cx > aw - w) cx = aw - w;
       int pady = 0;
       if(cx < 0) cx = 0;
       if(cy < 0){ pady = (h - ah) / 2; cy = 0; }
