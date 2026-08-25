@@ -2092,7 +2092,8 @@ static void build_art(int ch){
       for(rx = 0; rx < 8; rx++){
         int sx = hf ? 7 - rx : rx;
         int ci = (w2 >> ((7 - sx) * 2)) & 3;
-        art_px[ch][(ty*8 + ry)*96 + tx*8 + rx] = pal12_to565(A->pal[pn][ci]);
+        /* 색인 0 은 K1GE 투명 — 카드 화면에선 흰 종이가 비친다 */
+        art_px[ch][(ty*8 + ry)*96 + tx*8 + rx] = ci ? pal12_to565(A->pal[pn][ci]) : 0xFFFF;
       }
     }
   }
