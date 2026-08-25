@@ -2296,7 +2296,7 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
     if(art){
       /* 세로샷 — 2배 확대해 기둥을 위아래로 꽉 채우고 가로는 **얼굴 초점** 크롭
          (일괄 중앙이면 얼굴이 잘린다는 제보 — 그림마다 초점 x가 다르다) */
-      static const unsigned char art_fx[15] = {49,48,44,58,42,48,62,51,50,52,26,39,62,59,52};
+      static const unsigned char art_fx[15] = {37,52,62,58,48,36,40,51,50,52,32,54,30,56,58};
       int fc = (rc2 >= 0 && rc2 < 15) ? art_fx[rc2] : 48;
       int sc = 2, aw = 96*sc, ah = 96*sc;
       int cx = fc*sc - w/2, cy = (ah - h) / 2;
@@ -2321,18 +2321,7 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
           fb[y*pitch_px + gx2] = 0x4200;
         }
       }
-      /* 이름은 하단 어두운 띠 위에 */
-      if(nm && *nm){
-        for(y = h - 16; y < h; y++){
-          if(y < 0) continue;
-          for(x = 0; x < w; x++){
-            uint16_t v = fb[y*pitch_px + x];
-            fb[y*pitch_px + x] = (uint16_t)((v >> 2) & 0x39E7);
-          }
-        }
-        draw_line11(fb, pitch_px, 2, w - 2, nm, nm + strlen(nm),
-                    h - 13, 0, h, 99, COL_GOLD, 0);
-      }
+      /* 이름표 없음 — 일러만 (제보: 「이름 빼」) */
       return;
     }
     if(px){
