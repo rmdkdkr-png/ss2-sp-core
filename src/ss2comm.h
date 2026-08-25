@@ -10,6 +10,7 @@
 extern "C" {
 #endif
 
+#define SS2COMM_VERSION "1.0.0"   /* SS2 층 버전 — 릴리즈마다 올린다 */
 void        ss2comm_set_ram(void *p);        /* SS2SP_RAM_POINTER 빌드에서만 필요 */
 void        ss2comm_set_enabled(int on);     /* 코어 옵션 */
 void        ss2comm_set_rom(const void *rom, unsigned len); /* 초상(얼굴)을 사용자 롬에서 그린다 */

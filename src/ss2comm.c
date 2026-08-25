@@ -1798,7 +1798,7 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
       if(y==0 || y==bh-1 || x==0 || x==bw-1) *p = COL_GOLD;
       else *p = (uint16_t)((*p >> 3) & 0x18E3);
     }
-  { const char *t = "빠른 설정  (B 닫기)";
+  { const char *t = "빠른 설정 v" SS2COMM_VERSION "  (B 닫기)";
     draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+3, 0, h, 99, COL_GOLD, 0); }
   for(i = 0; i < ov_n; i++){
     char buf[72]; const char *vs;
