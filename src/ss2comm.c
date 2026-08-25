@@ -55,6 +55,7 @@ void ss2comm_set_ram(void *p) { (void)p; }
 
 #include "ss2comm_lines.h"
 #include "ss2comm_icon.h"
+#include "ss2comm_art.h"
 
 static const char *CHARNAME[15] = {
   "카즈키","소게츠","하오마루","겐주로","나코루루","리무루루","한조","갈포드",
@@ -2066,6 +2067,37 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
    실제 화면 밖 스테이지 그림을 정적으로 깐다. 매치가 설 때만 다시 굽는다.
    타일 형식은 tiletool 로 푼 그대로: 엔트리 = 타일9비트|팔레트4|V플립|H플립,
    패턴 2bpp 16바이트, 팔레트 RGB444 (SCR2 = 0x8300). 배포물엔 그림이 없다. */
+/* 대형 일러(96x96) — 로스터별 롬 주소표에서 실행 중에 굽는다. 없으면 아이콘으로.
+   (제보: 「롬 안에 주소를 서치해서 띄우자」 — 아이콘·쿠로코와 같은 방식의 확장) */
+static const ss2artdef SS2ART[15] = SS2COMM_ART_INIT;
+static uint16_t      art_px[15][96*96];
+static unsigned char art_ok[15], art_try[15];
+static void build_art(int ch){
+  const ss2artdef *A; int i, ry, rx; unsigned sum; unsigned a0;
+  art_try[ch] = 1;
+  if(ch < 0 || ch >= 15 || !cm_rom) return;
+  A = &SS2ART[ch];
+  if(!A->ok) return;
+  a0 = A->c[0].a;
+  if(a0 + 16 > cm_romlen) return;
+  for(sum = 0, i = 0; i < 16; i++) sum = (sum + cm_rom[a0 + i]) & 0xFFFF;
+  if(sum != A->sum) return;                    /* 다른 롬 — 일러 생략 */
+  for(i = 0; i < 144; i++){
+    unsigned a = A->c[i].a; int pn = A->c[i].pf >> 2;
+    int vf = (A->c[i].pf >> 1) & 1, hf = A->c[i].pf & 1;
+    int ty = i / 12, tx = i % 12;
+    for(ry = 0; ry < 8; ry++){
+      int sy = vf ? 7 - ry : ry; unsigned w2 = 0;
+      if(a && a + 16 <= cm_romlen) w2 = cm_rom[a + sy*2] | (cm_rom[a + sy*2 + 1] << 8);
+      for(rx = 0; rx < 8; rx++){
+        int sx = hf ? 7 - rx : rx;
+        int ci = (w2 >> ((7 - sx) * 2)) & 3;
+        art_px[ch][(ty*8 + ry)*96 + tx*8 + rx] = pal12_to565(A->pal[pn][ci]);
+      }
+    }
+  }
+  art_ok[ch] = 1;
+}
 #define SIDE_BG_W 64
 #define SIDE_BG_H 216
 static uint16_t      side_bg[2][SIDE_BG_W * SIDE_BG_H];
@@ -2148,20 +2180,34 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
       fb[y*pitch_px + gx2] = 0x4200;
     }
   }
-  /* 초상 — 32x32 아이콘을 기둥 폭에 맞춰 키운다(보통 2배 = 64) */
+  /* 초상 — 대형 일러(롬 주소표) 우선, 없으면 32x32 아이콘을 키운다 */
   { const uint16_t *px = 0; const unsigned char *al = 0;
+    const uint16_t *art = 0;
     int size, ox, oy;
+    { int rc2 = -1;
+      if(battle) rc2 = right ? st_oppChar : st_myChar;
+      if(rc2 >= 0 && rc2 < 15){
+        if(!art_try[rc2]) build_art(rc2);
+        if(art_ok[rc2]) art = art_px[rc2];
+      } }
     if(ch >= 0 && ch < SS2COMM_SPK_N && icon_ok[ch]){ px = icon_px[ch]; al = icon_a[ch]; }
     else if(ch == -2 && ref_ok){ px = ref_px; al = ref_a; }
     size = w - 8; if(size > 64) size = 64;
     ox = (w - size) / 2; oy = 14;
-    if(px){
+    if(art){
+      for(y = 0; y < size && oy + y < h; y++)
+        for(x = 0; x < size; x++)
+          fb[(oy + y)*pitch_px + ox + x] = art[(y*96/size)*96 + (x*96/size)];
+    }
+    else if(px){
       for(y = 0; y < size && oy + y < h; y++)
         for(x = 0; x < size; x++){
           int p = (y*32/size)*32 + (x*32/size);
           /* 카드는 불투명 — 투명 픽셀은 검정 바탕으로 (뒤 타일이 비쳤다는 제보) */
           fb[(oy + y)*pitch_px + ox + x] = al[p] ? px[p] : 0x0000;
         }
+    }
+    if(px || art){
       /* 얇은 틀 — 카드가 바탕에서 뜬다 */
       for(x = ox - 1; x <= ox + size; x++){
         if(x < 0 || x >= w) continue;
