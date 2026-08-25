@@ -170,8 +170,6 @@ static int st_fHp1, st_fHp2;   /* KO 전 마지막으로 본 두 체력 — 타�
 static int st_settled;         /* 이번 매치의 승패 정산(연승·전적)을 이미 했나 */
 static int blk_boot = -1, blk_moved;   /* 부팅 뒤 BLK1 이 한 번이라도 움직였나 — 기본값 썰 도배 방지 */
 static int st_oppGand;   /* 지금 상대가 간다라인가 — 이름은 「간다라」로 부른다(제보: 게임 명패는 수라라 떠도) */
-static unsigned char side_bg_ok, side_bg_want;   /* 기둥 타일 배경 캐시 상태 (정의부는 아래 기둥 절) */
-static unsigned char side_bg_mode;               /* 0=자동(창 바깥) 1..6=고정 구간 9=격자 (제보: 돌려 바꿀 수 있게) */
 static int st_survSaid = -1, st_streakSaid = -1;   /* 이미 낭독한 연승 값 — 같은 값 반복 금지 */
 static int surv_seen = -1, surv_live;   /* 무한대전 카운터가 이번 세션에 실제로 움직였나 —
                                            스토리는 이 값을 안 지워서(실기 검증) 잔존 15가 판마다 읽혔다 */
@@ -410,7 +408,6 @@ void ss2comm_reset(void){
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   st_fHp1=st_fHp2=0; st_settled=0;
   blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1; surv_seen=-1; surv_live=0; st_oppGand=0;
-  side_bg_ok=0; side_bg_want=1;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
   ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
@@ -1007,7 +1004,6 @@ const char *ss2comm_frame(void){
       st_myChar  = blk_char(rd(OFF_BLK1));
       st_oppChar = opp_read();
       st_oppGand = (rd(OFF_OPPID) == 8 && rd(OFF_BOSS) != 0);
-      side_bg_want = 1;                             /* 새 스테이지 — 기둥 배경을 다시 굽는다 */
       /* 판을 여는 건 **심판 하나**다. 예전에는 여기서 심판 구호 + EV_START(「하오마루 대
          겐주로…」) + 관계 대사가 한꺼번에 몰려, 두 칸짜리 대기열이 막히면서
          **흐름 대사가 통째로 버려졌다**(test_flow 6개 실패). 제보도 같았다 —
@@ -1764,8 +1760,9 @@ static int ov_n = 0;
 static unsigned char ov_on = 0, ov_cur = 0;
 void ss2comm_overlay_bind(unsigned char *chat, unsigned char *spk, unsigned char *ref,
                           unsigned char *sides, unsigned char *sbg, unsigned char *vib,
-                          unsigned char *cap){
+                          unsigned char *cap, unsigned char *sp){
   int n = 0;
+  if(sp)   { ov_it[n].name="원버튼 필살기"; ov_it[n].v=sp; ov_it[n].max=1; ov_it[n].kind=0; n++; }
   if(chat) { ov_it[n].name="캐릭터 해설"; ov_it[n].v=chat;  ov_it[n].max=1; ov_it[n].kind=0; n++; }
   if(spk)  { ov_it[n].name="해설자";      ov_it[n].v=spk;   ov_it[n].max=SS2COMM_SPK_N-1; ov_it[n].kind=1; n++; }
   if(ref)  { ov_it[n].name="심판 쿠로코"; ov_it[n].v=ref;   ov_it[n].max=1; ov_it[n].kind=0; n++; }
@@ -2167,19 +2164,21 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
    패턴 2bpp 16바이트, 팔레트 RGB444 (SCR2 = 0x8300). 배포물엔 그림이 없다. */
 /* 대형 일러(96x96) — 로스터별 롬 주소표에서 실행 중에 굽는다. 없으면 아이콘으로.
    (제보: 「롬 안에 주소를 서치해서 띄우자」 — 아이콘·쿠로코와 같은 방식의 확장) */
-static const ss2artdef SS2ART[15] = SS2COMM_ART_INIT;
-static uint16_t      art_px[15][96*96];
-static unsigned char art_ok[15], art_try[15];
-static void build_art(int ch){
-  const ss2artdef *A; int i, ry, rx; unsigned sum; unsigned a0;
-  art_try[ch] = 1;
-  if(ch < 0 || ch >= 15 || !cm_rom) return;
-  A = &SS2ART[ch];
-  if(!A->ok) return;
+static const ss2artdef SS2ART[SS2COMM_ART_N] = SS2COMM_ART_INIT;
+/* 기둥 2칸 캐시 — 캐릭터/변형이 바뀔 때만 굽는다. 변형은 콜될 때 랜덤 1회, 유지. */
+static uint16_t      art_px[2][96*96];
+static signed char   art_ch[2]  = {-1,-1};   /* 칸에 구운 캐릭터 */
+static unsigned char art_var[2], art_okc[2];
+static int art_bake(int side, int ch, int var){
+  const ss2artdef *A; int i, ry, rx; unsigned sum, a0;
+  int slot = ch*4 + var;
+  if(ch < 0 || ch >= 15 || !cm_rom || slot >= SS2COMM_ART_N) return 0;
+  A = &SS2ART[slot];
+  if(!A->ok) return 0;
   a0 = A->c[0].a;
-  if(a0 + 16 > cm_romlen) return;
+  if(a0 + 16 > cm_romlen) return 0;
   for(sum = 0, i = 0; i < 16; i++) sum = (sum + cm_rom[a0 + i]) & 0xFFFF;
-  if(sum != A->sum) return;                    /* 다른 롬 — 일러 생략 */
+  if(sum != A->sum) return 0;                  /* 다른 롬 — 일러 생략 */
   for(i = 0; i < 144; i++){
     unsigned a = A->c[i].a; int pn = A->c[i].pf >> 2;
     int vf = (A->c[i].pf >> 1) & 1, hf = A->c[i].pf & 1;
@@ -2191,53 +2190,24 @@ static void build_art(int ch){
         int sx = hf ? 7 - rx : rx;
         int ci = (w2 >> ((7 - sx) * 2)) & 3;
         /* 색인 0 은 K1GE 투명 — 카드 화면에선 흰 종이가 비친다 */
-        art_px[ch][(ty*8 + ry)*96 + tx*8 + rx] = ci ? pal12_to565(A->pal[pn][ci]) : 0xFFFF;
+        art_px[side][(ty*8 + ry)*96 + tx*8 + rx] = ci ? pal12_to565(A->pal[pn][ci]) : 0xFFFF;
       }
     }
   }
-  art_ok[ch] = 1;
+  return 1;
 }
-#define SIDE_BG_W 64
-#define SIDE_BG_H 216
-static uint16_t      side_bg[2][SIDE_BG_W * SIDE_BG_H];
-int ss2comm_side_wantbake(void){ return side_bg_want; }
-void ss2comm_side_bgmode(int m){
-  if(m < 0) m = 0;
-  if(side_bg_mode == (unsigned char)m) return;
-  side_bg_mode = (unsigned char)m; side_bg_want = 1;   /* 바뀌면 다시 굽는다 */
-}
-void ss2comm_side_tiles(const unsigned char *map2, const unsigned char *charram,
-                        const unsigned char *pal, int sx, int sy){
-  int side, x, y;
-  side_bg_want = 0;
-  if(!map2 || !charram || !pal || side_bg_mode == 9){ side_bg_ok = 0; return; }   /* 9 = 격자무늬로 */
-  for(side = 0; side < 2; side++){
-    int base = side_bg_mode
-      ? (side_bg_mode - 1) * 4 + (side ? 8 : 0)   /* 고정 구간 — 평면을 4칸씩 돌려 가며 고른다 */
-      : (sx >> 3) + (side ? 20 : -8);             /* 자동 — 보이는 창(20칸) 좌/우 바깥 8칸 */
-    for(y = 0; y < SIDE_BG_H; y++){
-      int line = (sy + y - (SIDE_BG_H - 152)) & 0xFF;
-      int trow = (line >> 3) & 31, prow = line & 7;
-      for(x = 0; x < SIDE_BG_W; x++){
-        int col = (base + (x >> 3)) & 31;
-        int off = ((trow << 5) | col) << 1;
-        unsigned e   = map2[off] | (map2[off+1] << 8);
-        unsigned tile= e & 0x1FF, pn = (e >> 9) & 0xF;
-        int r2 = (e & 0x4000) ? (7 - prow) : prow;
-        int tx = x & 7; if(e & 0x8000) tx = 7 - tx;
-        { unsigned w2 = charram[tile*16 + r2*2] | (charram[tile*16 + r2*2 + 1] << 8);
-          int ci = (w2 >> ((7 - tx) * 2)) & 3;
-          uint16_t v;
-          if(ci){
-            unsigned p2 = pal[0x100 + pn*8 + ci*2] | (pal[0x100 + pn*8 + ci*2 + 1] << 8);
-            v = (uint16_t)((pal12_to565((unsigned short)p2) >> 1) & 0x7BEF);   /* 절반 밝기 */
-          }else v = 0x0841;
-          side_bg[side][y*SIDE_BG_W + x] = v;
-        }
-      }
-    }
+static const uint16_t *art_get(int side, int ch, int *fx_out){
+  if(ch < 0 || ch >= 15) return 0;
+  if(art_ch[side] != ch){
+    int v = (int)(rnd() & 3), k;
+    art_okc[side] = 0;
+    for(k = 0; k < 4 && !art_okc[side]; k++)      /* 실패 변형은 다음 것으로 */
+      if(art_bake(side, ch, (v + k) & 3)){ art_var[side] = (unsigned char)((v + k) & 3); art_okc[side] = 1; }
+    art_ch[side] = (signed char)ch;
   }
-  side_bg_ok = 1;
+  if(!art_okc[side]) return 0;
+  if(fx_out) *fx_out = SS2ART[ch*4 + art_var[side]].fx;
+  return art_px[side];
 }
 void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
   int x, y, ch, battle;
@@ -2255,22 +2225,14 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
       ch = -1; nm = 0;   /* 아직 아무 판도 못 봤다 — 무늬만. 해설자를 바꿔도 기둥은 안 바뀐다 */
     }
   }
-  /* 바탕 — 구워 둔 스테이지 타일. 아직 못 구웠으면 예전 마름모 격자로. */
-  if(side_bg_ok){
-    const uint16_t *src = side_bg[right ? 1 : 0];
-    for(y = 0; y < h; y++){
-      int gy = y + (SIDE_BG_H - h); if(gy < 0) gy = 0;
-      for(x = 0; x < w; x++)
-        fb[y*pitch_px + x] = src[gy*SIDE_BG_W + (x < SIDE_BG_W ? x : SIDE_BG_W-1)];
+  /* 바탕 — 어두운 마름모 무늬 (스테이지 구간 배경은 구리다는 제보로 폐지.
+     매치 전 장식 아트가 정해지면 이 자리에 얹는다). */
+  for(y = 0; y < h; y++)
+    for(x = 0; x < w; x++){
+      uint16_t v = 0x0841;
+      if(((x + y) & 15) == 7 || ((x - y) & 15) == 7) v = 0x18E3;
+      fb[y*pitch_px + x] = v;
     }
-  }else{
-    for(y = 0; y < h; y++)
-      for(x = 0; x < w; x++){
-        uint16_t v = 0x0841;
-        if(((x + y) & 15) == 7 || ((x - y) & 15) == 7) v = 0x18E3;
-        fb[y*pitch_px + x] = v;
-      }
-  }
   /* 게임과 맞닿는 모서리에 금줄 */
   { int gx  = right ? 0 : w - 1;
     int gx2 = right ? 1 : w - 2;
@@ -2283,12 +2245,9 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
   { const uint16_t *px = 0; const unsigned char *al = 0;
     const uint16_t *art = 0;
     int size, ox, oy;
-    int rc2 = -1;
+    int rc2 = -1, art_fc = 48;
     if(battle) rc2 = right ? st_oppChar : st_myChar;
-    if(rc2 >= 0 && rc2 < 15){
-      if(!art_try[rc2]) build_art(rc2);
-      if(art_ok[rc2]) art = art_px[rc2];
-    }
+    art = art_get(right ? 1 : 0, rc2, &art_fc);
     if(ch >= 0 && ch < SS2COMM_SPK_N && icon_ok[ch]){ px = icon_px[ch]; al = icon_a[ch]; }
     else if(ch == -2 && ref_ok){ px = ref_px; al = ref_a; }
     size = w - 8; if(size > 64) size = 64;
@@ -2296,12 +2255,16 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
     if(art){
       /* 세로샷 — 2배 확대해 기둥을 위아래로 꽉 채우고 가로는 **얼굴 초점** 크롭
          (일괄 중앙이면 얼굴이 잘린다는 제보 — 그림마다 초점 x가 다르다) */
-      static const unsigned char art_fx[15] = {37,52,62,58,48,36,40,51,50,52,32,54,30,56,58};
-      int fc = (rc2 >= 0 && rc2 < 15) ? art_fx[rc2] : 48;
+      int fc = art_fc;
       int sc = 2, aw = 96*sc, ah = 96*sc;
       int cx = fc*sc - w/2, cy = (ah - h) / 2;
-      if(cx > aw - w) cx = aw - w;
       int pady = 0;
+      /* 전황 연출 — 빈사 물들기·KO 명암 (판이 살아 있을 때만) */
+      int live = (rd(OFF_MODE) == MD_BATTLE && rd(OFF_SCR) >= 8);
+      int hpS  = right ? rd(OFF_HP2) : rd(OFF_HP1);
+      int tt   = (live && !st_ko && hpS > 0 && hpS < 32) ? (32 - hpS) : 0;
+      int gray = (live && st_ko && hpS == 0);   /* 진 쪽 = 체력 0 쪽 */
+      if(cx > aw - w) cx = aw - w;
       if(cx < 0) cx = 0;
       if(cy < 0){ pady = (h - ah) / 2; cy = 0; }
       for(y = 0; y < h; y++){
@@ -2310,15 +2273,32 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
           uint16_t v = 0x0841;
           if(ay >= 0 && ay < ah)
             v = art[((ay + cy)/sc)*96 + (x + cx)/sc];
+          if(gray){
+            int l5 = (((v >> 11) & 31)*2 + ((v >> 5) & 63) + (v & 31)*2) / 6;
+            v = (uint16_t)((l5 << 11) | ((l5*2) << 5) | l5);
+          }else if(tt){
+            int g6 = (v >> 5) & 63, b5 = v & 31;
+            g6 -= g6 * tt / 34; b5 -= b5 * tt / 34;
+            v = (uint16_t)((v & 0xF800) | (g6 << 5) | b5);
+          }
           fb[y*pitch_px + x] = v;
         }
       }
-      /* 금줄 다시 — 일러가 덮었다 */
+      /* 금줄 다시 — 일러가 덮었다. 매치포인트 쪽은 테두리 전체 금색 점멸 */
       { int gx  = right ? 0 : w - 1;
         int gx2 = right ? 1 : w - 2;
+        int mp  = live && !st_ko && (right ? st_opR : st_myR) >= 1;
+        int on  = mp && ((cm_f >> 4) & 1);
         for(y = 0; y < h; y++){
           fb[y*pitch_px + gx]  = COL_GOLD;
           fb[y*pitch_px + gx2] = 0x4200;
+          if(on) fb[y*pitch_px + (right ? w-1 : 0)] = COL_GOLD;
+        }
+        if(on){
+          for(x = 0; x < w; x++){
+            fb[x] = COL_GOLD;
+            fb[(h-1)*pitch_px + x] = COL_GOLD;
+          }
         }
       }
       /* 이름표 없음 — 일러만 (제보: 「이름 빼」) */

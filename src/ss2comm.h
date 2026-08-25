@@ -17,7 +17,7 @@ void        ss2comm_set_rom(const void *rom, unsigned len); /* 초상(얼굴)을
 void        ss2comm_rom_fix(void *rom, unsigned len);  /* 한글패치 글자 깨짐을 롬 메모리에서 보정 */
 void        ss2comm_overlay_bind(unsigned char *chat, unsigned char *spk, unsigned char *ref,
                                  unsigned char *sides, unsigned char *sbg, unsigned char *vib,
-                                 unsigned char *cap); /* 빠른 설정 항목 연결 */
+                                 unsigned char *cap, unsigned char *sp); /* 빠른 설정 항목 연결 */
 int         ss2comm_overlay_active(void);
 void        ss2comm_overlay_toggle(void);
 int         ss2comm_overlay_input(int k); /* 0상 1하 2좌 3우 4확인 5닫기 — 소비하면 1 */
@@ -46,10 +46,6 @@ int         ss2comm_thump(void);             /* 심판 구령(승부!·한 판!)
 int         ss2comm_drawing(void);           /* 1이면 코어가 직접 그린다(알림 불필요) */
 void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h); /* 화면에 직접 그리기 */
 void        ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right); /* 양옆 아트웍 기둥 한 짝 */
-int         ss2comm_side_wantbake(void); /* 기둥 배경을 다시 구울 때인가 */
-void        ss2comm_side_bgmode(int m); /* 기둥 배경 고르기 — 0 자동 / 1..6 고정 구간 / 9 격자 */
-void        ss2comm_side_tiles(const unsigned char *scr2map, const unsigned char *charram,
-                               const unsigned char *pal, int scroll2x, int scroll2y); /* 스테이지 타일로 굽기 */
 
 #ifdef __cplusplus
 }
