@@ -168,6 +168,7 @@ static int sess_wins, sess_games, sess_streak, sess_survBest, sess_lastLossChar 
 static int st_fHp1, st_fHp2;   /* KO 전 마지막으로 본 두 체력 — 타임오버 라운드 판정용 */
 static int st_settled;         /* 이번 매치의 승패 정산(연승·전적)을 이미 했나 */
 static int blk_boot = -1, blk_moved;   /* 부팅 뒤 BLK1 이 한 번이라도 움직였나 — 기본값 썰 도배 방지 */
+static int st_oppGand;   /* 지금 상대가 간다라인가 — 이름은 「간다라」로 부른다(제보: 게임 명패는 수라라 떠도) */
 static int st_survSaid = -1, st_streakSaid = -1;   /* 이미 낭독한 연승 값 — 같은 값 반복 금지 */
 static int surv_seen = -1, surv_live;   /* 무한대전 카운터가 이번 세션에 실제로 움직였나 —
                                            스토리는 이 값을 안 지워서(실기 검증) 잔존 15가 판마다 읽혔다 */
@@ -403,7 +404,7 @@ void ss2comm_reset(void){
   st_won=st_lost=st_resultDone=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   st_fHp1=st_fHp2=0; st_settled=0;
-  blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1; surv_seen=-1; surv_live=0;
+  blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1; surv_seen=-1; surv_live=0; st_oppGand=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
   ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
@@ -567,7 +568,8 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
        부르게 하려고 열었다 (제보: 「상대를 인지하고 뱉는 느낌이 없다. 모든 말에 엮어라」).
        표 밖 개체(간다라류)면 「상대」라 부른다. 조사는 fill_name 이 받침 보고 고친다. */
     if(!who) who = (st_oppChar>=0 && st_oppChar<15 && ROST2SPK[st_oppChar]!=cm_spk)
-               ? CHARNAME[st_oppChar] : "상대";   /* 화자=상대(거울)면 제 이름 대신 「상대」 */
+               ? CHARNAME[st_oppChar]
+               : (st_oppGand ? "간다라" : "상대");   /* 거울이면 「상대」, 간다라는 간다라라고 부른다(제보) */
     fill_name(outbuf,sizeof(outbuf),fmt,who);
   }
   else if(strstr(fmt,"%d")){
@@ -998,6 +1000,7 @@ const char *ss2comm_frame(void){
       flow_reset(1);                              /* v0.7 관전 기억 — 매치 통째로 */
       st_myChar  = blk_char(rd(OFF_BLK1));
       st_oppChar = opp_read();
+      st_oppGand = (rd(OFF_OPPID) == 8 && rd(OFF_BOSS) != 0);
       /* 판을 여는 건 **심판 하나**다. 예전에는 여기서 심판 구호 + EV_START(「하오마루 대
          겐주로…」) + 관계 대사가 한꺼번에 몰려, 두 칸짜리 대기열이 막히면서
          **흐름 대사가 통째로 버려졌다**(test_flow 6개 실패). 제보도 같았다 —
@@ -1079,11 +1082,11 @@ const char *ss2comm_frame(void){
          한참 들여다보는 동안 통째로 조용했다 — 제보: 「카드 고를 때 왜 닥치고 있노」.
          고르는 화면(2 캐릭터 · 4 검질 · 6 카드)에서는 사담과 **썰**을 번갈아 낸다.
          카드 그림을 보고 있을 때 제 캐릭터 이야기를 듣는 게 제일 어울린다. */
-      int picking = (mode==MD_MENU) && (scr==2 || scr==4 || scr==6);   /* 문구(QUOTE) 화면은 제외 */
+      int picking = (mode==MD_MENU) && (scr==2 || scr==4);   /* 문구·카드 화면은 제외 — 카드 땐 쉰다(제보) */
       if(!st_selChatAt) st_selChatAt=cm_f;
       if(!st_menuAt)    st_menuAt=cm_f;
       if(picking){
-        if(cm_f > hush_until && cm_f - st_selChatAt > 420){
+        if(cm_f > hush_until && cm_f - st_selChatAt > 600){   /* 10초 — 말수 축소(제보) */
           int said;
           st_selChatAt = cm_f; st_selChatN++;
           said = (st_selChatN & 1) ? emit(EV_CHARSELCHAT) : 0;
@@ -1096,7 +1099,7 @@ const char *ss2comm_frame(void){
             if(me < 0 || !say_anec(me)) emit(EV_CHARSELCHAT);
           }
         }
-      }else if(mode==MD_MENU && scr<8 && cm_f > hush_until && cm_f - st_menuAt > 420){
+      }else if(mode==MD_MENU && scr<8 && scr!=6 && cm_f > hush_until && cm_f - st_menuAt > 600){
         st_menuAt = cm_f;
         if(!emit(EV_MENUIDLE)) emit(EV_MUSE_M);
       }
@@ -1122,6 +1125,7 @@ const char *ss2comm_frame(void){
        살아 있으니 여기서 주워 담는다. 간다라(표 밖)는 그대로 -1 로 남는다. */
     st_myChar  = blk_char(rd(OFF_BLK1));
     st_oppChar = opp_read();
+    st_oppGand = (rd(OFF_OPPID) == 8 && rd(OFF_BOSS) != 0);
   }
   /* v0.5.6: 승부가 난 뒤의 승리 포즈도 액션ID가 0x180을 넘는다.
      그걸 필살기로 읽어 "온다! 비오의!" 를 뜬금없이 외치던 버그를 여기서 막는다.
@@ -1282,9 +1286,13 @@ out:
     /* 두 단계로 본다. **썰이 혼잣말보다 먼저** 나와야 한다 —
        6초쯤 비면 상대 이야기를 풀고, 그래도 8초를 넘기면 그때 혼잣말이다.
        (전에는 15초 하나뿐이라 실제로는 아무 말도 안 나왔다. 제보: 「빌 때 아깝다」) */
-    unsigned anecN = (mode==MD_BATTLE) ? 360 : 240;   /* 6초 / 4초 */
-    unsigned need  = (mode==MD_BATTLE) ? 480 : 300;   /* 8초 / 5초 */
-    if(cm_f > 300 && quiet > anecN && cm_f > hush_until && !st_ko){ /* KO 연출 중엔 잡담 금지 */
+    unsigned anecN = (mode==MD_BATTLE) ? 360 : 420;   /* 6초 / 7초 — 비전투는 말수를 줄인다(제보) */
+    unsigned need  = (mode==MD_BATTLE) ? 480 : 600;   /* 8초 / 10초 */
+    /* 잡담 필러는 **진짜 메뉴(카드 화면 제외)와 공방 중에만** 돈다.
+       문구·스토리·카드 화면에서 썰이 쏟아졌다(제보: 「스토리 볼 때 딴소리 오지게 함」
+       「카드 획득 같은 중간 이벤트 때는 쉬라」). */
+    int fillok = (mode==MD_MENU && scr != 6) || (mode==MD_BATTLE && scr >= 8);
+    if(fillok && cm_f > 300 && quiet > anecN && cm_f > hush_until && !st_ko){
       /* 상대 이야기를 한 번 풀고, 다음 차례엔 내 편 이야기. 번갈아 간다. */
       static unsigned char turn;
       /* 메뉴에서는 아직 매치가 안 잡혀 st_myChar 가 비어 있다. 램에서 바로 읽는다 —
@@ -2075,7 +2083,7 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
     int rc;
     if(battle){
       rc = right ? st_oppChar : st_myChar;
-      nm = (rc >= 0) ? CHARNAME[rc] : (right ? "마물" : 0);
+      nm = (rc >= 0) ? CHARNAME[rc] : (right ? (st_oppGand ? "간다라" : "마물") : 0);
       ch = (rc >= 0 && rc < 15) ? ROST2SPK[rc] : -1;
     }else{
       ch = -1; nm = 0;   /* 아직 아무 판도 못 봤다 — 무늬만. 해설자를 바꿔도 기둥은 안 바뀐다 */
