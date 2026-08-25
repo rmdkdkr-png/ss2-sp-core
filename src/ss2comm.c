@@ -2175,11 +2175,13 @@ static unsigned char art_var[2], art_okc[2];
 static int art_bake(int side, int ch, int var){
   const ss2artdef *A; int i, ry, rx; unsigned sum, a0;
   int slot = ch*4 + var;
-  if(ch < 0 || ch >= 15 || !cm_rom || slot >= SS2COMM_ART_N) return 0;
+  if(ch < 0 || ch > 15 || !cm_rom || slot >= SS2COMM_ART_N) return 0;
   A = &SS2ART[slot];
   if(!A->ok) return 0;
-  a0 = A->c[0].a;
-  if(a0 + 16 > cm_romlen) return 0;
+  /* 검증은 첫 **유의미** 타일로 — 빈 타일(주소 0 근처, 합 0)은 판별력이 없다 */
+  a0 = 0;
+  for(i = 0; i < 144 && !a0; i++) if(A->c[i].a >= 4096) a0 = A->c[i].a;
+  if(!a0 || a0 + 16 > cm_romlen) return 0;
   for(sum = 0, i = 0; i < 16; i++) sum = (sum + cm_rom[a0 + i]) & 0xFFFF;
   if(sum != A->sum) return 0;                  /* 다른 롬 — 일러 생략 */
   for(i = 0; i < 144; i++){
@@ -2193,7 +2195,8 @@ static int art_bake(int side, int ch, int var){
         int sx = hf ? 7 - rx : rx;
         int ci = (w2 >> ((7 - sx) * 2)) & 3;
         /* 색인 0 은 K1GE 투명 — 카드 화면에선 흰 종이가 비친다 */
-        art_px[side][(ty*8 + ry)*96 + tx*8 + rx] = ci ? pal12_to565(A->pal[pn][ci]) : 0xFFFF;
+        art_px[side][(ty*8 + ry)*96 + tx*8 + rx] =
+          ci ? pal12_to565(A->pal[pn][ci]) : (A->ok == 2 ? 0x0000 : 0xFFFF);
       }
     }
   }
@@ -2201,17 +2204,17 @@ static int art_bake(int side, int ch, int var){
 }
 static const uint16_t *art_get(int side, int ch, int *fx_out){
   int sty;
-  if(ch < 0 || ch >= 15) return 0;
+  if(ch < 0 || ch > 15) return 0;   /* 15 = 간다라 (슬롯 60, 유파 무관) */
   /* 이 캐릭터가 고른 유파 — BLK 무기비트 (0=수라 1=나찰, 유파선택 순서 기준) */
   sty = (rd(side ? OFF_BLK2 : OFF_BLK1) / 8) & 1;
   if(art_ch[side] != ch || art_sty[side] != (signed char)sty){
     int pool[4], np = 0, k, s0;
-    for(k = 0; k < 4; k++){
+    for(k = 0; k < 4 && ch*4 + k < SS2COMM_ART_N; k++){
       int slot = ch*4 + k;
-      if(SS2ART[slot].ok && art_su[slot] == (sty ? 0 : 1)) pool[np++] = k;
+      if(SS2ART[slot].ok && (ch == 15 || art_su[slot] == (sty ? 0 : 1))) pool[np++] = k;
     }
     if(!np)   /* 그 유파에 쓸 그림이 없다 — 아무 유효 변형으로 */
-      for(k = 0; k < 4; k++) if(SS2ART[ch*4 + k].ok) pool[np++] = k;
+      for(k = 0; k < 4 && ch*4 + k < SS2COMM_ART_N; k++) if(SS2ART[ch*4 + k].ok) pool[np++] = k;
     art_okc[side] = 0;
     if(np){
       s0 = (int)(rnd() % (unsigned)np);           /* 콜될 때 랜덤 1회 */
@@ -2237,7 +2240,8 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
     if(battle){
       rc = right ? st_oppChar : st_myChar;
       nm = (rc >= 0) ? CHARNAME[rc] : (right ? (st_oppGand ? "간다라" : "마물") : 0);
-      ch = (rc >= 0 && rc < 15) ? ROST2SPK[rc] : -1;
+      ch = (rc >= 0 && rc < 15) ? ROST2SPK[rc]
+         : (right && rc < 0 && st_oppGand) ? 15 : -1;   /* 간다라 = 슬롯 60 */
     }else{
       ch = -1; nm = 0;   /* 아직 아무 판도 못 봤다 — 무늬만. 해설자를 바꿔도 기둥은 안 바뀐다 */
     }
@@ -2263,7 +2267,7 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
     const uint16_t *art = 0;
     int size, ox, oy;
     int rc2 = -1, art_fc = 48;
-    if(battle) rc2 = right ? st_oppChar : st_myChar;
+    if(battle) rc2 = right ? (st_oppGand ? 15 : st_oppChar) : st_myChar;
     art = art_get(right ? 1 : 0, rc2, &art_fc);
     if(ch >= 0 && ch < SS2COMM_SPK_N && icon_ok[ch]){ px = icon_px[ch]; al = icon_a[ch]; }
     else if(ch == -2 && ref_ok){ px = ref_px; al = ref_a; }
