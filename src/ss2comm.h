@@ -14,6 +14,13 @@ void        ss2comm_set_ram(void *p);        /* SS2SP_RAM_POINTER 빌드에서�
 void        ss2comm_set_enabled(int on);     /* 코어 옵션 */
 void        ss2comm_set_rom(const void *rom, unsigned len); /* 초상(얼굴)을 사용자 롬에서 그린다 */
 void        ss2comm_rom_fix(void *rom, unsigned len);  /* 한글패치 글자 깨짐을 롬 메모리에서 보정 */
+void        ss2comm_overlay_bind(unsigned char *chat, unsigned char *spk, unsigned char *ref,
+                                 unsigned char *sides, unsigned char *sbg, unsigned char *vib,
+                                 unsigned char *cap); /* 빠른 설정 항목 연결 */
+int         ss2comm_overlay_active(void);
+void        ss2comm_overlay_toggle(void);
+int         ss2comm_overlay_input(int k); /* 0상 1하 2좌 3우 4확인 5닫기 — 소비하면 1 */
+void        ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h);
 void        ss2comm_set_speaker(int idx);    /* 0 = 하오마루. 순서는 ss2comm_speaker_name() 으로 */
 int         ss2comm_speaker_count(void);     /* 해설자 수 (v0.7: 15) */
 const char *ss2comm_speaker_name(int idx);   /* 화자 이름 (UTF-8) */

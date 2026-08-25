@@ -402,6 +402,8 @@ const char *ss2comm_speaker_hello(int idx){
 }
 void ss2comm_reset(void){
   int i; for(i=0;i<CK_N;i++) cd[i]=0;
+  /* 시드가 고정이면 켤 때마다 첫 마디가 똑같다(검수에서 확인) — 램 내용을 섞는다 */
+  if(RAM){ unsigned s=0x9E3779B9u; for(i=0;i<4096;i+=7) s = s*33u + RAM[i]; rng ^= s | 1u; }
   p_mode=p_scr=-1; p_hp1=p_hp2=-1; p_a1=p_a2=0; p_surv=p_stage=0;
   st_ko=st_low1=st_low2=st_lead=st_rev=0;
   st_won=st_lost=st_resultDone=0;
@@ -1104,7 +1106,7 @@ const char *ss2comm_frame(void){
             if(me < 0 || !say_anec(me)) emit(EV_CHARSELCHAT);
           }
         }
-      }else if(mode==MD_MENU && scr<8 && scr!=6 && cm_f > hush_until && cm_f - st_menuAt > 600){
+      }else if(mode==MD_MENU && (scr==8||scr==10||scr==12) && cm_f > hush_until && cm_f - st_menuAt > 600){
         st_menuAt = cm_f;
         if(!emit(EV_MENUIDLE)) emit(EV_MUSE_M);
       }
@@ -1296,7 +1298,8 @@ out:
     /* 잡담 필러는 **진짜 메뉴(카드 화면 제외)와 공방 중에만** 돈다.
        문구·스토리·카드 화면에서 썰이 쏟아졌다(제보: 「스토리 볼 때 딴소리 오지게 함」
        「카드 획득 같은 중간 이벤트 때는 쉬라」). */
-    int fillok = (mode==MD_MENU && scr != 6) || (mode==MD_BATTLE && scr >= 8);
+    int fillok = (mode==MD_MENU && (scr==2 || scr==4 || scr>=8)) || (mode==MD_BATTLE && scr >= 8);
+    /* 타이틀·컬렉션·설정(s0)과 카드 화면(s6)은 제외 — 검수: 컬렉션 구경 내내 잔존 캐릭터 썰이 돌았다 */
     if(fillok && cm_f > 300 && quiet > anecN && cm_f > hush_until && !st_ko){
       /* 상대 이야기를 한 번 풀고, 다음 차례엔 내 편 이야기. 번갈아 간다. */
       static unsigned char turn;
@@ -1304,6 +1307,9 @@ out:
          안 그러면 메뉴에선 썰이 한 줄도 안 나가고 「…지루하구나」만 돈다. */
       int a1c = (mode==MD_BATTLE) ? st_oppChar : blk_char(rd(OFF_BLK2));
       int a2c = (mode==MD_BATTLE) ? st_myChar  : blk_char(rd(OFF_BLK1));
+      /* 선택 화면(s2/s4)의 BLK 는 부팅 기본값일 수 있다 — 고른 적도 싸운 적도 없으면
+         특정 캐릭터 썰 금지(검수: 켜자마자 카즈키 썰 도배). VS 화면(s8+)은 값이 진짜다. */
+      if(mode==MD_MENU && scr<8 && !blk_moved && !st_lastFightF){ a1c = -1; a2c = -1; }
       int said;
       if(turn & 1){ int t = a1c; a1c = a2c; a2c = t; }
       /* 세 번에 한 번은 **혼잣말** 차례로 둔다. 안 그러면 썰이 빈 자리를 전부 먹어
@@ -1741,6 +1747,71 @@ static uint16_t tint(uint16_t c, int mood){
 #define COL_REF    0x9E7F   /* 심판 — 해설자와 구분되는 찬 색 */
 #define BOX_LINE_H 13
 #define BOX_MAXL   3
+/* ── 빠른 설정 오버레이 — 게임 화면 위에 직접 띄우는 설정창 ─────────────
+   앱이 변수 포인터를 묶어 주면(bind) 엔진이 그리기·조작을 다 맡는다.
+   값은 앱 변수에 바로 쓰이므로 저장은 앱의 기존 설정 저장이 그대로 담당. */
+static int draw_line11(uint16_t *fb,int pitch_px,int x0,int x1,const char *s,const char *end,
+                       int ytop,int clipTop,int clipBot,int show,uint16_t col,int bold);
+typedef struct { const char *name; unsigned char *v; unsigned char max; unsigned char kind; } ss2ovitem;
+static ss2ovitem ov_it[8];
+static int ov_n = 0;
+static unsigned char ov_on = 0, ov_cur = 0;
+void ss2comm_overlay_bind(unsigned char *chat, unsigned char *spk, unsigned char *ref,
+                          unsigned char *sides, unsigned char *sbg, unsigned char *vib,
+                          unsigned char *cap){
+  int n = 0;
+  if(chat) { ov_it[n].name="캐릭터 해설"; ov_it[n].v=chat;  ov_it[n].max=1; ov_it[n].kind=0; n++; }
+  if(spk)  { ov_it[n].name="해설자";      ov_it[n].v=spk;   ov_it[n].max=SS2COMM_SPK_N-1; ov_it[n].kind=1; n++; }
+  if(ref)  { ov_it[n].name="심판 쿠로코"; ov_it[n].v=ref;   ov_it[n].max=1; ov_it[n].kind=0; n++; }
+  if(sides){ ov_it[n].name="기둥 아트";   ov_it[n].v=sides; ov_it[n].max=1; ov_it[n].kind=0; n++; }
+  if(sbg)  { ov_it[n].name="기둥 배경";   ov_it[n].v=sbg;   ov_it[n].max=7; ov_it[n].kind=2; n++; }
+  if(vib)  { ov_it[n].name="진동";        ov_it[n].v=vib;   ov_it[n].max=1; ov_it[n].kind=0; n++; }
+  if(cap)  { ov_it[n].name="장면 수집";   ov_it[n].v=cap;   ov_it[n].max=1; ov_it[n].kind=0; n++; }
+  ov_n = n;
+}
+int  ss2comm_overlay_active(void){ return ov_on; }
+void ss2comm_overlay_toggle(void){ ov_on = !ov_on; if(ov_on) ov_cur = 0; }
+int ss2comm_overlay_input(int k){
+  ss2ovitem *it;
+  if(!ov_on || !ov_n) return 0;
+  if(k == 5){ ov_on = 0; return 1; }
+  if(k == 0){ ov_cur = (unsigned char)((ov_cur + ov_n - 1) % ov_n); return 1; }
+  if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % ov_n); return 1; }
+  it = &ov_it[ov_cur];
+  if(!it->v) return 1;
+  if(k == 2)            *it->v = (unsigned char)((*it->v + it->max) % (it->max + 1));
+  if(k == 3 || k == 4)  *it->v = (unsigned char)((*it->v + 1) % (it->max + 1));
+  return 1;
+}
+static const char *ov_bgname(int i){
+  static const char *nm[8] = {"자동","구간 1","구간 2","구간 3","구간 4","구간 5","구간 6","격자"};
+  return nm[i & 7];
+}
+void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
+  int bw, bh, bx, by, x, y, i;
+  if(!ov_on || !ov_n || !fb) return;
+  bw = w - 12; bh = 17 + ov_n*13 + 4;
+  bx = 6; by = (h - bh) / 2; if(by < 0) by = 0;
+  for(y = 0; y < bh && by + y < h; y++)
+    for(x = 0; x < bw; x++){
+      uint16_t *p = &fb[(by+y)*pitch_px + bx + x];
+      if(y==0 || y==bh-1 || x==0 || x==bw-1) *p = COL_GOLD;
+      else *p = (uint16_t)((*p >> 3) & 0x18E3);
+    }
+  { const char *t = "빠른 설정  (B 닫기)";
+    draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+3, 0, h, 99, COL_GOLD, 0); }
+  for(i = 0; i < ov_n; i++){
+    char buf[72]; const char *vs;
+    ss2ovitem *it = &ov_it[i];
+    if(it->kind == 1)      vs = ss2comm_speaker_name(*it->v);
+    else if(it->kind == 2) vs = ov_bgname(*it->v);
+    else                   vs = *it->v ? "켬" : "끔";
+    snprintf(buf, sizeof buf, "%s : %s", it->name, vs);
+    draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
+                (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
+  }
+}
+
 int ss2comm_band_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_BAND_H : 0; }
 int ss2comm_ref_h(void){ return 0; }  /* 심판은 이제 게임 화면 위 오버레이 — 제 자리를 차지하지 않는다 */
 int ss2comm_ref_overlay(void);        /* 아래에 — 이번 프레임에 오버레이가 실제로 그려졌으면 그 높이 */
