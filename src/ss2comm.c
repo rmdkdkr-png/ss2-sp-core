@@ -1579,9 +1579,30 @@ static unsigned char face_a[SS2COMM_SPK_N][256];   /* 0 = 투명(색인 0) */
 static unsigned char face_ok[SS2COMM_SPK_N];
 static int face_built = 0;
 
+#include "ss2comm_fix.h"
+/* 한글패치 글자 깨짐 보정 — 로드된 롬 사본(메모리)에만 손댄다. 파일은 불변.
+   검증합이 안 맞으면(다른 롬·이미 수정) 아무것도 하지 않는다. */
+static void rom_fix(unsigned char *r, unsigned len){
+  unsigned i, s;
+  if(!r || len < 0x200000) return;
+  for(s = 0, i = 0; i < SS2FIX_REC_LEN; i++) s = (s + r[SS2FIX_REC_OFF + i]) & 0xFFFF;
+  if(s != SS2FIX_REC_SUM) return;
+  for(i = 0; i < 224; i++) if(r[SS2FIX_FREE_OFF + i] != 0xFF) return;
+  memcpy(r + SS2FIX_FREE_OFF,       SS2FIX_TILES, 192);
+  memcpy(r + SS2FIX_FREE_OFF + 192, r + SS2FIX_BLANKT_OFF, 16);
+  memcpy(r + SS2FIX_FREE_OFF + 208, r + SS2FIX_BLANKB_OFF, 16);
+  r[SS2FIX_BANK_OFF] = 0x3F;
+  memcpy(r + SS2FIX_ADDR_OFF, SS2FIX_ADDRS, 30);
+  memcpy(r + SS2FIX_LAYT_OFF, SS2FIX_LAYT, 8);
+  memcpy(r + SS2FIX_LAYB_OFF, SS2FIX_LAYB, 8);
+}
+
 void ss2comm_set_rom(const void *rom, unsigned len){
   cm_rom = (const unsigned char *)rom; cm_romlen = len; face_built = 0;
+  rom_fix((unsigned char *)rom, len);
 }
+
+void ss2comm_rom_fix(void *rom, unsigned len){ rom_fix((unsigned char *)rom, len); }
 
 static uint16_t pal12_to565(unsigned short v){
   int r=(v&0xF)*17, g=((v>>4)&0xF)*17, b=((v>>8)&0xF)*17;   /* RGB444, R이 하위 니블 */
@@ -2196,11 +2217,44 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
     size = w - 8; if(size > 64) size = 64;
     ox = (w - size) / 2; oy = 14;
     if(art){
-      for(y = 0; y < size && oy + y < h; y++)
-        for(x = 0; x < size; x++)
-          fb[(oy + y)*pitch_px + ox + x] = art[(y*96/size)*96 + (x*96/size)];
+      /* 세로샷 — 2배 확대해 기둥을 위아래로 꽉 채우고 가로는 얼굴 중심 크롭 */
+      int sc = 2, aw = 96*sc, ah = 96*sc;
+      int cx = (aw - w) / 2, cy = (ah - h) / 2;
+      int pady = 0;
+      if(cx < 0) cx = 0;
+      if(cy < 0){ pady = (h - ah) / 2; cy = 0; }
+      for(y = 0; y < h; y++){
+        int ay = y - pady;
+        for(x = 0; x < w; x++){
+          uint16_t v = 0x0841;
+          if(ay >= 0 && ay < ah)
+            v = art[((ay + cy)/sc)*96 + (x + cx)/sc];
+          fb[y*pitch_px + x] = v;
+        }
+      }
+      /* 금줄 다시 — 일러가 덮었다 */
+      { int gx  = right ? 0 : w - 1;
+        int gx2 = right ? 1 : w - 2;
+        for(y = 0; y < h; y++){
+          fb[y*pitch_px + gx]  = COL_GOLD;
+          fb[y*pitch_px + gx2] = 0x4200;
+        }
+      }
+      /* 이름은 하단 어두운 띠 위에 */
+      if(nm && *nm){
+        for(y = h - 16; y < h; y++){
+          if(y < 0) continue;
+          for(x = 0; x < w; x++){
+            uint16_t v = fb[y*pitch_px + x];
+            fb[y*pitch_px + x] = (uint16_t)((v >> 2) & 0x39E7);
+          }
+        }
+        draw_line11(fb, pitch_px, 2, w - 2, nm, nm + strlen(nm),
+                    h - 13, 0, h, 99, COL_GOLD, 0);
+      }
+      return;
     }
-    else if(px){
+    if(px){
       for(y = 0; y < size && oy + y < h; y++)
         for(x = 0; x < size; x++){
           int p = (y*32/size)*32 + (x*32/size);

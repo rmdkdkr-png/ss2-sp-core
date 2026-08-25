@@ -13,6 +13,7 @@ extern "C" {
 void        ss2comm_set_ram(void *p);        /* SS2SP_RAM_POINTER 빌드에서만 필요 */
 void        ss2comm_set_enabled(int on);     /* 코어 옵션 */
 void        ss2comm_set_rom(const void *rom, unsigned len); /* 초상(얼굴)을 사용자 롬에서 그린다 */
+void        ss2comm_rom_fix(void *rom, unsigned len);  /* 한글패치 글자 깨짐을 롬 메모리에서 보정 */
 void        ss2comm_set_speaker(int idx);    /* 0 = 하오마루. 순서는 ss2comm_speaker_name() 으로 */
 int         ss2comm_speaker_count(void);     /* 해설자 수 (v0.7: 15) */
 const char *ss2comm_speaker_name(int idx);   /* 화자 이름 (UTF-8) */
