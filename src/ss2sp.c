@@ -162,7 +162,11 @@ static uint8_t ss2_mirror(uint8_t pad)
    되어 엉뚱한 기술이 나가거나 불발한다. 리셋 플래그를 세우면 게임 자신의 리셋 경로가
    커서와 센티널을 정리한다 — 추가 지연 0프레임, 연속기도 안 끊긴다.
    (예전엔 약베기를 한 번 끼워 버퍼를 끊었는데 그건 3연참 같은 연속기를 파괴했다) */
-static void ss2_compile(const ss2_move *m)
+/* tk(타이거니) = 공중기를 지상에서: 커맨드를 다 넣고 마지막에 ↑+버튼.
+   게임이 버튼을 점프 준비 프레임 너머로 버퍼링해서 이륙 즉시(저공) 발동한다.
+   실측(우쿄 나찰 츠바메, 간다라전): 모션 직후 ↑+A 동시(t=0)부터 t=9까지 전부 성공,
+   t=0이 최저공. 사람 손의 2368/2369 입력(유저 제보)을 그대로 기계화한 것. */
+static void ss2_compile_ex(const ss2_move *m, int tk)
 {
    int i, mirror = (CPUExRAM[OFF_FACING] == 1);
    q_n = q_i = 0;
@@ -186,11 +190,11 @@ static void ss2_compile(const ss2_move *m)
       }
    }
 
-   for (i = 0; i < m->len && q_n < MAX_STEPS - 2; i++)
+   for (i = 0; i < m->len && q_n < MAX_STEPS - 3; i++)
    {
       uint8_t d = m->motion[i];
       if (mirror) d = ss2_mirror(d);
-      if (i == m->len - 1)
+      if (i == m->len - 1 && !tk)
       {
          q[q_n].pad = (uint8_t)(d | m->btn);
          q[q_n].frames = HOLD_FRAMES;
@@ -202,6 +206,13 @@ static void ss2_compile(const ss2_move *m)
          q[q_n].frames = STEP_FRAMES;
          q[q_n].sustain = 0;
       }
+      q_n++;
+   }
+   if (tk)
+   {
+      q[q_n].pad = (uint8_t)(PAD_UP | m->btn);   /* ↑+버튼 동시 — 최저공 */
+      q[q_n].frames = HOLD_FRAMES;
+      q[q_n].sustain = 1;
       q_n++;
    }
    q[q_n].pad = 0; q[q_n].frames = TAIL_FRAMES; q[q_n].sustain = 0; q_n++;
@@ -221,6 +232,7 @@ static void ss2_compile(const ss2_move *m)
    ss2sp_last_name = m->name;
    ss2sp_last_ok = -1;
 }
+static void ss2_compile(const ss2_move *m) { ss2_compile_ex(m, 0); }
 
 /* ── SP 모드: 버튼 하나 + 방향으로 슬롯을 고른다 ─────────────────
    브라우저판 resolveSpSlot과 같은 우선순위:
@@ -430,9 +442,12 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
             }
             else
             {
-               ss2_compile(m);
-               if (ss2_dbg()) fprintf(stderr, "[ss2sp] compile %s len=%d steps=%d\n",
-                                      m->name, m->len, q_n);
+               /* 공중기를 지상에서 = 타이거니(커맨드 후 ↑+버튼, 저공 발동).
+                  공중에서 눌렀으면 그냥 커맨드+버튼(이미 떠 있다). */
+               int tk = (m->flags & 4) && CPUExRAM[OFF_Y] == 128;
+               ss2_compile_ex(m, tk);
+               if (ss2_dbg()) fprintf(stderr, "[ss2sp] compile %s len=%d steps=%d tk=%d\n",
+                                      m->name, m->len, q_n, tk);
             }
          }
       }
