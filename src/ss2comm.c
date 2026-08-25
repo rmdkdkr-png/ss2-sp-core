@@ -2516,23 +2516,39 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
         }
         if(mp){
           int ph = cm_f & 31; if(ph > 15) ph = 31 - ph;         /* 0..15..0 */
-          { int r5 = 19 + ph*12/15, g6 = 27 + ph*26/15, t;
-            uint16_t gold = (uint16_t)((r5 << 11) | (g6 << 5));
-            for(t = 0; t < 2; t++){
-              for(x = 0; x < w; x++){
-                fb[t*pitch_px + x] = gold;
-                fb[(h-1-t)*pitch_px + x] = gold;
-              }
-              for(y = 0; y < h; y++){
-                fb[y*pitch_px + t] = gold;
-                fb[y*pitch_px + (w-1-t)] = gold;
+          int r5 = 19 + ph*12/15, g6 = 27 + ph*26/15, t, k;
+          uint16_t gold = (uint16_t)((r5 << 11) | (g6 << 5));
+          /* 만화 집중선 — 테만으론 심심하다는 제보. 가장자리에서 얼굴 쪽으로
+             달려드는 금빛 속도선. 선마다 길이가 다르고 프레임 따라 일렁인다 */
+          { int cxx = w/2, cyy = (h*2)/5, per = 2*(w + h);
+            for(k = 0; k < 26; k++){
+              int pp = (k*per)/26 + (int)((cm_f >> 2) % 7);
+              int ex, ey, dx, dy, dist, len, s;
+              pp %= per;
+              if(pp < w)            { ex = pp;              ey = 0;    }
+              else if(pp < w+h)     { ex = w-1;             ey = pp-w; }
+              else if(pp < 2*w+h)   { ex = 2*w+h-1-pp;      ey = h-1;  }
+              else                  { ex = 0;               ey = per-1-pp; }
+              dx = cxx-ex; dy = cyy-ey;
+              dist = (dx<0?-dx:dx) + (dy<0?-dy:dy); if(!dist) continue;
+              len = dist * (22 + (int)((k*7 + (cm_f>>3)*3) % 16)) / 100;
+              for(s = 0; s < len; s++){
+                int px2 = ex + dx*s/dist, py2 = ey + dy*s/dist;
+                if(px2 < 0 || px2 >= w || py2 < 0 || py2 >= h) continue;
+                fb[py2*pitch_px + px2] = gold;
+                /* 바깥쪽 절반은 2픽셀 굵기 — 쐐기꼴로 가늘어진다 */
+                if(s < len/2 && py2+1 < h) fb[(py2+1)*pitch_px + px2] = gold;
               }
             }
-            for(t = 2; t < 7; t++){                              /* 모서리 쐐기 */
-              fb[2*pitch_px + t] = gold;           fb[t*pitch_px + 2] = gold;
-              fb[2*pitch_px + (w-1-t)] = gold;     fb[t*pitch_px + (w-3)] = gold;
-              fb[(h-3)*pitch_px + t] = gold;       fb[(h-1-t)*pitch_px + 2] = gold;
-              fb[(h-3)*pitch_px + (w-1-t)] = gold; fb[(h-1-t)*pitch_px + (w-3)] = gold;
+          }
+          for(t = 0; t < 2; t++){
+            for(x = 0; x < w; x++){
+              fb[t*pitch_px + x] = gold;
+              fb[(h-1-t)*pitch_px + x] = gold;
+            }
+            for(y = 0; y < h; y++){
+              fb[y*pitch_px + t] = gold;
+              fb[y*pitch_px + (w-1-t)] = gold;
             }
           }
         }

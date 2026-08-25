@@ -210,7 +210,9 @@ static void ss2_compile_ex(const ss2_move *m, int tk)
    }
    if (tk)
    {
-      q[q_n].pad = (uint8_t)(PAD_UP | m->btn);   /* ↑+버튼 동시 — 최저공 */
+      uint8_t d9 = PAD_UP | PAD_RIGHT;           /* 9 = 전방 점프 (2369 — 실효성 제보) */
+      if (mirror) d9 = ss2_mirror(d9);
+      q[q_n].pad = (uint8_t)(d9 | m->btn);       /* ↗+버튼 동시 — 최저공 */
       q[q_n].frames = HOLD_FRAMES;
       q[q_n].sustain = 1;
       q_n++;
