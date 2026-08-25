@@ -37,6 +37,7 @@ int         ss2comm_thump(void);             /* 심판 구령(승부!·한 판!)
 int         ss2comm_drawing(void);           /* 1이면 코어가 직접 그린다(알림 불필요) */
 void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h); /* 화면에 직접 그리기 */
 void        ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right); /* 양옆 아트웍 기둥 한 짝 */
+void        ss2comm_side_feed(const uint16_t *left, const uint16_t *right, int pitch_px); /* 기둥 바탕감 — 게임 가장자리 16줄 */
 
 #ifdef __cplusplus
 }
