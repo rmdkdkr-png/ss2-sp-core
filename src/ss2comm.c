@@ -169,6 +169,7 @@ static int st_fHp1, st_fHp2;   /* KO 전 마지막으로 본 두 체력 — 타�
 static int st_settled;         /* 이번 매치의 승패 정산(연승·전적)을 이미 했나 */
 static int blk_boot = -1, blk_moved;   /* 부팅 뒤 BLK1 이 한 번이라도 움직였나 — 기본값 썰 도배 방지 */
 static int st_oppGand;   /* 지금 상대가 간다라인가 — 이름은 「간다라」로 부른다(제보: 게임 명패는 수라라 떠도) */
+static unsigned char side_bg_ok, side_bg_want;   /* 기둥 타일 배경 캐시 상태 (정의부는 아래 기둥 절) */
 static int st_survSaid = -1, st_streakSaid = -1;   /* 이미 낭독한 연승 값 — 같은 값 반복 금지 */
 static int surv_seen = -1, surv_live;   /* 무한대전 카운터가 이번 세션에 실제로 움직였나 —
                                            스토리는 이 값을 안 지워서(실기 검증) 잔존 15가 판마다 읽혔다 */
@@ -405,6 +406,7 @@ void ss2comm_reset(void){
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   st_fHp1=st_fHp2=0; st_settled=0;
   blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1; surv_seen=-1; surv_live=0; st_oppGand=0;
+  side_bg_ok=0; side_bg_want=1;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
   ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
@@ -1001,6 +1003,7 @@ const char *ss2comm_frame(void){
       st_myChar  = blk_char(rd(OFF_BLK1));
       st_oppChar = opp_read();
       st_oppGand = (rd(OFF_OPPID) == 8 && rd(OFF_BOSS) != 0);
+      side_bg_want = 1;                             /* 새 스테이지 — 기둥 배경을 다시 굽는다 */
       /* 판을 여는 건 **심판 하나**다. 예전에는 여기서 심판 구호 + EV_START(「하오마루 대
          겐주로…」) + 관계 대사가 한꺼번에 몰려, 두 칸짜리 대기열이 막히면서
          **흐름 대사가 통째로 버려졌다**(test_flow 6개 실패). 제보도 같았다 —
@@ -2057,21 +2060,45 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
    전투 중: 왼쪽 = 내 캐릭터, 오른쪽 = 상대 (표 밖 개체는 「마물」 글자만).
    그 밖:   왼쪽 = 해설자, 오른쪽 = 심판.
    한 번에 기둥 하나를 그린다 — 32비트 화면은 기둥별로 변환해 얹기 좋게. */
-/* 기둥 바탕감 — 게임 화면의 좌우 가장자리 16줄을 매 프레임 받아 둔다.
-   기둥은 이걸 거울로 늘여 어둡게 깔아 스테이지가 옆으로 번져 보인다
-   (제보: 「아트웍 배경을 땡겨올 수 없을까 그럴듯하게」). 배포물엔 그림이 없다. */
-#define SIDE_SRC_W 16
-static uint16_t      side_src[2][SIDE_SRC_W * 152];
-static unsigned char side_src_ok;
-void ss2comm_side_feed(const uint16_t *left, const uint16_t *right, int pitch_px){
-  int x, y;
-  if(!left || !right){ side_src_ok = 0; return; }
-  for(y = 0; y < 152; y++)
-    for(x = 0; x < SIDE_SRC_W; x++){
-      side_src[0][y*SIDE_SRC_W + x] = left [y*pitch_px + x];
-      side_src[1][y*SIDE_SRC_W + x] = right[y*pitch_px + x];
+/* 기둥 바탕감 — **스테이지 타일**로 굽는다 (제보: 「실시간 반영은 에바다, 타일을」).
+   K1GE 스크롤2(배경면) 타일맵에서 **보이는 창 좌우 바깥 8칸씩**을 떼어
+   실제 화면 밖 스테이지 그림을 정적으로 깐다. 매치가 설 때만 다시 굽는다.
+   타일 형식은 tiletool 로 푼 그대로: 엔트리 = 타일9비트|팔레트4|V플립|H플립,
+   패턴 2bpp 16바이트, 팔레트 RGB444 (SCR2 = 0x8300). 배포물엔 그림이 없다. */
+#define SIDE_BG_W 64
+#define SIDE_BG_H 216
+static uint16_t      side_bg[2][SIDE_BG_W * SIDE_BG_H];
+int ss2comm_side_wantbake(void){ return side_bg_want; }
+void ss2comm_side_tiles(const unsigned char *map2, const unsigned char *charram,
+                        const unsigned char *pal, int sx, int sy){
+  int side, x, y;
+  side_bg_want = 0;
+  if(!map2 || !charram || !pal){ side_bg_ok = 0; return; }
+  for(side = 0; side < 2; side++){
+    int base = (sx >> 3) + (side ? 20 : -8);   /* 보이는 창(20칸) 좌/우 바깥 8칸 */
+    for(y = 0; y < SIDE_BG_H; y++){
+      int line = (sy + y - (SIDE_BG_H - 152)) & 0xFF;
+      int trow = (line >> 3) & 31, prow = line & 7;
+      for(x = 0; x < SIDE_BG_W; x++){
+        int col = (base + (x >> 3)) & 31;
+        int off = ((trow << 5) | col) << 1;
+        unsigned e   = map2[off] | (map2[off+1] << 8);
+        unsigned tile= e & 0x1FF, pn = (e >> 9) & 0xF;
+        int r2 = (e & 0x4000) ? (7 - prow) : prow;
+        int tx = x & 7; if(e & 0x8000) tx = 7 - tx;
+        { unsigned w2 = charram[tile*16 + r2*2] | (charram[tile*16 + r2*2 + 1] << 8);
+          int ci = (w2 >> ((7 - tx) * 2)) & 3;
+          uint16_t v;
+          if(ci){
+            unsigned p2 = pal[0x100 + pn*8 + ci*2] | (pal[0x100 + pn*8 + ci*2 + 1] << 8);
+            v = (uint16_t)((pal12_to565((unsigned short)p2) >> 1) & 0x7BEF);   /* 절반 밝기 */
+          }else v = 0x0841;
+          side_bg[side][y*SIDE_BG_W + x] = v;
+        }
+      }
     }
-  side_src_ok = 1;
+  }
+  side_bg_ok = 1;
 }
 void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
   int x, y, ch, battle;
@@ -2089,19 +2116,13 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
       ch = -1; nm = 0;   /* 아직 아무 판도 못 봤다 — 무늬만. 해설자를 바꿔도 기둥은 안 바뀐다 */
     }
   }
-  /* 바탕 — 게임 가장자리를 거울로 늘여 반쯤 어둡게(스테이지가 옆으로 번진 느낌).
-     아직 게임 화면을 못 받았으면 예전 마름모 격자로. */
-  if(side_src_ok){
-    const uint16_t *src = side_src[right ? 1 : 0];
-    int gtop = h - 152; if(gtop < 0) gtop = 0;
+  /* 바탕 — 구워 둔 스테이지 타일. 아직 못 구웠으면 예전 마름모 격자로. */
+  if(side_bg_ok){
+    const uint16_t *src = side_bg[right ? 1 : 0];
     for(y = 0; y < h; y++){
-      int gy = y - gtop; if(gy < 0) gy = 0; if(gy > 151) gy = 151;
-      for(x = 0; x < w; x++){
-        int sx = right ? (SIDE_SRC_W - 1 - x * SIDE_SRC_W / w)
-                       : ((w - 1 - x) * SIDE_SRC_W / w);
-        uint16_t v = src[gy * SIDE_SRC_W + sx];
-        fb[y*pitch_px + x] = (uint16_t)((v >> 1) & 0x7BEF);   /* 절반 밝기 */
-      }
+      int gy = y + (SIDE_BG_H - h); if(gy < 0) gy = 0;
+      for(x = 0; x < w; x++)
+        fb[y*pitch_px + x] = src[gy*SIDE_BG_W + (x < SIDE_BG_W ? x : SIDE_BG_W-1)];
     }
   }else{
     for(y = 0; y < h; y++)
