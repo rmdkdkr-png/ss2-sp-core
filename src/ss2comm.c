@@ -816,6 +816,16 @@ static int blk_char(int blk){
 /* 상대 정체 판독 — BLK2 가 아니라 개체 번호(OFF_OPPID)로 본다.
    보스 플래그가 선 판은 유가(14)만 로스터로 인정하고 나머지(간다라 8·그림자 19)는
    표 밖 마물(-1)로 떨어뜨린다 — 심판이 안 서고 마물 관계대사가 나간다. */
+/* 간다라 판별 — 유저 간다라전 세이브(ganda, st7) 실측: 개체 **19 + 보스기 + 스테이지 7**.
+   그림자 아수라도 19+보스기로 오므로 스테이지(0x17FE)==7 로만 가른다.
+   구 실측(8+보스기)도 간다라로 유지 — 반증 세이브가 없다. */
+static int opp_is_gand(void){
+  int id = rd(OFF_OPPID);
+  if(!rd(OFF_BOSS)) return 0;
+  if(id == 8) return 1;
+  if(id == 19 && rd(OFF_STAGE) == 7) return 1;
+  return 0;
+}
 static int opp_read(void){
   int id = rd(OFF_OPPID);
   /* 스토리 전체 강제 주행으로 전수 실측(아수라 스토리):
@@ -824,10 +834,10 @@ static int opp_read(void){
        예전 규칙은 이걸 마물로 오인했다),
        개체 19 + 보스기 = 그림자 아수라 (제보: 「아수라한테 지고 리트라이했는데
        마물로 인지함」 — 유저에겐 그냥 아수라다),
-       간다라만 아수라 자리(8) + 보스기 1 로 온다 (stage 6 실측). */
+       단 19 + 보스기 + **스테이지 7** = 진짜 간다라전 (ganda 세이브 실측). */
+  if(opp_is_gand()) return -1;                /* 간다라 — 표 밖 마물 */
   if(id == 19) return 8;                      /* 그림자 아수라 — 아수라로 부른다 */
   if(id < 0 || id > 14) return -1;            /* 표 밖 개체 */
-  if(id == 8 && rd(OFF_BOSS)) return -1;      /* 간다라 — 아수라 자리에 보스기로 온다 */
   return id;                                  /* 보스기가 서도 로스터면 그 사람(시키 보스전) */
 }
 /* 간다라는 로스터 밖 중간보스다. 해설자 15명에도 없다.
@@ -1007,7 +1017,7 @@ const char *ss2comm_frame(void){
       flow_reset(1);                              /* v0.7 관전 기억 — 매치 통째로 */
       st_myChar  = blk_char(rd(OFF_BLK1));
       st_oppChar = opp_read();
-      st_oppGand = (rd(OFF_OPPID) == 8 && rd(OFF_BOSS) != 0);
+      st_oppGand = opp_is_gand();
       /* 판을 여는 건 **심판 하나**다. 예전에는 여기서 심판 구호 + EV_START(「하오마루 대
          겐주로…」) + 관계 대사가 한꺼번에 몰려, 두 칸짜리 대기열이 막히면서
          **흐름 대사가 통째로 버려졌다**(test_flow 6개 실패). 제보도 같았다 —
@@ -1138,7 +1148,7 @@ const char *ss2comm_frame(void){
        살아 있으니 여기서 주워 담는다. 간다라(표 밖)는 그대로 -1 로 남는다. */
     st_myChar  = blk_char(rd(OFF_BLK1));
     st_oppChar = opp_read();
-    st_oppGand = (rd(OFF_OPPID) == 8 && rd(OFF_BOSS) != 0);
+    st_oppGand = opp_is_gand();
   }
   /* v0.5.6: 승부가 난 뒤의 승리 포즈도 액션ID가 0x180을 넘는다.
      그걸 필살기로 읽어 "온다! 비오의!" 를 뜬금없이 외치던 버그를 여기서 막는다.
