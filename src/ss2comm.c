@@ -1587,10 +1587,10 @@ static void rom_fix(unsigned char *r, unsigned len){
   if(!r || len < 0x200000) return;
   for(s = 0, i = 0; i < SS2FIX_REC_LEN; i++) s = (s + r[SS2FIX_REC_OFF + i]) & 0xFFFF;
   if(s != SS2FIX_REC_SUM) return;
-  for(i = 0; i < 224; i++) if(r[SS2FIX_FREE_OFF + i] != 0xFF) return;
-  memcpy(r + SS2FIX_FREE_OFF,       SS2FIX_TILES, 192);
-  memcpy(r + SS2FIX_FREE_OFF + 192, r + SS2FIX_BLANKT_OFF, 16);
-  memcpy(r + SS2FIX_FREE_OFF + 208, r + SS2FIX_BLANKB_OFF, 16);
+  for(i = 0; i < 240; i++) if(r[SS2FIX_FREE_OFF + i] != 0xFF) return;
+  memcpy(r + SS2FIX_FREE_OFF,       SS2FIX_TILES, 208);        /* 글자 12 + 하단 민무늬 */
+  memcpy(r + SS2FIX_FREE_OFF + 208, r + SS2FIX_BLANKT_OFF, 16); /* 상단 민무늬 */
+  memcpy(r + SS2FIX_FREE_OFF + 224, r + SS2FIX_BLANKB_OFF, 16); /* 모서리 장식 */
   r[SS2FIX_BANK_OFF] = 0x3F;
   memcpy(r + SS2FIX_ADDR_OFF, SS2FIX_ADDRS, 30);
   memcpy(r + SS2FIX_LAYT_OFF, SS2FIX_LAYT, 8);
@@ -1599,10 +1599,10 @@ static void rom_fix(unsigned char *r, unsigned len){
 
 void ss2comm_set_rom(const void *rom, unsigned len){
   cm_rom = (const unsigned char *)rom; cm_romlen = len; face_built = 0;
-  rom_fix((unsigned char *)rom, len);
 }
 
-void ss2comm_rom_fix(void *rom, unsigned len){ rom_fix((unsigned char *)rom, len); }
+/* 유저가 롬을 직접 패치하기로 함 — 자동 적용은 끈다. 필요하면 이 함수만 다시 호출. */
+void ss2comm_rom_fix(void *rom, unsigned len){ rom_fix((unsigned char *)rom, len); (void)rom; (void)len; }
 
 static uint16_t pal12_to565(unsigned short v){
   int r=(v&0xF)*17, g=((v>>4)&0xF)*17, b=((v>>8)&0xF)*17;   /* RGB444, R이 하위 니블 */
