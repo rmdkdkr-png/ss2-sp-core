@@ -2165,9 +2165,12 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
 /* 대형 일러(96x96) — 로스터별 롬 주소표에서 실행 중에 굽는다. 없으면 아이콘으로.
    (제보: 「롬 안에 주소를 서치해서 띄우자」 — 아이콘·쿠로코와 같은 방식의 확장) */
 static const ss2artdef SS2ART[SS2COMM_ART_N] = SS2COMM_ART_INIT;
+/* 슬롯별 유파 — 1=수라, 0=나찰 (컬렉션 목록 헤더 실측). 고른 유파의 일러만 돈다. */
+static const unsigned char art_su[SS2COMM_ART_N] = {1,1,0,0,0,1,1,0,0,1,1,0,0,0,1,1,0,0,1,1,1,0,0,1,1,0,0,1,1,1,0,0,1,1,0,0,0,1,1,0,0,1,1,0,0,0,1,1,0,0,1,1,1,0,0,1,1,0,0,1};
 /* 기둥 2칸 캐시 — 캐릭터/변형이 바뀔 때만 굽는다. 변형은 콜될 때 랜덤 1회, 유지. */
 static uint16_t      art_px[2][96*96];
 static signed char   art_ch[2]  = {-1,-1};   /* 칸에 구운 캐릭터 */
+static signed char   art_sty[2] = {-1,-1};   /* 칸에 구운 유파 (수라0/나찰1 — BLK 무기비트) */
 static unsigned char art_var[2], art_okc[2];
 static int art_bake(int side, int ch, int var){
   const ss2artdef *A; int i, ry, rx; unsigned sum, a0;
@@ -2197,13 +2200,27 @@ static int art_bake(int side, int ch, int var){
   return 1;
 }
 static const uint16_t *art_get(int side, int ch, int *fx_out){
+  int sty;
   if(ch < 0 || ch >= 15) return 0;
-  if(art_ch[side] != ch){
-    int v = (int)(rnd() & 3), k;
+  /* 이 캐릭터가 고른 유파 — BLK 무기비트 (0=수라 1=나찰, 유파선택 순서 기준) */
+  sty = (rd(side ? OFF_BLK2 : OFF_BLK1) / 8) & 1;
+  if(art_ch[side] != ch || art_sty[side] != (signed char)sty){
+    int pool[4], np = 0, k, s0;
+    for(k = 0; k < 4; k++){
+      int slot = ch*4 + k;
+      if(SS2ART[slot].ok && art_su[slot] == (sty ? 0 : 1)) pool[np++] = k;
+    }
+    if(!np)   /* 그 유파에 쓸 그림이 없다 — 아무 유효 변형으로 */
+      for(k = 0; k < 4; k++) if(SS2ART[ch*4 + k].ok) pool[np++] = k;
     art_okc[side] = 0;
-    for(k = 0; k < 4 && !art_okc[side]; k++)      /* 실패 변형은 다음 것으로 */
-      if(art_bake(side, ch, (v + k) & 3)){ art_var[side] = (unsigned char)((v + k) & 3); art_okc[side] = 1; }
-    art_ch[side] = (signed char)ch;
+    if(np){
+      s0 = (int)(rnd() % (unsigned)np);           /* 콜될 때 랜덤 1회 */
+      for(k = 0; k < np && !art_okc[side]; k++){
+        int v = pool[(s0 + k) % np];
+        if(art_bake(side, ch, v)){ art_var[side] = (unsigned char)v; art_okc[side] = 1; }
+      }
+    }
+    art_ch[side] = (signed char)ch; art_sty[side] = (signed char)sty;
   }
   if(!art_okc[side]) return 0;
   if(fx_out) *fx_out = SS2ART[ch*4 + art_var[side]].fx;
