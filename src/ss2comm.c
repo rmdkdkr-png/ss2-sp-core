@@ -1791,7 +1791,7 @@ extern void ss2sp_set_slot(int style, int slot, int mv);
 static unsigned char ov_page = 0;   /* 0=빠른 설정, 1=SP 배치 */
 static int ov_spstyle = 0;          /* 마지막으로 본 유파 — 전투 밖에서 열었을 때 대비 */
 static const char *ov_slotname(int i){
-  static const char *nm[7] = {"기본","앞","뒤","아래","앞아래","뒤아래","공중"};
+  static const char *nm[7] = {"기본","→ 앞","← 뒤","↓ 아래","↘","↙","공중"};
   return (i >= 0 && i < 7) ? nm[i] : "?";
 }
 static void ov_stylelabel(int st, char *out, int cap){
@@ -1902,7 +1902,7 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
           snprintf(buf, sizeof buf, "%s : %s %s", ov_slotname(i - 1), nt,
                    ss2sp_move_name(ov_spstyle, mv));
         }
-      }else snprintf(buf, sizeof buf, "돌아가기 — 빠른 설정");
+      }else snprintf(buf, sizeof buf, "← 빠른 설정으로");
       draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
                   (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
     }
@@ -1922,7 +1922,7 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
                 (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
   }
 #ifdef SS2OV_SP
-  { const char *t = "SP 기술 배치 …";
+  { const char *t = "SP 기술 배치 →";
     draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+17+ov_n*13, 0, h, 99,
                 (ov_cur == ov_n) ? COL_GOLD : 0xDEDB, 0); }
 #endif
