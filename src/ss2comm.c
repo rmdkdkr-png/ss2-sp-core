@@ -170,6 +170,7 @@ static int st_fHp1, st_fHp2;   /* KO 전 마지막으로 본 두 체력 — 타�
 static int st_settled;         /* 이번 매치의 승패 정산(연승·전적)을 이미 했나 */
 static int blk_boot = -1, blk_moved;   /* 부팅 뒤 BLK1 이 한 번이라도 움직였나 — 기본값 썰 도배 방지 */
 static int st_oppGand;   /* 지금 상대가 간다라인가 — 이름은 「간다라」로 부른다(제보: 게임 명패는 수라라 떠도) */
+static unsigned char st_shk[2];   /* 히트 충격 잔량(프레임) — 맞은 쪽 기둥이 흔들린다. [0]=나 [1]=상대 */
 static int st_survSaid = -1, st_streakSaid = -1;   /* 이미 낭독한 연승 값 — 같은 값 반복 금지 */
 static int surv_seen = -1, surv_live;   /* 무한대전 카운터가 이번 세션에 실제로 움직였나 —
                                            스토리는 이 값을 안 지워서(실기 검증) 잔존 15가 판마다 읽혔다 */
@@ -408,6 +409,7 @@ void ss2comm_reset(void){
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   st_fHp1=st_fHp2=0; st_settled=0;
   blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1; surv_seen=-1; surv_live=0; st_oppGand=0;
+  st_shk[0]=st_shk[1]=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
   ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
@@ -849,6 +851,8 @@ const char *ss2comm_frame(void){
   int hit1, hit2, down2, downed1;
   if(!cm_on) return 0;
   cm_f++;
+  if(st_shk[0]) st_shk[0]--;
+  if(st_shk[1]) st_shk[1]--;
 
   mode  = rd(OFF_MODE);  scr  = rd(OFF_SCR);
   hp1   = rd(OFF_HP1);   hp2  = rd(OFF_HP2);
@@ -1152,6 +1156,9 @@ const char *ss2comm_frame(void){
   }
 
   hit2 = hp2 < p_hp2; hit1 = hp1 < p_hp1;
+  /* 기둥 충격 — 맞은 쪽 일러가 쿵 흔들리고 큰 타격은 첫 프레임 하얗게 번쩍 */
+  if(hit2){ int d = p_hp2-hp2; st_shk[1] = (unsigned char)(d >= 12 ? 12 : (d >= 4 ? 8 : 5)); }
+  if(hit1){ int d = p_hp1-hp1; st_shk[0] = (unsigned char)(d >= 12 ? 12 : (d >= 4 ? 8 : 5)); }
   /* v0.7 관전 기억 — 유효타만. pend_name 이 살아 있으면 그 기술로 친 것이다
      (아래 pend_take 가 가져가기 전에 세야 한다). */
   if(hit2 && (p_hp2-hp2)>=4) flow_hit(pend_name);
@@ -2467,8 +2474,17 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
       int hpS  = right ? rd(OFF_HP2) : rd(OFF_HP1);
       int tt   = (live && !st_ko && hpS > 0 && hpS < 32) ? (32 - hpS) : 0;
       int gray = (live && st_ko && hpS == 0);   /* 진 쪽 = 체력 0 쪽 */
+      /* 히트 충격 — 맞은 쪽 일러가 감쇠하며 좌우로 쿵, 큰 타격 첫 두 프레임은 백섬광 */
+      int shk   = live ? st_shk[right ? 1 : 0] : 0;
+      int flash = (shk >= 11);
+      if(shk){
+        int amp = (shk + 3) / 4;                       /* 3 → 2 → 1 감쇠 */
+        cx += (cm_f & 2) ? amp : -amp;
+        cy += (shk > 6 && (cm_f & 4)) ? 1 : 0;
+      }
       if(cx > aw - w) cx = aw - w;
       if(cx < 0) cx = 0;
+      if(cy > ah - h && ah > h) cy = ah - h;
       if(cy < 0){ pady = (h - ah) / 2; cy = 0; }
       for(y = 0; y < h; y++){
         int ay = y - pady;
@@ -2484,23 +2500,40 @@ void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
             g6 -= g6 * tt / 34; b5 -= b5 * tt / 34;
             v = (uint16_t)((v & 0xF800) | (g6 << 5) | b5);
           }
+          if(flash) v = (uint16_t)(((v >> 1) & 0x7BEF) + 0x7BEF);   /* 백섬광 — 흰색 쪽 절반 */
           fb[y*pitch_px + x] = v;
         }
       }
-      /* 금줄 다시 — 일러가 덮었다. 매치포인트 쪽은 테두리 전체 금색 점멸 */
+      /* 금줄 다시 — 일러가 덮었다. 매치포인트 쪽은 **숨쉬는 금테** —
+         1픽셀 깜빡임은 어설프다는 제보로 교체: 2픽셀 틀이 삼각파로 밝아졌다
+         어두워지고(점멸 아님), 모서리에 쐐기를 둬 틀이 그림에서 또렷이 뜬다 */
       { int gx  = right ? 0 : w - 1;
         int gx2 = right ? 1 : w - 2;
         int mp  = live && !st_ko && (right ? st_opR : st_myR) >= 1;
-        int on  = mp && ((cm_f >> 4) & 1);
         for(y = 0; y < h; y++){
           fb[y*pitch_px + gx]  = COL_GOLD;
           fb[y*pitch_px + gx2] = 0x4200;
-          if(on) fb[y*pitch_px + (right ? w-1 : 0)] = COL_GOLD;
         }
-        if(on){
-          for(x = 0; x < w; x++){
-            fb[x] = COL_GOLD;
-            fb[(h-1)*pitch_px + x] = COL_GOLD;
+        if(mp){
+          int ph = cm_f & 31; if(ph > 15) ph = 31 - ph;         /* 0..15..0 */
+          { int r5 = 19 + ph*12/15, g6 = 27 + ph*26/15, t;
+            uint16_t gold = (uint16_t)((r5 << 11) | (g6 << 5));
+            for(t = 0; t < 2; t++){
+              for(x = 0; x < w; x++){
+                fb[t*pitch_px + x] = gold;
+                fb[(h-1-t)*pitch_px + x] = gold;
+              }
+              for(y = 0; y < h; y++){
+                fb[y*pitch_px + t] = gold;
+                fb[y*pitch_px + (w-1-t)] = gold;
+              }
+            }
+            for(t = 2; t < 7; t++){                              /* 모서리 쐐기 */
+              fb[2*pitch_px + t] = gold;           fb[t*pitch_px + 2] = gold;
+              fb[2*pitch_px + (w-1-t)] = gold;     fb[t*pitch_px + (w-3)] = gold;
+              fb[(h-3)*pitch_px + t] = gold;       fb[(h-1-t)*pitch_px + 2] = gold;
+              fb[(h-3)*pitch_px + (w-1-t)] = gold; fb[(h-1-t)*pitch_px + (w-3)] = gold;
+            }
           }
         }
       }
