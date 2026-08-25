@@ -1772,14 +1772,93 @@ void ss2comm_overlay_bind(unsigned char *chat, unsigned char *spk, unsigned char
   if(cap)  { ov_it[n].name="장면 수집";   ov_it[n].v=cap;   ov_it[n].max=1; ov_it[n].kind=0; n++; }
   ov_n = n;
 }
+/* ── 오버레이 2페이지: SP 기술 배치 ──
+   ss2sp 층이 같이 링크되는 실제 빌드(코어·앱)에서만 켠다.
+   단독 하네스(-DSS2COMM_TEST)는 ss2sp 없이 링크되므로 페이지가 빠진다
+   (미리보기 하네스는 -DSS2COMM_SPEDIT 로 강제). 슬롯 표는 앱이 설정 저장 때
+   ss2sp_slots_blob 을 그대로 직렬화하므로 여기서 바꾸면 저절로 저장된다. */
+#if !defined(SS2COMM_TEST) || defined(SS2COMM_SPEDIT)
+#define SS2OV_SP 1
+extern int  ss2sp_style_count(void);
+extern int  ss2sp_slot_count(void);
+extern const char *ss2sp_style_id(int style);
+extern int  ss2sp_cur_style(void);
+extern int  ss2sp_move_count(int style);
+extern const char *ss2sp_move_name(int style, int i);
+extern int  ss2sp_move_notation(int style, int i, char *out, int cap);
+extern int  ss2sp_get_slot(int style, int slot);
+extern void ss2sp_set_slot(int style, int slot, int mv);
+static unsigned char ov_page = 0;   /* 0=빠른 설정, 1=SP 배치 */
+static int ov_spstyle = 0;          /* 마지막으로 본 유파 — 전투 밖에서 열었을 때 대비 */
+static const char *ov_slotname(int i){
+  static const char *nm[7] = {"기본","앞","뒤","아래","앞아래","뒤아래","공중"};
+  return (i >= 0 && i < 7) ? nm[i] : "?";
+}
+static void ov_stylelabel(int st, char *out, int cap){
+  static const struct { const char *id, *ko; } NM[15] = {
+    {"kazuki","카즈키"},{"sogetsu","소게츠"},{"haohmaru","하오마루"},
+    {"genjuro","겐주로"},{"nakoruru","나코루루"},{"rimururu","리무루루"},
+    {"hanzo","한조"},{"galford","갈포드"},{"asura","아수라"},
+    {"charlotte","샤를로트"},{"morozumi","모로즈미"},{"ukyo","우쿄"},
+    {"jubei","쥬베이"},{"shiki","시키"},{"yuga","유가"}};
+  const char *id = ss2sp_style_id(st); const char *ko = id; int i, bl;
+  const char *cut = strrchr(id, '_');
+  bl = cut ? (int)(cut - id) : (int)strlen(id);
+  for(i = 0; i < 15; i++)
+    if((int)strlen(NM[i].id) == bl && !strncmp(NM[i].id, id, bl)){ ko = NM[i].ko; break; }
+  snprintf(out, cap, "%s·%s", ko, (cut && !strcmp(cut, "_bst")) ? "나찰" : "수라");
+}
+static int ov_sp_rows(void){ return 2 + ss2sp_slot_count(); }  /* 캐릭터 + 슬롯들 + 돌아가기 */
+#endif
 int  ss2comm_overlay_active(void){ return ov_on; }
-void ss2comm_overlay_toggle(void){ ov_on = !ov_on; if(ov_on) ov_cur = 0; }
+void ss2comm_overlay_toggle(void){
+  ov_on = !ov_on;
+  if(ov_on){ ov_cur = 0;
+#ifdef SS2OV_SP
+    ov_page = 0;
+#endif
+  }
+}
 int ss2comm_overlay_input(int k){
   ss2ovitem *it;
   if(!ov_on || !ov_n) return 0;
   if(k == 5){ ov_on = 0; return 1; }
+#ifdef SS2OV_SP
+  if(ov_page == 1){
+    int rows = ov_sp_rows(), st = ss2sp_cur_style();
+    if(st >= 0) ov_spstyle = st;
+    if(k == 0){ ov_cur = (unsigned char)((ov_cur + rows - 1) % rows); return 1; }
+    if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % rows); return 1; }
+    if(k < 2 || k > 4) return 1;
+    if(ov_cur == 0){                                   /* 캐릭터/유파 */
+      int n = ss2sp_style_count(); if(n <= 0) return 1;
+      ov_spstyle = (k == 2) ? (ov_spstyle + n - 1) % n : (ov_spstyle + 1) % n;
+    }else if(ov_cur <= ss2sp_slot_count()){            /* 슬롯 — 좌우로 순환, 0=비움 */
+      int slot = ov_cur - 1, n = ss2sp_move_count(ov_spstyle) + 1;
+      int mv = ss2sp_get_slot(ov_spstyle, slot) + 1;
+      mv = (k == 2) ? (mv + n - 1) % n : (mv + 1) % n;
+      ss2sp_set_slot(ov_spstyle, slot, mv - 1);
+    }else{                                             /* ← 돌아가기 */
+      ov_page = 0; ov_cur = 0;
+    }
+    return 1;
+  }
+  {
+    int rows0 = ov_n + 1;                              /* 마지막 줄 = SP 기술 배치 */
+    if(k == 0){ ov_cur = (unsigned char)((ov_cur + rows0 - 1) % rows0); return 1; }
+    if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % rows0); return 1; }
+    if(ov_cur == ov_n){
+      if(k >= 2 && k <= 4){
+        int st = ss2sp_cur_style(); if(st >= 0) ov_spstyle = st;
+        ov_page = 1; ov_cur = 0;
+      }
+      return 1;
+    }
+  }
+#else
   if(k == 0){ ov_cur = (unsigned char)((ov_cur + ov_n - 1) % ov_n); return 1; }
   if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % ov_n); return 1; }
+#endif
   it = &ov_it[ov_cur];
   if(!it->v) return 1;
   if(k == 2)            *it->v = (unsigned char)((*it->v + it->max) % (it->max + 1));
@@ -1791,9 +1870,13 @@ static const char *ov_bgname(int i){
   return nm[i & 7];
 }
 void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
-  int bw, bh, bx, by, x, y, i;
+  int bw, bh, bx, by, x, y, i, rows;
   if(!ov_on || !ov_n || !fb) return;
-  bw = w - 12; bh = 17 + ov_n*13 + 4;
+  rows = ov_n;
+#ifdef SS2OV_SP
+  rows = (ov_page == 1) ? ov_sp_rows() : ov_n + 1;
+#endif
+  bw = w - 12; bh = 17 + rows*13 + 4;
   bx = 6; by = (h - bh) / 2; if(by < 0) by = 0;
   for(y = 0; y < bh && by + y < h; y++)
     for(x = 0; x < bw; x++){
@@ -1801,6 +1884,31 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
       if(y==0 || y==bh-1 || x==0 || x==bw-1) *p = COL_GOLD;
       else *p = (uint16_t)((*p >> 3) & 0x18E3);
     }
+#ifdef SS2OV_SP
+  if(ov_page == 1){
+    char t[64], buf[96];
+    int st = ss2sp_cur_style(); if(st >= 0) ov_spstyle = st;
+    snprintf(t, sizeof t, "SP 배치  (B 닫기)");
+    draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+3, 0, h, 99, COL_GOLD, 0);
+    for(i = 0; i < rows; i++){
+      if(i == 0){
+        char sl[40]; ov_stylelabel(ov_spstyle, sl, sizeof sl);
+        snprintf(buf, sizeof buf, "캐릭터 : %s", sl);
+      }else if(i <= ss2sp_slot_count()){
+        int mv = ss2sp_get_slot(ov_spstyle, i - 1);
+        if(mv < 0) snprintf(buf, sizeof buf, "%s : — 비움 —", ov_slotname(i - 1));
+        else{
+          char nt[16]; ss2sp_move_notation(ov_spstyle, mv, nt, sizeof nt);
+          snprintf(buf, sizeof buf, "%s : %s %s", ov_slotname(i - 1), nt,
+                   ss2sp_move_name(ov_spstyle, mv));
+        }
+      }else snprintf(buf, sizeof buf, "돌아가기 — 빠른 설정");
+      draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
+                  (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
+    }
+    return;
+  }
+#endif
   { const char *t = "빠른 설정 v" SS2COMM_VERSION "  (B 닫기)";
     draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+3, 0, h, 99, COL_GOLD, 0); }
   for(i = 0; i < ov_n; i++){
@@ -1813,6 +1921,11 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
     draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
                 (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
   }
+#ifdef SS2OV_SP
+  { const char *t = "SP 기술 배치 …";
+    draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+17+ov_n*13, 0, h, 99,
+                (ov_cur == ov_n) ? COL_GOLD : 0xDEDB, 0); }
+#endif
 }
 
 int ss2comm_band_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_BAND_H : 0; }
