@@ -20,7 +20,7 @@
 
 | 쓰시는 기기 | 파일 |
 |---|---|
-| **안드로이드 폰·태블릿** (요즘 기기 대부분) | `NGPcustumSP-core-v1.0.1-android-arm64-v8a.so` |
+| **안드로이드 폰·태블릿** (요즘 기기 대부분) | `NGPcustumSP-core-v1.0.2-android-arm64-v8a.so` |
 | 안드로이드 (오래된 32비트) | `…-android-armeabi-v7a.so` |
 | 안드로이드 (에뮬레이터·일부 태블릿) | `…-android-x86_64.so` / `…-android-x86.so` |
 | 안드로이드 (RISC-V) | `…-android-riscv64.so` |
