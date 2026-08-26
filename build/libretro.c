@@ -418,26 +418,17 @@ static bool ss2sp_enable = true;
 #define SS2_SIDE_W 64
 #define SS2_WIDE_W (SS2_SIDE_W*2 + FB_WIDTH)
 static bool     ss2_sides = true;                 /* 코어 옵션 ngp_ss2sp_sides */
-/* 이 롬이 사쇼!2 인가 — 롬 헤더 이름(0x24)으로 본다.
-   아니면 SS2 층을 통째로 재운다: 기둥·해설띠·오버레이·원버튼 전부 끄고
-   화면도 원본 그대로(160x152) 내보낸다. 예전에는 그림만 생략하고 기둥 자리와
-   띠는 그대로 잡아서, 다른 게임을 띄우면 빈 기둥이 서고 해상도가 288x184 가 됐다. */
-static bool     ss2_game  = false;
 static uint16_t ss2_wide[SS2_WIDE_W * (FB_HEIGHT + SS2COMM_BAND_MAX)];
 static unsigned ss2_last_w = FB_WIDTH, ss2_last_h = FB_HEIGHT;
 /* 오버레이가 직접 만지는 값 — 코어 옵션이 바뀌면 여기로도 동기한다 */
 static unsigned char ov_sp = 1, ov_chat = 1, ov_spk = 0, ov_ref = 1, ov_sides = 1;
 static unsigned char ov_sp_p = 1, ov_chat_p = 1, ov_spk_p = 0, ov_ref_p = 1, ov_sides_p = 1;
 
-/* SS2 롬일 때만 참 — 레이아웃을 바꾸는 판단은 전부 이 둘을 거친다 */
-static int ss2_wide_on(void) { return ss2_game && ss2_sides; }
-static int ss2_band(void)    { return ss2_game ? ss2comm_band_h() : 0; }
-
 static void ss2_set_geometry(void)
 {
    struct retro_game_geometry geom;
-   int band = ss2_band();
-   geom.base_width   = ss2_wide_on() ? SS2_WIDE_W : FB_WIDTH;
+   int band = ss2comm_band_h();
+   geom.base_width   = ss2_sides ? SS2_WIDE_W : FB_WIDTH;
    geom.base_height  = FB_HEIGHT + band;
    geom.max_width    = SS2_WIDE_W;
    geom.max_height   = FB_HEIGHT + SS2COMM_BAND_MAX;
@@ -588,8 +579,6 @@ void retro_reset(void)
 {
    ss2sp_reset();
    ss2comm_set_ram(&CPUExRAM[0]);
-   ss2_game = ngpc_rom.orig_data && ngpc_rom.length >= 0x2C &&
-              !memcmp((const char *)ngpc_rom.orig_data + 0x24, "SAMURAI2", 8);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
    ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
    ss2comm_reset();
@@ -646,8 +635,6 @@ bool retro_load_game(const struct retro_game_info *info)
 
    /* 해설 엔진: 램·롬을 물리고 상태를 비운다 (retro_reset() 에도 같은 줄이 있다) */
    ss2comm_set_ram(&CPUExRAM[0]);
-   ss2_game = ngpc_rom.orig_data && ngpc_rom.length >= 0x2C &&
-              !memcmp((const char *)ngpc_rom.orig_data + 0x24, "SAMURAI2", 8);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
    ss2comm_reset();
@@ -738,7 +725,7 @@ static void update_input(void)
       int toggled = 0;
       int down = (ret >> RETRO_DEVICE_ID_JOYPAD_DOWN) & 1;
       int opt  = (ret >> RETRO_DEVICE_ID_JOYPAD_START) & 1;
-      if (ss2_game && down && opt)
+      if (down && opt)
       {
          if (!ss2_combo_latch)
          {
@@ -770,7 +757,7 @@ static void update_input(void)
       ss2_ov_prev = ret;
    }
 
-   if (ss2_game && ss2sp_enable)
+   if (ss2sp_enable)
    {
       /* v0.5: 트리거는 SP 하나뿐(X, 그리고 손이 편한 쪽을 위해 R 도 같은 자리).
          A+B 버튼(Y·L)은 패드 바이트에 A·B 를 한꺼번에 세워 준다 —
@@ -853,7 +840,6 @@ void retro_run(void)
       width  = spec.DisplayRect.w;
       height = spec.DisplayRect.h;
 
-      if (ss2_game)
       {
          const char *cline = ss2comm_frame();
          int band = ss2comm_band_h();
@@ -884,7 +870,7 @@ void retro_run(void)
       spec.SoundBufSize = 0;
    }
 
-   if (ss2_wide_on())
+   if (ss2_sides)
    {
       /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
          게임 그림을 가운데로 옮겨 넓은 캔버스(288px)로 내보낸다 */
@@ -932,8 +918,8 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
    info->timing.sample_rate    = 44100;
    {
-      int band = ss2_band();                         /* 해설 확장 띠 — SS2 롬일 때만 > 0 */
-      info->geometry.base_width   = ss2_wide_on() ? SS2_WIDE_W : MEDNAFEN_CORE_GEOMETRY_BASE_W;
+      int band = ss2comm_band_h();                   /* 해설 확장 띠(20px) 사용 시에만 > 0 */
+      info->geometry.base_width   = ss2_sides ? SS2_WIDE_W : MEDNAFEN_CORE_GEOMETRY_BASE_W;
       info->geometry.base_height  = MEDNAFEN_CORE_GEOMETRY_BASE_H + band;
       info->geometry.max_width    = SS2_WIDE_W;
       info->geometry.max_height   = MEDNAFEN_CORE_GEOMETRY_MAX_H + SS2COMM_BAND_MAX;
