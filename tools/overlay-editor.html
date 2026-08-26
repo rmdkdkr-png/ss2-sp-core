@@ -1,0 +1,698 @@
+<title>NGPC 오버레이 배치대</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+
+<style>
+:root{
+  --bg:#EDF1F3; --surface:#FFFFFF; --sunk:#D9E1E5; --stage:#C3CFD5;
+  --ink:#0F161B; --ink2:#54636D; --ink3:#7C8B94;
+  --line:#C3CDD4; --line2:#DFE6EA;
+  --accent:#C25A26; --accent-soft:#F0DCD0; --accent-ink:#FFFFFF;
+  --screen:#3D6E7A; --screen-soft:#D3E2E6;
+  --warn:#B03030;
+  --shadow:0 1px 2px rgba(15,22,27,.10), 0 8px 24px rgba(15,22,27,.06);
+  --font:'IBM Plex Sans KR', system-ui, -apple-system, 'Malgun Gothic', sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1317; --surface:#161D22; --sunk:#0A0E12; --stage:#070A0D;
+    --ink:#E9EEF0; --ink2:#94A3AC; --ink3:#6B7A84;
+    --line:#28323A; --line2:#1E262C;
+    --accent:#E8823F; --accent-soft:#3A2415; --accent-ink:#140C05;
+    --screen:#5FA3B0; --screen-soft:#152A30;
+    --warn:#E06868;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1317; --surface:#161D22; --sunk:#0A0E12; --stage:#070A0D;
+  --ink:#E9EEF0; --ink2:#94A3AC; --ink3:#6B7A84;
+  --line:#28323A; --line2:#1E262C;
+  --accent:#E8823F; --accent-soft:#3A2415; --accent-ink:#140C05;
+  --screen:#5FA3B0; --screen-soft:#152A30;
+  --warn:#E06868;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--font); font-size:15px; line-height:1.55;
+  -webkit-text-size-adjust:100%;
+}
+h1,h2,h3{margin:0; text-wrap:balance; font-weight:600; letter-spacing:-.01em}
+button{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px}
+
+.wrap{max-width:1560px; margin:0 auto; padding:28px 24px 72px}
+
+/* ── header ── */
+header{
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 18px;
+  padding-bottom:16px; margin-bottom:22px; border-bottom:1px solid var(--line);
+}
+header h1{font-size:23px}
+.sub{color:var(--ink2); font-size:14px; max-width:62ch}
+.hint{
+  margin-left:auto; font-family:var(--mono); font-size:11.5px;
+  color:var(--ink3); letter-spacing:.02em;
+}
+
+/* ── two column ── */
+.cols{display:grid; grid-template-columns:minmax(0,1fr) 372px; gap:26px; align-items:start}
+@media(max-width:1080px){ .cols{grid-template-columns:minmax(0,1fr)} }
+
+/* ── stage ── */
+.stagewrap{
+  background:var(--sunk); border:1px solid var(--line);
+  border-radius:10px; padding:18px; box-shadow:var(--shadow);
+}
+.stagebar{
+  display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center;
+  margin-bottom:14px; font-size:13px; color:var(--ink2);
+}
+.stagebar label{display:flex; align-items:center; gap:6px}
+select, input[type=text]{
+  font:inherit; font-size:13px; padding:5px 8px; color:var(--ink);
+  background:var(--surface); border:1px solid var(--line); border-radius:6px;
+}
+input[type=range]{accent-color:var(--accent); width:100%}
+input[type=checkbox]{accent-color:var(--accent)}
+
+.phone{
+  position:relative; width:100%; background:var(--stage);
+  border-radius:14px; overflow:hidden; touch-action:none;
+  border:1px solid var(--line);
+}
+.screen{
+  position:absolute; background:var(--screen-soft);
+  border:1px dashed var(--screen); border-radius:2px;
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none;
+}
+.screen span{
+  font-family:var(--mono); font-size:11px; color:var(--screen);
+  letter-spacing:.04em; background:var(--sunk); padding:2px 7px; border-radius:3px;
+}
+.grid{position:absolute; inset:0; pointer-events:none; opacity:.5}
+
+/* ── pads ── */
+.pad{
+  position:absolute; transform:translate(-50%,-50%);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  border-radius:50%; cursor:grab; user-select:none; touch-action:none;
+  background:color-mix(in srgb, var(--accent) 18%, transparent);
+  border:2px solid var(--accent);
+  color:var(--ink);
+}
+.pad.dpad{border-radius:12%}
+.pad:active{cursor:grabbing}
+.pad.sel{
+  background:var(--accent); border-color:var(--accent); color:var(--accent-ink);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.pad .lab{font-weight:700; line-height:1; letter-spacing:-.02em}
+.pad .key{font-family:var(--mono); font-size:9px; opacity:.72; line-height:1.4; margin-top:2px}
+.pad.small .key{display:none}
+.pad.clash{border-color:var(--warn)}
+
+/* ── rail ── */
+.rail{display:flex; flex-direction:column; gap:16px}
+.card{
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:10px; padding:16px 16px 18px; box-shadow:var(--shadow);
+}
+.card h2{
+  font-size:11px; text-transform:uppercase; letter-spacing:.09em;
+  color:var(--ink3); font-weight:600; margin-bottom:12px;
+}
+.row{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+.row:last-child{margin-bottom:0}
+.row .k{font-size:13px; color:var(--ink2); min-width:52px}
+.num{font-family:var(--mono); font-size:12.5px; color:var(--ink); font-variant-numeric:tabular-nums}
+
+.btnrow{display:flex; flex-wrap:wrap; gap:7px}
+.btn{
+  padding:6px 11px; font-size:13px; border-radius:6px; cursor:pointer;
+  background:var(--surface); border:1px solid var(--line); color:var(--ink);
+}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.pri{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:500}
+.btn.pri:hover{filter:brightness(1.08); color:var(--accent-ink)}
+.btn.danger:hover{border-color:var(--warn); color:var(--warn)}
+
+.list{display:flex; flex-direction:column; gap:1px; background:var(--line2); border:1px solid var(--line2); border-radius:7px; overflow:hidden}
+.item{
+  display:flex; align-items:center; gap:9px; padding:7px 10px;
+  background:var(--surface); cursor:pointer; font-size:13.5px;
+}
+.item:hover{background:var(--sunk)}
+.item.on{background:var(--accent-soft)}
+.item .dot{width:9px; height:9px; border-radius:50%; background:var(--accent); flex:none}
+.item .rk{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--ink3)}
+
+.empty{color:var(--ink3); font-size:13px; font-style:italic}
+
+pre{
+  margin:0; font-family:var(--mono); font-size:11.5px; line-height:1.62;
+  background:var(--sunk); border:1px solid var(--line2); border-radius:7px;
+  padding:12px; overflow-x:auto; max-height:290px; overflow-y:auto;
+  color:var(--ink); white-space:pre;
+}
+textarea{
+  width:100%; font-family:var(--mono); font-size:11.5px; padding:10px;
+  background:var(--sunk); color:var(--ink);
+  border:1px solid var(--line); border-radius:7px; resize:vertical; min-height:76px;
+}
+.note{font-size:12.5px; color:var(--ink2); line-height:1.6}
+.note code{font-family:var(--mono); font-size:11.5px; background:var(--sunk); padding:1px 4px; border-radius:3px}
+.note b{color:var(--ink); font-weight:600}
+
+.pngbox{background:var(--stage); border:1px solid var(--line2); border-radius:7px; padding:8px; margin-bottom:10px}
+.pngbox img{display:block; width:100%; height:auto; border-radius:3px}
+
+.map{width:100%; border-collapse:collapse; font-size:12.5px}
+.map th{
+  text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--ink3); font-weight:600; padding:0 0 6px; border-bottom:1px solid var(--line2);
+}
+.map td{padding:6px 0; border-bottom:1px solid var(--line2); vertical-align:top}
+.map tr:last-child td{border-bottom:0}
+.map .rk{font-family:var(--mono); font-size:11.5px; color:var(--accent)}
+
+.toast{
+  position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(14px);
+  background:var(--ink); color:var(--bg); padding:9px 18px; border-radius:7px;
+  font-size:13.5px; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; z-index:50;
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion: reduce){ .toast{transition:none} }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>NGPC 오버레이 배치대</h1>
+    <p class="sub">버튼을 끌어다 놓으면 레트로아크 오버레이 설정이 바로 나옵니다. 세로·가로 둘 다 됩니다.</p>
+    <span class="hint">드래그 이동 · 화살표키 미세조정 · Delete 삭제</span>
+  </header>
+
+  <div class="cols">
+    <!-- ─────────── 무대 ─────────── -->
+    <div class="stagewrap">
+      <div class="stagebar">
+        <label>화면비
+          <select id="ratio">
+            <optgroup label="세로">
+              <option value="0.859" selected>앱 스샷 실측 (1856×2160)</option>
+              <option value="0.462">9:19.5</option>
+              <option value="0.450">9:20</option>
+              <option value="0.562">9:16</option>
+              <option value="0.750">3:4 (태블릿)</option>
+            </optgroup>
+            <optgroup label="가로">
+              <option value="2.222">20:9</option>
+              <option value="2.166">19.5:9</option>
+              <option value="1.777">16:9</option>
+              <option value="1.600">16:10</option>
+              <option value="1.333">4:3</option>
+            </optgroup>
+          </select>
+        </label>
+        <label>게임 화면
+          <select id="geom">
+            <option value="288x184">288×184 (기둥+해설)</option>
+            <option value="160x152">160×152 (원본)</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="snap" checked> 격자에 붙이기</label>
+        <label><input type="checkbox" id="showgrid" checked> 격자 보기</label>
+      </div>
+
+      <div class="phone" id="phone">
+        <canvas class="grid" id="grid"></canvas>
+        <div class="screen" id="screen"><span id="screenlab"></span></div>
+      </div>
+    </div>
+
+    <!-- ─────────── 조작 레일 ─────────── -->
+    <div class="rail">
+
+      <div class="card">
+        <h2>버튼</h2>
+        <div class="list" id="list"></div>
+        <div class="btnrow" style="margin-top:11px">
+          <select id="addsel"></select>
+          <button class="btn" id="add">추가</button>
+        </div>
+      </div>
+
+      <div class="card" id="editcard">
+        <h2>고른 버튼</h2>
+        <div id="editbody"><p class="empty">버튼을 하나 고르세요.</p></div>
+      </div>
+
+      <div class="card">
+        <h2>배치 불러오기</h2>
+        <div class="btnrow">
+          <button class="btn pri" data-preset="app">앱과 같게 (세로)</button>
+          <button class="btn" data-preset="right">오른손 기본</button>
+          <button class="btn" data-preset="left">왼손잡이</button>
+          <button class="btn" data-preset="big">큰 손</button>
+          <button class="btn" data-preset="low">낮게</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>버튼이 어디로 가는가</h2>
+        <table class="map">
+          <thead><tr><th>패드</th><th>게임에서</th></tr></thead>
+          <tbody id="maptbl"></tbody>
+        </table>
+        <p class="note" style="margin-top:11px">
+          NGPC 는 버튼이 <b>A·B·옵션</b> 셋뿐입니다. 레트로아크 패드의 <code>B</code> 가
+          게임의 <b>A(베기)</b>, <code>A</code> 가 <b>B(발차기)</b> 입니다 — 뒤집혀 있으니 주의하세요.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>오버레이 그림</h2>
+        <div class="pngbox"><img id="png" alt="만들어진 오버레이 그림 미리보기"></div>
+        <p class="note">
+          그림을 <b>길게 눌러</b>(PC 는 오른클릭) <code>ngpc.png</code> 로 저장하세요.
+          아래 설정 파일과 <b>같은 폴더</b>(다운로드 폴더면 됩니다)에 둡니다.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>설정 파일</h2>
+        <div class="btnrow" style="margin-bottom:11px">
+          <button class="btn pri" id="copy">설정 복사</button>
+          <button class="btn" id="toggleimport">기존 설정 불러오기</button>
+        </div>
+        <div id="importbox" hidden style="margin-bottom:11px">
+          <textarea id="importta" placeholder="쓰던 .cfg 내용을 여기 붙이고 [읽기] 를 누르세요"></textarea>
+          <div class="btnrow" style="margin-top:7px"><button class="btn" id="doimport">읽기</button></div>
+        </div>
+        <pre id="cfg"></pre>
+        <p class="note" style="margin-top:11px">
+          <b>overlays 폴더에 안 넣어도 됩니다.</b> 오버레이 경로는 그냥 파일 경로라
+          읽을 수 있는 자리면 어디든 됩니다. 요즘 안드로이드는 앱 폴더에 손을 못 대니
+          <code>다운로드</code> 폴더를 쓰세요.
+        </p>
+        <p class="note" style="margin-top:9px">
+          <b>1.</b> <code>ngpc.cfg</code> 와 <code>ngpc.png</code> 를 <b>둘 다 다운로드 폴더</b>에
+          저장합니다 (같은 폴더여야 그림을 찾습니다).<br>
+          <b>2.</b> 레트로아크 → 설정 → 화면 표시 → 온스크린 오버레이 → <b>오버레이 지정</b><br>
+          <b>3.</b> 파일 고르는 창에서 <code>다운로드</code> 로 찾아가 <code>ngpc.cfg</code> 를 고릅니다.
+        </p>
+        <p class="note" style="margin-top:9px">
+          목록에 다운로드 폴더가 안 보이면 설정 → <b>디렉토리</b> → <b>오버레이</b> 를
+          다운로드 폴더로 바꿔 두면 다음부터 거기서 열립니다.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ── 우리 코어의 버튼 지도 ─────────────────────────────
+   레트로아크 패드 이름 ↔ 게임에서 하는 일. 이름이 뒤집혀 있어 헷갈리는
+   지점이라 표로 붙여 둔다. */
+var CATALOG = [
+  {retro:"dpad",  lab:"십자",   role:"이동",              size:.150, dpad:true},
+  {retro:"b",     lab:"A",      role:"A — 베기",          size:.082},
+  {retro:"a",     lab:"B",      role:"B — 발차기",        size:.082},
+  {retro:"x",     lab:"SP",     role:"원버튼 필살기",      size:.078},
+  {retro:"y",     lab:"A+B",    role:"A+B (뒤+A+B=비오의)", size:.072},
+  {retro:"r",     lab:"SP",     role:"SP (X 와 같음)",     size:.062},
+  {retro:"l",     lab:"A+B",    role:"A+B (Y 와 같음)",    size:.062},
+  {retro:"l2",    lab:"해설",   role:"해설자 교대",        size:.058},
+  {retro:"start", lab:"OPT",    role:"옵션 (아래+OPT=빠른 설정)", size:.054},
+  {retro:"select",lab:"SEL",    role:"셀렉트",             size:.050}
+];
+function cat(r){ for(var i=0;i<CATALOG.length;i++) if(CATALOG[i].retro===r) return CATALOG[i]; return null; }
+
+/* 기본 배치 — 오른손. x,y 는 0..1 정규화 중심좌표, size 는 폭 대비 지름. */
+var PRESETS = {
+  /* 앱(NGPcustumSP) 세로 화면 스크린샷에서 버튼 자리를 그대로 뜬 것.
+     세로 1856x2160 기준 정규화 — 화면비 0.859 에서 맞는다. */
+  app:  [["dpad",.285,.632,.255],["y",.641,.633,.099],["b",.756,.637,.102],
+         ["x",.700,.557,.102],["a",.811,.556,.102],
+         ["l2",.062,.456,.108],["start",.896,.443,.105]],
+  right:[["dpad",.115,.680],["y",.800,.660],["x",.878,.505],["b",.878,.800],["a",.955,.655],
+         ["l2",.058,.115],["start",.500,.930]],
+  left: [["dpad",.885,.680],["y",.200,.660],["x",.122,.505],["b",.122,.800],["a",.045,.655],
+         ["l2",.942,.115],["start",.500,.930]],
+  big:  [["dpad",.130,.665,.190],["y",.775,.650,.088],["x",.872,.480,.094],["b",.872,.815,.098],
+         ["a",.962,.648,.098],["l2",.062,.120,.066],["start",.500,.935,.060]],
+  low:  [["dpad",.108,.800],["y",.802,.790],["x",.880,.655],["b",.880,.918],["a",.958,.788],
+         ["l2",.055,.100],["start",.500,.965,.046]]
+};
+
+var pads=[], sel=-1, aspect=1.777, geom="288x184";
+var phone=document.getElementById("phone"),
+    screenEl=document.getElementById("screen"),
+    screenLab=document.getElementById("screenlab"),
+    gridEl=document.getElementById("grid"),
+    listEl=document.getElementById("list"),
+    editBody=document.getElementById("editbody"),
+    cfgEl=document.getElementById("cfg"),
+    pngEl=document.getElementById("png"),
+    addSel=document.getElementById("addsel"),
+    snapEl=document.getElementById("snap"),
+    showGridEl=document.getElementById("showgrid");
+
+var SNAP=.005;
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function snapv(v){ return snapEl.checked ? Math.round(v/SNAP)*SNAP : v; }
+function f3(v){ return v.toFixed(3); }
+
+function loadPreset(name){
+  var p=PRESETS[name]; if(!p) return;
+  pads = p.map(function(e){
+    var c=cat(e[0]);
+    return {retro:e[0], x:e[1], y:e[2], size:(e[3]!=null?e[3]:c.size)};
+  });
+  sel=-1; renderAll();
+}
+
+/* ── 무대 ───────────────────────────────────────── */
+function layoutStage(){
+  phone.style.aspectRatio = aspect + " / 1";
+  var g = geom.split("x"), gw=+g[0], gh=+g[1], ga=gw/gh;
+  /* 레트로아크 기본: 세로를 채우고 가로는 비율 유지 */
+  var h=1, w=(ga/aspect);
+  if(w>1){ w=1; h=aspect/ga; }
+  screenEl.style.left  = ((1-w)/2*100)+"%";
+  screenEl.style.top   = ((1-h)/2*100)+"%";
+  screenEl.style.width = (w*100)+"%";
+  screenEl.style.height= (h*100)+"%";
+  screenLab.textContent = gw+"×"+gh;
+  drawGrid();
+}
+function drawGrid(){
+  var r=phone.getBoundingClientRect(), W=Math.max(1,r.width|0), H=Math.max(1,r.height|0);
+  gridEl.width=W; gridEl.height=H; gridEl.style.display = showGridEl.checked?"block":"none";
+  if(!showGridEl.checked) return;
+  var c=gridEl.getContext("2d");
+  c.clearRect(0,0,W,H);
+  var css=getComputedStyle(document.documentElement);
+  c.strokeStyle=css.getPropertyValue("--line").trim()||"#888";
+  c.globalAlpha=.55; c.lineWidth=1;
+  for(var i=1;i<20;i++){
+    var x=Math.round(W*i/20)+.5; c.beginPath(); c.moveTo(x,0); c.lineTo(x,H); c.stroke();
+  }
+  for(var j=1;j<10;j++){
+    var y=Math.round(H*j/10)+.5; c.beginPath(); c.moveTo(0,y); c.lineTo(W,y); c.stroke();
+  }
+}
+
+/* ── 패드 그리기 ─────────────────────────────────── */
+function renderPads(){
+  Array.prototype.slice.call(phone.querySelectorAll(".pad")).forEach(function(n){n.remove();});
+  pads.forEach(function(p,i){
+    var c=cat(p.retro);
+    var el=document.createElement("div");
+    el.className="pad"+(c.dpad?" dpad":"")+(i===sel?" sel":"")+(p.size<.055?" small":"");
+    el.style.left=(p.x*100)+"%"; el.style.top=(p.y*100)+"%";
+    el.style.width=(p.size*100)+"%";
+    el.style.height=(p.size*aspect*100)+"%";
+    el.tabIndex=0;
+    el.setAttribute("role","button");
+    el.setAttribute("aria-label", c.lab+" — "+c.role);
+    var fs=Math.max(9, Math.min(20, p.size*150));
+    el.innerHTML='<span class="lab" style="font-size:'+fs+'px">'+c.lab+
+                 '</span><span class="key">'+p.retro+'</span>';
+    el.addEventListener("pointerdown", onDown.bind(null,i));
+    el.addEventListener("focus", function(){ if(sel!==i){ sel=i; renderAll(); } });
+    phone.appendChild(el);
+  });
+}
+function onDown(i,ev){
+  ev.preventDefault();
+  sel=i; renderAll();
+  var el=ev.currentTarget, r=phone.getBoundingClientRect();
+  var p=pads[i];
+  var dx=ev.clientX-(r.left+p.x*r.width), dy=ev.clientY-(r.top+p.y*r.height);
+  el.setPointerCapture(ev.pointerId);
+  function mv(e){
+    var nx=(e.clientX-dx-r.left)/r.width, ny=(e.clientY-dy-r.top)/r.height;
+    p.x=clamp(snapv(nx),0,1); p.y=clamp(snapv(ny),0,1);
+    el.style.left=(p.x*100)+"%"; el.style.top=(p.y*100)+"%";
+    renderEdit(); renderOut();
+  }
+  function up(e){
+    el.releasePointerCapture(ev.pointerId);
+    el.removeEventListener("pointermove",mv); el.removeEventListener("pointerup",up);
+    el.removeEventListener("pointercancel",up);
+  }
+  el.addEventListener("pointermove",mv);
+  el.addEventListener("pointerup",up);
+  el.addEventListener("pointercancel",up);
+}
+
+/* ── 목록 · 편집 ─────────────────────────────────── */
+function renderList(){
+  listEl.innerHTML="";
+  if(!pads.length){ listEl.innerHTML='<div class="item"><span class="empty">아직 버튼이 없습니다.</span></div>'; return; }
+  pads.forEach(function(p,i){
+    var c=cat(p.retro);
+    var d=document.createElement("div");
+    d.className="item"+(i===sel?" on":"");
+    d.innerHTML='<span class="dot"></span>'+c.lab+' <span style="color:var(--ink2)">'+c.role+'</span><span class="rk">'+p.retro+'</span>';
+    d.addEventListener("click",function(){ sel=i; renderAll(); });
+    listEl.appendChild(d);
+  });
+}
+function renderEdit(){
+  if(sel<0||sel>=pads.length){ editBody.innerHTML='<p class="empty">버튼을 하나 고르세요.</p>'; return; }
+  var p=pads[sel], c=cat(p.retro);
+  editBody.innerHTML=
+    '<div class="row"><span class="k">이름</span><b>'+c.lab+'</b>'+
+      '<span class="num" style="margin-left:auto">'+p.retro+'</span></div>'+
+    '<div class="row"><span class="k">하는 일</span><span style="font-size:13px;color:var(--ink2)">'+c.role+'</span></div>'+
+    '<div class="row"><span class="k">크기</span><input type="range" id="sz" min="30" max="240" value="'+Math.round(p.size*1000)+'">'+
+      '<span class="num" id="szv">'+f3(p.size)+'</span></div>'+
+    '<div class="row"><span class="k">가로 X</span><input type="range" id="px" min="0" max="1000" value="'+Math.round(p.x*1000)+'">'+
+      '<span class="num" id="pxv">'+f3(p.x)+'</span></div>'+
+    '<div class="row"><span class="k">세로 Y</span><input type="range" id="py" min="0" max="1000" value="'+Math.round(p.y*1000)+'">'+
+      '<span class="num" id="pyv">'+f3(p.y)+'</span></div>'+
+    '<div class="btnrow" style="margin-top:12px"><button class="btn danger" id="del">이 버튼 지우기</button></div>';
+  function bind(id,vid,set,div){
+    var s=document.getElementById(id);
+    s.addEventListener("input",function(){
+      set(+s.value/div); document.getElementById(vid).textContent=f3(+s.value/div);
+      renderPads(); renderOut();
+    });
+  }
+  bind("sz","szv",function(v){p.size=v;},1000);
+  bind("px","pxv",function(v){p.x=v;},1000);
+  bind("py","pyv",function(v){p.y=v;},1000);
+  document.getElementById("del").addEventListener("click",function(){
+    pads.splice(sel,1); sel=-1; renderAll();
+  });
+}
+function renderAddSel(){
+  addSel.innerHTML="";
+  CATALOG.forEach(function(c){
+    var o=document.createElement("option"); o.value=c.retro; o.textContent=c.lab+" ("+c.retro+")";
+    addSel.appendChild(o);
+  });
+}
+function renderMap(){
+  var t=document.getElementById("maptbl"); t.innerHTML="";
+  CATALOG.forEach(function(c){
+    var tr=document.createElement("tr");
+    tr.innerHTML='<td class="rk">'+(c.dpad?"십자키":c.retro.toUpperCase())+'</td><td>'+c.role+'</td>';
+    t.appendChild(tr);
+  });
+}
+
+/* ── 내보내기 ─────────────────────────────────────
+   레트로아크 오버레이 desc 한 줄 형식:
+     "<버튼>,<중심 x>,<중심 y>,<모양>,<가로 반경>,<세로 반경>"
+   좌표는 전부 0..1 정규화. 반경은 가로/세로 각각 기준이라
+   동그랗게 보이려면 세로 반경에 화면비를 곱해야 한다. */
+function descs(){
+  var out=[];
+  pads.forEach(function(p){
+    var c=cat(p.retro);
+    var rx=p.size/2, ry=p.size*aspect/2;
+    if(c.dpad){
+      var t=rx*2/3;                    /* 십자를 3×3 으로 쪼갠다 */
+      var tv=ry*2/3;
+      var cells=[
+        ["up|left",  -t,-tv],["up",        0,-tv],["up|right",   t,-tv],
+        ["left",     -t,  0],                      ["right",      t,  0],
+        ["down|left",-t, tv],["down",      0, tv],["down|right", t, tv]
+      ];
+      cells.forEach(function(q){
+        out.push('"'+q[0]+','+f3(p.x+q[1])+','+f3(p.y+q[2])+',rect,'+f3(t/2)+','+f3(tv/2)+'"');
+      });
+    }else{
+      out.push('"'+p.retro+','+f3(p.x)+','+f3(p.y)+',radial,'+f3(rx)+','+f3(ry)+'"');
+    }
+  });
+  return out;
+}
+function renderOut(){
+  var d=descs(), L=[];
+  L.push("# NGPC 오버레이 — NGPcustumSP 용");
+  L.push("# ngpc.png 을 이 파일과 같은 폴더에 두세요.");
+  L.push("");
+  L.push("overlays = 1");
+  L.push("");
+  L.push("overlay0_name = \"ngpc\"");
+  L.push("overlay0_overlay = ngpc.png");
+  L.push("overlay0_full_screen = true");
+  L.push("overlay0_normalized = true");
+  /* 이게 없으면 화면비가 다른 기기에서 배치가 늘어난다 (libretro 표준 팩 확인) */
+  L.push("overlay0_aspect_ratio = "+aspect.toFixed(5));
+  L.push("overlay0_range_mod = 1.5");
+  L.push("overlay0_alpha_mod = 2.0");
+  L.push("overlay0_descs = "+d.length);
+  d.forEach(function(s,i){ L.push("overlay0_desc"+i+" = "+s); });
+  cfgEl.textContent=L.join("\n");
+  drawPng();
+}
+
+/* 오버레이 그림 — 투명 배경에 버튼만 그린다. 배치와 1:1 로 맞는다. */
+function drawPng(){
+  var W=1280, H=Math.round(1280/aspect);
+  var cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  var c=cv.getContext("2d");
+  c.clearRect(0,0,W,H);
+  pads.forEach(function(p){
+    var cd=cat(p.retro);
+    var cx=p.x*W, cy=p.y*H, rx=p.size/2*W, ry=p.size*aspect/2*H;
+    c.lineWidth=Math.max(2,W*.0035);
+    c.strokeStyle="rgba(255,255,255,.92)";
+    c.fillStyle="rgba(20,26,32,.34)";
+    c.beginPath();
+    if(cd.dpad){
+      var r=rx*.16;
+      c.moveTo(cx-rx+r,cy-ry); c.arcTo(cx+rx,cy-ry,cx+rx,cy+ry,r);
+      c.arcTo(cx+rx,cy+ry,cx-rx,cy+ry,r); c.arcTo(cx-rx,cy+ry,cx-rx,cy-ry,r);
+      c.arcTo(cx-rx,cy-ry,cx+rx,cy-ry,r); c.closePath();
+      c.fill(); c.stroke();
+      /* 십자 표시 */
+      c.beginPath();
+      c.moveTo(cx-rx*.55,cy); c.lineTo(cx+rx*.55,cy);
+      c.moveTo(cx,cy-ry*.55); c.lineTo(cx,cy+ry*.55);
+      c.stroke();
+    }else{
+      c.beginPath(); c.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);
+      c.fill(); c.stroke();
+      c.fillStyle="rgba(255,255,255,.95)";
+      c.textAlign="center"; c.textBaseline="middle";
+      c.font="700 "+Math.round(rx*.72)+"px 'IBM Plex Sans KR', sans-serif";
+      c.fillText(cd.lab,cx,cy);
+    }
+  });
+  pngEl.src=cv.toDataURL("image/png");
+}
+
+function renderAll(){ layoutStage(); renderPads(); renderList(); renderEdit(); renderOut(); }
+
+/* ── 불러오기 ─────────────────────────────────────
+   내보낸 설정을 되읽어 편집을 이어간다. 십자키 8칸은 하나로 다시 묶는다. */
+function importCfg(txt){
+  var re=/overlay\d+_desc\d+\s*=\s*"([^"]+)"/g, m, got=[], dpad=null;
+  while((m=re.exec(txt))){
+    var f=m[1].split(",");
+    if(f.length<6) continue;
+    var name=f[0].trim(), x=+f[1], y=+f[2], rx=+f[4], ry=+f[5];
+    if(/^(up|down|left|right)(\|(up|down|left|right))?$/.test(name)){
+      if(!dpad) dpad={minx:x,maxx:x,miny:y,maxy:y,rx:rx,ry:ry};
+      else{ dpad.minx=Math.min(dpad.minx,x); dpad.maxx=Math.max(dpad.maxx,x);
+            dpad.miny=Math.min(dpad.miny,y); dpad.maxy=Math.max(dpad.maxy,y); }
+      continue;
+    }
+    if(!cat(name)) continue;
+    got.push({retro:name, x:x, y:y, size:rx*2});
+  }
+  if(dpad){
+    var w=(dpad.maxx-dpad.minx)+dpad.rx*2;
+    got.unshift({retro:"dpad", x:(dpad.minx+dpad.maxx)/2, y:(dpad.miny+dpad.maxy)/2, size:w});
+  }
+  if(!got.length){ toast("읽을 만한 버튼을 못 찾았습니다."); return; }
+  pads=got; sel=-1; renderAll();
+  toast(got.length+"개 읽었습니다.");
+}
+
+/* ── 잔심부름 ─────────────────────────────────── */
+var toastEl=document.getElementById("toast"), toastT;
+function toast(msg){
+  toastEl.textContent=msg; toastEl.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(function(){toastEl.classList.remove("show");},1900);
+}
+
+document.getElementById("ratio").addEventListener("change",function(e){ aspect=+e.target.value; renderAll(); });
+document.getElementById("geom").addEventListener("change",function(e){ geom=e.target.value; layoutStage(); });
+showGridEl.addEventListener("change",drawGrid);
+document.getElementById("add").addEventListener("click",function(){
+  var r=addSel.value, c=cat(r);
+  pads.push({retro:r, x:.5, y:.5, size:c.size});
+  sel=pads.length-1; renderAll();
+});
+document.querySelectorAll("[data-preset]").forEach(function(b){
+  b.addEventListener("click",function(){ loadPreset(b.dataset.preset); toast("배치를 불러왔습니다."); });
+});
+document.getElementById("copy").addEventListener("click",function(){
+  var t=cfgEl.textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){toast("설정을 복사했습니다.");},
+                                          function(){toast("복사가 막혔습니다 — 직접 긁어서 복사하세요.");});
+  }else toast("복사가 막혔습니다 — 직접 긁어서 복사하세요.");
+});
+document.getElementById("toggleimport").addEventListener("click",function(){
+  var b=document.getElementById("importbox"); b.hidden=!b.hidden;
+});
+document.getElementById("doimport").addEventListener("click",function(){
+  importCfg(document.getElementById("importta").value);
+});
+
+/* 화살표키 미세조정 · Delete 삭제 */
+document.addEventListener("keydown",function(e){
+  if(sel<0) return;
+  var tag=(e.target.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="textarea"||tag==="select") return;
+  var p=pads[sel], step=e.shiftKey?.02:.002, used=true;
+  if(e.key==="ArrowLeft") p.x=clamp(p.x-step,0,1);
+  else if(e.key==="ArrowRight") p.x=clamp(p.x+step,0,1);
+  else if(e.key==="ArrowUp") p.y=clamp(p.y-step,0,1);
+  else if(e.key==="ArrowDown") p.y=clamp(p.y+step,0,1);
+  else if(e.key==="Delete"||e.key==="Backspace"){ pads.splice(sel,1); sel=-1; }
+  else used=false;
+  if(used){ e.preventDefault(); renderPads(); renderList(); renderEdit(); renderOut(); }
+});
+
+window.addEventListener("resize",drawGrid);
+
+/* 마지막 배치를 기억해 둔다 — 이 브라우저에만 남는다. */
+function save(){ try{ localStorage.setItem("ngpc_overlay", JSON.stringify({pads:pads,aspect:aspect})); }catch(e){} }
+function restore(){
+  try{
+    var s=localStorage.getItem("ngpc_overlay");
+    if(s){ var o=JSON.parse(s);
+      if(o && o.pads && o.pads.length){ pads=o.pads; if(o.aspect){ aspect=o.aspect;
+        document.getElementById("ratio").value=String(o.aspect); } return true; } }
+  }catch(e){}
+  return false;
+}
+if(!restore()) loadPreset("app");
+renderAddSel(); renderMap(); renderAll();
+setInterval(save, 1500);
+window.addEventListener("beforeunload", save);
+requestAnimationFrame(drawGrid);
+
+})();
+</script>
