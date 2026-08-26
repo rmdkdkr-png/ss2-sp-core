@@ -125,7 +125,7 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "ngp_ss2sp_comm_draw",
       "SS2 Commentary Display",
       NULL,
-      "Outside the screen (default): the core adds a 30px band above or below the game image and draws the line there with its own Korean pixel font (Galmuri 11px) plus the speaker's portrait - the game image is never covered, but the picture gets taller. Inside the screen: draws a dialogue box over the game image instead, so the console screen size and aspect stay exactly as they were. Frontend notification only: no drawing, uses RetroArch OSD (Korean may not render, depends on the frontend font).",
+      "Outside the screen (default): the core adds a 32px band above or below the game image and draws the line there with its own Korean pixel font (Galmuri 11px) plus the speaker's portrait - the game image is never covered, but the picture gets taller. Inside the screen: draws a dialogue box over the game image instead, so the console screen size and aspect stay exactly as they were. Frontend notification only: no drawing, uses RetroArch OSD (Korean may not render, depends on the frontend font).",
       NULL,
       "video",
       {
