@@ -235,6 +235,7 @@ static uint8_t svc_mirror(uint8_t pad)
 /* 커맨드 → 프레임 큐. SS2 와 달리 리셋 트릭이 없다 — 그냥 순서대로 넣는다.
    ★ 마지막 방향을 STEP 프레임 잡은 **다음**, 잡은 채로 버튼을 HOLD 프레임.
      (같은 프레임에 방향+버튼이면 실패한다 — 실측 §7) */
+static int svc_compile_cancel;   /* 이번 컴파일이 노멀 캔슬 경로인가 — 표시용 */
 static void svc_compile(const svc_move *m)
 {
    int i, mirror = (CPUExRAM[OFF_X1] > CPUExRAM[OFF_X2]);   /* P1 이 오른쪽 → 왼쪽 봄 */
@@ -296,8 +297,9 @@ static void svc_compile(const svc_move *m)
          int n2 = snprintf(svcsp_last_disp, sizeof svcsp_last_disp, "%s ", nb);
          for (ci = 0; ci < na && n2 < (int)sizeof svcsp_last_disp - 8; ci++)
             n2 += snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "%s", arrows[ci]);
-         snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "+%s",
-                  (m->btn & PAD_A) ? "P" : "K");
+         snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "+%s%s",
+                  (m->btn & PAD_A) ? "P" : "K",
+                  svc_compile_cancel ? " ìºì¬" : "");
       }
       svcsp_disp_seq++;
    }
@@ -444,23 +446,18 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       int need_ground = !(pending->flags & 4);
       int fire = 0;
       if (pending_kind == 2)
-      {  /* 파생 — 이번 기술이 히트했을 때만. 창이 끝날 때까지 기다렸다가 버린다 */
-         if (hit_at >= move_started) fire = 1;
-         else if (--pending_left <= 0) { pending = 0; pending_kind = 0; }
-      }
+         fire = 1;                       /* 파생 — 헛쳐도 창 안이면 나가는 것이 원작 동작 (유저 확인) */
       else if (pending_kind == 1 && (frames - hit_at) <= 2)
-         fire = 1;                       /* 캔슬 선입력 — 히트가 뜬 그 순간 발사 */
-      else if (pending_kind == 3)
-      {  /* 헛친 물기 — 파생 창(+2~36f)이 닫힌 뒤에 새로 시전.
-            창 안에 236 을 다시 넣으면 게임이 파생으로 흡수해 버린다 (실측) */
-         if ((frames - move_started) >= 42 && svc_actable()) fire = 1;
-         else if (--pending_left <= 0) { pending = 0; pending_kind = 0; }
-      }
+         fire = 2;                       /* 캔슬 선입력 — 히트가 뜬 그 순간 발사 */
       else if ((!need_ground || !svc_airborne()) && svc_actable())
          fire = 1;                       /* 일반 — 착지·회복 대기 */
       else if (pending_kind != 2 && --pending_left <= 0) { pending = 0; pending_kind = 0; }
       if (fire && pending)
-         { svc_compile(pending); pending = 0; pending_kind = 0; }
+      {
+         svc_compile_cancel = (fire == 2);
+         svc_compile(pending); svc_compile_cancel = 0;
+         pending = 0; pending_kind = 0;
+      }
    }
 
    if (svc_active())
@@ -481,16 +478,10 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
    if ((edge & 1u) && svc_in_battle() && chain_left > 0)
    {
       const svc_move *nx = svc_chain_next();
-      if (nx && hit_at >= move_started)      /* 맞았다 — 파생 */
+      if (nx)
       {
          svc_compile(nx);
          if (svc_active()) return svc_step_out(trig & 1u);
-      }
-      if (nx)
-      {  /* 헛쳤다 — 창이 닫히면 새로 시전 (지금 넣으면 게임이 파생으로 흡수) */
-         const svc_move *m2 = svc_resolve(pad);
-         if (m2) { pending = m2; pending_left = 70; pending_kind = 3; }
-         return pad;
       }
    }
    if ((edge & 1u) && svc_in_battle())
@@ -510,7 +501,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
          if (need_ground && svc_airborne())
             { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
          else if (kill_cancel)
-            svc_compile(m);                   /* 이미 맞았다 — 즉시 캔슬 */
+            { svc_compile_cancel = 1; svc_compile(m); svc_compile_cancel = 0; }
          else if (own_atk && !svc_actable())
             { pending = m; pending_left = 30; pending_kind = 1; }  /* 선입력 — 히트 뜨면 발사 */
          else if (!svc_actable())
