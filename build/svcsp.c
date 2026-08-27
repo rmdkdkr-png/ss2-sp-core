@@ -173,7 +173,14 @@ static int       chain_left;       /* 파생 입력 창 (매크로 끝난 뒤 �
 static uint32_t  frames;           /* 엔진 프레임 카운터 */
 static uint32_t  my_attack_at;     /* 유저가 직접 평타(A/B)를 누른 프레임 — 킬캔슬 판정 */
 static uint32_t  hit_at;           /* P2 체력이 깎인 프레임 — 히트 캔슬만 허용 (헛침 즉시주입은 leak) */
-static uint32_t  move_started;     /* 마지막 기술 시작 프레임 — 파생은 이 이후의 히트가 있어야 나간다 */
+static uint32_t  move_started;     /* 마지막 기술 시작 프레임 */
+static const svc_move *retry_mv;   /* 불발 재시도 대상 (파생 컴파일은 제외) */
+static int       retry_cnt;
+static uint32_t  retry_at;
+static uint32_t  macro_end_at;
+static int       compile_no_retry; /* 파생 등 재시도 금지 컴파일 표시 */
+static uint8_t   bank_at_compile;  /* 컴파일 시점 뱅크 — 재시도 성공 판정은 뱅크 변화로
+                                      (씹힌 평타도 카운터는 리셋해서 카운터만으론 속는다) */
 static uint8_t   prev_pad_btn;
 static uint8_t   prev_hp2v;
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
@@ -220,6 +227,8 @@ static int svc_actable(void)
    if (nogate) return 1;
    if (warm < 4) return 0;
    a = CPUExRAM[OFF_ANIM];
+   { unsigned k = CPUExRAM[OFF_ANIM + 1];          /* 0x0C7F = K(킥) 동작 카운터 */
+     if (!((k == 127) || (k >= 6 && k < 127))) return 0; }
    return (a == 127) || (a >= 6 && a < 127);
 }
 
@@ -261,6 +270,10 @@ static void svc_compile(const svc_move *m)
    q_left = q[0].frames;
    hold_elapsed = 0;
    verify_left = 60;
+   if (compile_no_retry) { retry_mv = 0; }
+   else { retry_mv = m; if (m == &svc_basic) retry_mv = 0; }
+   retry_cnt = 0; retry_at = 0;
+   bank_at_compile = CPUExRAM[OFF_BANK];
    chain_mv = m; chain_left = 0;      /* 창은 매크로가 끝날 때 연다 (step_out) */
    move_started = frames;
    svcsp_last_name = m->name;
@@ -377,6 +390,7 @@ static uint8_t svc_step_out(int held)
       else
       {
          q_n = q_i = 0; q_left = 0;
+         macro_end_at = frames;
          /* 파생이 있는 기술이면 재입력 창을 연다 (실측: 첫 기술 시작 +2~36f 수용) */
          if (chain_mv && chain_tbl &&
              ((svcsp_last_strong ? chain_mv->next_hold : chain_mv->next) >= 0))
@@ -423,14 +437,36 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
    /* 발동 결과 판정 — 애니 카운터(경과시계)가 **줄어들면** 새 동작이 시작된 것.
       뱅크로는 안 된다: 황물기 꼬리가 뱅크 0 이라 팔청(0)과 구분이 안 된다 (실측). */
    {
-      static uint8_t va_prev = 255;
-      uint8_t va = CPUExRAM[OFF_ANIM];
+      static uint8_t va_prev = 255, vk_prev = 255;
+      uint8_t va = CPUExRAM[OFF_ANIM], vk = CPUExRAM[OFF_ANIM + 1];
       if (verify_left > 0)
       {
-         if (va < va_prev && va_prev != 255) { svcsp_last_ok = 1; verify_left = 0; }
-         else if (--verify_left == 0)          svcsp_last_ok = 0;
+         if ((va < va_prev && va_prev != 255) || (vk < vk_prev && vk_prev != 255))
+            { svcsp_last_ok = 1; verify_left = 0; }   /* retry 는 뱅크로만 접는다 — 평타 leak 도 카운터는 리셋한다 */
+         else if (--verify_left == 0) svcsp_last_ok = 0;
       }
-      va_prev = va;
+      va_prev = va; vk_prev = vk;
+      /* 불발 자동 재시도 — 진짜 발동은 뱅크가 바뀐다 (평타 leak 은 카운터만 리셋).
+         매크로 후 12f 안에 뱅크 변화가 없으면 14f 간격으로 다시 넣는다 (자기 후딜은
+         무브마다 달라 문턱으로 못 덮는다 — 강킥은 +36f 에야 커맨드가 먹힌다, 실측). */
+      {
+         uint8_t bnow = CPUExRAM[OFF_BANK];
+         if (retry_mv && bnow != bank_at_compile && bnow != 255)
+            retry_mv = 0;                      /* 뱅크 변화 = 진짜 발동 */
+         if (retry_mv && !svc_active() && !pending && frames - macro_end_at >= 12)
+         {
+            if (retry_cnt >= 3) retry_mv = 0;
+            else if (!retry_at) retry_at = frames + 2;
+            else if (frames >= retry_at)
+            {
+               const svc_move *rm = retry_mv;
+               int rc = retry_cnt + 1;
+               if (svc_dbg()) fprintf(stderr, "[svcsp] retry %d %s\n", rc, rm->name);
+               svc_compile(rm);                /* compile 이 retry 상태를 초기화한다 — 복원 */
+               retry_mv = rm; retry_cnt = rc; retry_at = frames + 14;
+            }
+         }
+      }
    }
 
    /* 보류 관리 — 전투가 끝났거나 새 입력이 오면 버린다 (ss2sp v0.5.4 규칙) */
@@ -449,15 +485,18 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       int fire = 0;
       if (pending_kind == 2)
          fire = 1;                       /* 파생 — 헛쳐도 창 안이면 나가는 것이 원작 동작 (유저 확인) */
-      else if (pending_kind == 1 && (frames - hit_at) <= 2)
-         fire = 2;                       /* 캔슬 선입력 — 히트가 뜬 그 순간 발사 */
+      else if (pending_kind == 4)
+      {  /* 평타 후 — 캔슬 창(공격 시작 +40f)이 지나고 행동 가능해지면 */
+         if ((frames - my_attack_at) >= 40 && svc_actable()) fire = 1;
+         else if (--pending_left <= 0) { pending = 0; pending_kind = 0; }
+      }
       else if ((!need_ground || !svc_airborne()) && svc_actable())
          fire = 1;                       /* 일반 — 착지·회복 대기 */
       else if (pending_kind != 2 && --pending_left <= 0) { pending = 0; pending_kind = 0; }
       if (fire && pending)
       {
-         svc_compile_cancel = (fire == 2);
-         svc_compile(pending); svc_compile_cancel = 0;
+         compile_no_retry = (pending_kind == 2);   /* 파생은 재시도 금지 */
+         svc_compile(pending); compile_no_retry = 0;
          pending = 0; pending_kind = 0;
       }
    }
@@ -482,7 +521,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       const svc_move *nx = svc_chain_next();
       if (nx)
       {
-         svc_compile(nx);
+         compile_no_retry = 1; svc_compile(nx); compile_no_retry = 0;
          if (svc_active()) return svc_step_out(trig & 1u);
       }
    }
@@ -498,14 +537,14 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
          /* 킬캔슬: 자기 평타 직후(24f)의 X 는 회복을 기다리지 않는다 —
             캔슬창이 히트 후 0~8f 라서 기다리면 놓친다 (실측 §19).
             히트가 아니면 게임이 그냥 먹는다 (가드·헛침 캔슬 불가 실측). */
-         int own_atk    = (frames - my_attack_at) <= 24 && !svc_airborne();
-         int kill_cancel = own_atk && (frames - hit_at) <= 14;
+         /* 노멀 캔슬 창은 함정이다: 창 안의 어떤 방향+버튼도 게임이 지정기(쿄: 누에잡기,
+            비공격 카운터)로 바꿔 낸다 (실측 §24). 그래서 자기 평타 직후의 X 는
+            창이 완전히 지나간 뒤(공격 시작 +40f)에 깨끗한 필살기로 낸다. */
+         int own_atk = (frames - my_attack_at) <= 40 && !svc_airborne();
          if (need_ground && svc_airborne())
             { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
-         else if (kill_cancel)
-            { svc_compile_cancel = 1; svc_compile(m); svc_compile_cancel = 0; }
-         else if (own_atk && !svc_actable())
-            { pending = m; pending_left = 30; pending_kind = 1; }  /* 선입력 — 히트 뜨면 발사 */
+         else if (own_atk)
+            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 4; }
          else if (!svc_actable())
             { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
          else
@@ -521,6 +560,7 @@ void svcsp_reset(void)
 {
    q_n = q_i = q_left = 0;
    pending = 0; pending_left = 0; pending_kind = 0; move_started = 0;
+   retry_mv = 0; retry_cnt = 0; retry_at = 0; macro_end_at = 0; compile_no_retry = 0;
    prev_trig = 0; prev_pad_dir = 0;
    prev_pad_btn = 0; my_attack_at = 0; hit_at = 0; prev_hp2v = 255; frames = 100;
    warm = 0; verify_left = 0;
