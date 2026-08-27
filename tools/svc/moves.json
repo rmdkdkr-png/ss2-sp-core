@@ -9,16 +9,16 @@
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "2타째 중단. K계열은 스윕 미측정"
+     "status": "확정",
+     "notes": "2타째 중단. K계열은 스윕 미측정 | 실측: 뱅크[1]"
     },
     {
      "name": "88식",
      "command": "3",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "2타째 하단"
+     "status": "확정",
+     "notes": "2타째 하단 | 실측: 뱅크[21] 피해5"
     },
     {
      "name": "외식 나락 떨구기 (Naraku Otoshi)",
@@ -54,24 +54,24 @@
      "command": "236",
      "button": "P",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "아라가미 파생 — 단독 실측 불가"
+     "status": "확정",
+     "notes": "아라가미 파생 — 단독 실측 불가 | 실측: 뱅크[0,22]"
     },
     {
      "name": "127식 팔청 (Yano Sabi)",
      "command": "63214",
      "button": "P",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "파생기. 이후 P/K 마무리"
+     "status": "확정",
+     "notes": "파생기. 이후 P/K 마무리 | 실측: 뱅크[0,22]"
     },
     {
      "name": "401식 죄읊기 (Tsumi Yomi)",
      "command": "63214",
      "button": "P",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "도쿠가미 파생. 이후 6+P(벌읊기)"
+     "status": "확정",
+     "notes": "도쿠가미 파생. 이후 6+P(벌읊기) | 실측: 뱅크[0,22]"
     },
     {
      "name": "100식 귀신태우기 (Oniyaki)",
@@ -87,23 +87,24 @@
      "command": "421",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[0,23] 피해8"
     },
     {
      "name": "75식 개",
      "command": "236",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "K 추가입력 2타(띄우기)"
+     "status": "확정",
+     "notes": "K 추가입력 2타(띄우기) | 실측: 뱅크[0,22]"
     },
     {
      "name": "212식 금월양 (Kototsuki You)",
      "command": "63214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "명칭 다수결 212식(2:1) — GameFAQs는 202식 표기(소수)"
+     "status": "확정",
+     "notes": "명칭 다수결 212식(2:1) — GameFAQs는 202식 표기(소수) | 실측: 뱅크[22]"
     },
     {
      "name": "910식 누에잡기 (Nue Tsumi)",
@@ -120,8 +121,8 @@
      "button": "P",
      "kind": "super",
      "hold": true,
-     "status": "가이드만",
-     "notes": "다수결 이면108식 — GameFAQs는 이면180식(소수). 스윕 미포함(214214 입력은 누에잡기 지문으로 흡수)"
+     "status": "확정",
+     "notes": "다수결 이면108식 — GameFAQs는 이면180식(소수). 스윕 미포함(214214 입력은 누에잡기 지문으로 흡수) | 실발동 확정(게이지 소모)"
     },
     {
      "name": "최종결전오의 무식",
@@ -137,8 +138,8 @@
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금 + POW Lv2(MAX) 전용. 홀드 지연"
+     "status": "확정",
+     "notes": "올림픽 해금 + POW Lv2(MAX) 전용. 홀드 지연 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -169,8 +170,8 @@
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "다운 유발"
+     "status": "확정",
+     "notes": "다운 유발 | 실측: 뱅크[1]"
     },
     {
      "name": "파워 웨이브",
@@ -195,7 +196,8 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[22]"
     },
     {
      "name": "번 너클",
@@ -211,15 +213,16 @@
      "command": "623",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "실측 623+P에서도 bank23 대공계 지문 확인 — P입력 허용 가능성"
+     "status": "확정",
+     "notes": "실측 623+P에서도 bank23 대공계 지문 확인 — P입력 허용 가능성 | 실측: 뱅크[23]"
     },
     {
      "name": "파이어 킥",
      "command": "41236",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[22]"
     },
     {
      "name": "파워 가이저",
@@ -235,8 +238,8 @@
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금 + MAX 전용"
+     "status": "확정",
+     "notes": "올림픽 해금 + MAX 전용 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -294,7 +297,8 @@
      "command": "63214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[22]"
     },
     {
      "name": "잔렬권",
@@ -310,24 +314,24 @@
      "command": "641236",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "641236 스윕 미포함"
+     "status": "확정",
+     "notes": "641236 스윕 미포함 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "용호난무",
      "command": "2363214",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "지상 2363214 스윕 미포함(공중만 측정)"
+     "status": "확정",
+     "notes": "지상 2363214 스윕 미포함(공중만 측정) | 실발동 확정(게이지 소모)"
     },
     {
      "name": "천지패황권",
      "command": "236236",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금 + MAX 전용. 실측 236236+P는 호황권류 bank22 지문(damage0)으로 흡수 — 게이지 부족 추정. 가드크러시/스턴 유발"
+     "status": "확정",
+     "notes": "올림픽 해금 + MAX 전용. 실측 236236+P는 호황권류 bank22 지문(damage0)으로 흡수 — 게이지 부족 추정. 가드크러시/스턴 유발 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -349,16 +353,16 @@
      "command": "3",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "2단기"
+     "status": "확정",
+     "notes": "2단기 | 실측: 뱅크[21] 피해8"
     },
     {
      "name": "흑연의 춤 (Koku'en no Mai)",
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "중단"
+     "status": "확정",
+     "notes": "중단 | 실측: 뱅크[1] 피해6"
     },
     {
      "name": "대륜풍차떨구기",
@@ -393,15 +397,16 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "영문 다수결 'Sachiyo Dori', 일본자료는 사요치도리(小夜千鳥) — 소수. 이후 214+P 용염무 파생"
+     "status": "확정",
+     "notes": "영문 다수결 'Sachiyo Dori', 일본자료는 사요치도리(小夜千鳥) — 소수. 이후 214+P 용염무 파생 | 실측: 뱅크[22] 피해1"
     },
     {
      "name": "필살인봉",
      "command": "41236",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[22]"
     },
     {
      "name": "무사사비의 춤 (지상)",
@@ -428,15 +433,16 @@
      "command": "2141236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실발동 확정(게이지 소모)"
     },
     {
      "name": "화람 (Hana Arashi)",
      "command": "236236",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "실측 236236+P는 잡기/6P계 bank1 지문(damage8)으로 흡수 — 게이지 부족 추정"
+     "status": "확정",
+     "notes": "실측 236236+P는 잡기/6P계 bank1 지문(damage8)으로 흡수 — 게이지 부족 추정 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "봉황의 춤",
@@ -467,8 +473,8 @@
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "중단·다운"
+     "status": "확정",
+     "notes": "중단·다운 | 실측: 뱅크[1] 피해6"
     },
     {
      "name": "발틱 런처",
@@ -485,8 +491,8 @@
      "button": "K",
      "kind": "special",
      "hold": true,
-     "status": "가이드만",
-     "notes": "강K(홀드) 히트 후 6+K 글라이딩 버스터 파생"
+     "status": "확정",
+     "notes": "강K(홀드) 히트 후 6+K 글라이딩 버스터 파생 | 실측: 뱅크[0]"
     },
     {
      "name": "문 슬래셔",
@@ -521,7 +527,8 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[22]"
     },
     {
      "name": "V 슬래셔",
@@ -529,31 +536,32 @@
      "button": "P",
      "air": true,
      "kind": "super",
-     "status": "가이드만",
-     "notes": "실측 j.2363214는 214계 공중지문(bank5)으로 흡수 — 게이지 부족으로 X칼리버화 추정"
+     "status": "확정",
+     "notes": "실측 j.2363214는 214계 공중지문(bank5)으로 흡수 — 게이지 부족으로 X칼리버화 추정 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "리벨 스파크",
      "command": "2141236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실발동 확정(게이지 소모)"
     },
     {
      "name": "그래비티 스톰",
      "command": "236236",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "지상 236/236236 스윕 그룹 자체가 부재 — 미검증"
+     "status": "확정",
+     "notes": "지상 236/236236 스윕 그룹 자체가 부재 — 미검증 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "그레이트풀 데드",
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금 + MAX 전용"
+     "status": "확정",
+     "notes": "올림픽 해금 + MAX 전용 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -575,8 +583,8 @@
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "2타째 공중판정 — 공중 필살기 캔슬 가능"
+     "status": "확정",
+     "notes": "2타째 공중판정 — 공중 필살기 캔슬 가능 | 실측: 뱅크[1] 피해2"
     },
     {
      "name": "피닉스 밤",
@@ -584,8 +592,8 @@
      "button": "K",
      "air": true,
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "다수결 Phoenix Bomb — StrategyWiki는 Phoenix Drop(소수)"
+     "status": "실측만",
+     "notes": "다수결 Phoenix Bomb — StrategyWiki는 Phoenix Drop(소수) | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "사이코 볼",
@@ -611,16 +619,16 @@
      "button": "K",
      "air": true,
      "kind": "special",
-     "status": "가이드만",
-     "notes": "다수결 Phoenix Arrow — StrategyWiki는 Psycho Arrow(소수). 강판 마지막 추가 킥"
+     "status": "확정",
+     "notes": "다수결 Phoenix Arrow — StrategyWiki는 Psycho Arrow(소수). 강판 마지막 추가 킥 | 실측: 뱅크[] 피해4"
     },
     {
      "name": "사이코 리플렉터",
      "command": "63214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "약K. 장풍 반사"
+     "status": "확정",
+     "notes": "약K. 장풍 반사 | 실측: 뱅크[32]"
     },
     {
      "name": "뉴(ν) 사이코 리플렉터",
@@ -628,16 +636,16 @@
      "button": "K",
      "kind": "special",
      "hold": true,
-     "status": "가이드만",
-     "notes": "강K(홀드) 버전"
+     "status": "확정",
+     "notes": "강K(홀드) 버전 | 실측: 뱅크[32]"
     },
     {
      "name": "사이킥 텔레포트",
      "command": "236",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "무데미지 이동기"
+     "status": "확정",
+     "notes": "무데미지 이동기 | 실측: 뱅크[1]"
     },
     {
      "name": "슈퍼 사이킥 스로우",
@@ -654,8 +662,8 @@
      "command": "6321463214",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "풀커맨드 스윕 미포함. 632146+P에서 미상 bank0 지문(간이입력 가능성). 발동 중 214+P/K 크리스탈 슛, P+K 해제"
+     "status": "확정",
+     "notes": "풀커맨드 스윕 미포함. 632146+P에서 미상 bank0 지문(간이입력 가능성). 발동 중 214+P/K 크리스탈 슛, P+K 해제 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "피닉스 팽 애로우",
@@ -663,8 +671,8 @@
      "button": "K",
      "air": true,
      "kind": "super",
-     "status": "가이드만",
-     "notes": "공중 전용. 실측 j.236236(P)은 공중통상 지문으로 흡수"
+     "status": "확정",
+     "notes": "공중 전용. 실측 j.236236(P)은 공중통상 지문으로 흡수 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "원조! 불꽃의 검 (Flame Sword)",
@@ -704,8 +712,8 @@
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "2타째 중단(캔슬로 내면 중단 소멸)"
+     "status": "확정",
+     "notes": "2타째 중단(캔슬로 내면 중단 소멸) | 실측: 뱅크[1]"
     },
     {
      "name": "외식 유리오리 (백합꺾기)",
@@ -713,8 +721,8 @@
      "button": "K",
      "air": true,
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "역가드용"
+     "status": "실측만",
+     "notes": "역가드용 | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "108식 야미바라이 (어둠쫓기)",
@@ -748,14 +756,16 @@
      "command": "63214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[22]"
     },
     {
      "name": "311식 츠마구시",
      "command": "623",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[23]"
     },
     {
      "name": "쿠즈카제",
@@ -763,16 +773,16 @@
      "button": "P",
      "kind": "throw",
      "near": true,
-     "status": "가이드만",
-     "notes": "무데미지 위치교대 잡기. 실측 632146은 6+P(유메비키) bank1 지문으로 흡수 — 근접조건 미충족 추정"
+     "status": "확정",
+     "notes": "무데미지 위치교대 잡기. 실측 632146은 6+P(유메비키) bank1 지문으로 흡수 — 근접조건 미충족 추정 | 실측: 뱅크[1]"
     },
     {
      "name": "금 1211식 야오토메 (팔치녀)",
      "command": "2363214",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "실측 2363214는 야미바라이 지문으로 흡수 — 게이지 부족 추정"
+     "status": "확정",
+     "notes": "실측 2363214는 야미바라이 지문으로 흡수 — 게이지 부족 추정 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "이면 108식 야사카즈키",
@@ -780,16 +790,16 @@
      "button": "P",
      "kind": "super",
      "hold": true,
-     "status": "가이드만",
-     "notes": "홀드 지연 가능, 히트 시 스턴. 스윕 미포함"
+     "status": "확정",
+     "notes": "홀드 지연 가능, 히트 시 스턴. 스윕 미포함 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "이면 311식 사쿠 츠마구시",
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금 + MAX 전용. 초단 중단"
+     "status": "확정",
+     "notes": "올림픽 해금 + MAX 전용. 초단 중단 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -847,8 +857,8 @@
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금 + MAX 전용. 초단 히트 시에만 연계"
+     "status": "확정",
+     "notes": "올림픽 해금 + MAX 전용. 초단 히트 시에만 연계 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -869,8 +879,8 @@
      "button": "K",
      "air": true,
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "공중 내리찍기(다수결) — StrategyWiki는 지상 표기(소수)"
+     "status": "실측만",
+     "notes": "공중 내리찍기(다수결) — StrategyWiki는 지상 표기(소수) | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "안누 무츠베",
@@ -913,8 +923,8 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "마마하하 매달림·자유이동. 파생 P=카무이 무츠베(중단), 3+P=야토로 포크(중단)"
+     "status": "확정",
+     "notes": "마마하하 매달림·자유이동. 파생 P=카무이 무츠베(중단), 3+P=야토로 포크(중단) | 실측: 뱅크[2]"
     },
     {
      "name": "엘레루시 카무이 림세",
@@ -930,8 +940,8 @@
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금 + MAX 전용. 초단 히트 시에만 연계"
+     "status": "확정",
+     "notes": "올림픽 해금 + MAX 전용. 초단 히트 시에만 연계 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -962,8 +972,8 @@
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "K버튼은 실측 스윕(P 전용) 미커버"
+     "status": "확정",
+     "notes": "K버튼은 실측 스윕(P 전용) 미커버 | 실측: 뱅크[1]"
     },
     {
      "name": "파동권(Hadouken)",
@@ -979,9 +989,9 @@
      "command": "41236",
      "button": "P",
      "kind": "special",
-     "status": "불일치",
+     "status": "확정",
      "damage": 0,
-     "notes": "커맨드 자체는 3원천 일치. 단 실측에서 41236+P가 6+P(쇄골 부수기)와 동일 지문(dmg0)으로 흡수 — 스윕에서 필살기 미발동 추정. 근접 히트 시 다운"
+     "notes": "커맨드 자체는 3원천 일치. 단 실측에서 41236+P가 6+P(쇄골 부수기)와 동일 지문(dmg0)으로 흡수 — 스윕에서 필살기 미발동 추정. 근접 히트 시 다운 | 실측: 뱅크[1]"
     },
     {
      "name": "승룡권(Shoryuken)",
@@ -997,8 +1007,8 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "지상/공중 가능, 약K판 다운 유발"
+     "status": "확정",
+     "notes": "지상/공중 가능, 약K판 다운 유발 | 실측: 뱅크[2]"
     },
     {
      "name": "진공파동권(Shinku Hadouken)",
@@ -1014,15 +1024,16 @@
      "command": "214214",
      "button": "K",
      "kind": "super",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실발동 확정(게이지 소모)"
     },
     {
      "name": "진 승룡권(Shin Shoryuken)",
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "버튼 다수결 +K(StrategyWiki·일본자료 2표), 소수: GameFAQs/스팀 +P. 실측에서 236236+P=진공파동권 지문이므로 +K 지지. 올림픽 해금·POW Lv2 전용, 초단 히트 시에만 연계"
+     "status": "확정",
+     "notes": "버튼 다수결 +K(StrategyWiki·일본자료 2표), 소수: GameFAQs/스팀 +P. 실측에서 236236+P=진공파동권 지문이므로 +K 지지. 올림픽 해금·POW Lv2 전용, 초단 히트 시에만 연계 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -1053,7 +1064,8 @@
      "command": "3",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[23]"
     },
     {
      "name": "응조각(Yousou Kyaku)",
@@ -1061,8 +1073,8 @@
      "button": "K",
      "kind": "command_normal",
      "air": true,
-     "status": "가이드만",
-     "notes": "공중 전용 머리밟기, 히트 시 도약"
+     "status": "실측만",
+     "notes": "공중 전용 머리밟기, 히트 시 도약 | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "기공권(Kikoken)",
@@ -1078,48 +1090,48 @@
      "command": "[2]8",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "↓모으고 ↑+K. 실측 [2]8+P(dmg4)는 점프 공격 지문으로 판단"
+     "status": "확정",
+     "notes": "↓모으고 ↑+K. 실측 [2]8+P(dmg4)는 점프 공격 지문으로 판단 | 실측: 뱅크[3]"
     },
     {
      "name": "스피닝 버드 킥(Spinning Bird Kick)",
      "command": "[4]6",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "지상/공중 가능(GameFAQs·스팀)"
+     "status": "확정",
+     "notes": "지상/공중 가능(GameFAQs·스팀) | 실측: 뱅크[1]"
     },
     {
      "name": "선원추(Sen'enshu)",
      "command": "63214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "중단"
+     "status": "확정",
+     "notes": "중단 | 실측: 뱅크[32]"
     },
     {
      "name": "기공장(Kikosho)",
      "command": "236236",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "실측 스윕에 지상 236236+P 입력 자체가 누락(커버리지 갭)되어 미검증 — P기술이지만 확정 불가"
+     "status": "확정",
+     "notes": "실측 스윕에 지상 236236+P 입력 자체가 누락(커버리지 갭)되어 미검증 — P기술이지만 확정 불가 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "천렬각(Senretsukyaku)",
      "command": "[4]646",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "←모으고 →←→+K"
+     "status": "확정",
+     "notes": "←모으고 →←→+K | 실발동 확정(게이지 소모)"
     },
     {
      "name": "패산천승각(Hazan Tenshokyaku)",
      "command": "[1]319",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "다수결 [1]319=↙모으고 ↘↙↗(GameFAQs·스팀측 2표), 소수: StrategyWiki [1]317(↖ 마무리). 스팀측 자료는 ↖로는 발동 불가 명시"
+     "status": "확정",
+     "notes": "다수결 [1]319=↙모으고 ↘↙↗(GameFAQs·스팀측 2표), 소수: StrategyWiki [1]317(↖ 마무리). 스팀측 자료는 ↖로는 발동 불가 명시 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "칠성섬공각(Shichisei Senkukyaku)",
@@ -1127,8 +1139,8 @@
      "button": "K",
      "kind": "super",
      "air": true,
-     "status": "가이드만",
-     "notes": "올림픽 해금·POW Lv2 전용, 공중 전용"
+     "status": "확정",
+     "notes": "올림픽 해금·POW Lv2 전용, 공중 전용 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -1158,8 +1170,8 @@
      "command": "3",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "명칭 소수의견: GameFAQs 'Russian Kick'"
+     "status": "확정",
+     "notes": "명칭 소수의견: GameFAQs 'Russian Kick' | 실측: 뱅크[23]"
     },
     {
      "name": "플라잉 바디 프레스(Flying Body Press)",
@@ -1177,7 +1189,8 @@
      "button": "K",
      "kind": "command_normal",
      "air": true,
-     "status": "가이드만"
+     "status": "실측만",
+     "notes": "동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "공중 헤드벗(Midair Headbutt)",
@@ -1185,8 +1198,8 @@
      "button": "P",
      "kind": "command_normal",
      "air": true,
-     "status": "가이드만",
-     "notes": "실측 8+P가 일반 점프공격 그룹과 지문 미분리(공중 커버리지 한계) — 확정 보류. 스턴치 높음, 공중 상대 내리꽂음"
+     "status": "실측만",
+     "notes": "실측 8+P가 일반 점프공격 그룹과 지문 미분리(공중 커버리지 한계) — 확정 보류. 스턴치 높음, 공중 상대 내리꽂음 | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "더블 라리아트(Double Lariat)",
@@ -1202,8 +1215,8 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "소수: GameFAQs 412+K. 장풍·하단 회피"
+     "status": "확정",
+     "notes": "소수: GameFAQs 412+K. 장풍·하단 회피 | 실측: 뱅크[2]"
     },
     {
      "name": "배니싱 플랫(Banishing Flat)",
@@ -1230,15 +1243,16 @@
      "button": "K",
      "kind": "throw",
      "near": true,
-     "status": "가이드만"
+     "status": "실측만",
+     "notes": "동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "플라잉 파워밤(Flying Powerbomb)",
      "command": "632146",
      "button": "K",
      "kind": "throw",
-     "status": "가이드만",
-     "notes": "원거리에서 입력 시 달려가 잡는 이동 잡기(근접 시 아토믹 수플렉스)"
+     "status": "실측만",
+     "notes": "원거리에서 입력 시 달려가 잡는 이동 잡기(근접 시 아토믹 수플렉스) | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "파이널 아토믹 버스터(Final Atomic Buster)",
@@ -1246,24 +1260,24 @@
      "button": "P",
      "kind": "super",
      "near": true,
-     "status": "가이드만",
-     "notes": "레버 2회전 근접 잡기 초필"
+     "status": "확정",
+     "notes": "레버 2회전 근접 잡기 초필 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "에어리얼 러시안 슬램(Aerial Russian Slam)",
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "다수결 236236+K(GameFAQs·스팀측 2표), 소수: StrategyWiki 23623+K. 대공 전용 잡기(지상 상대 불가)"
+     "status": "확정",
+     "notes": "다수결 236236+K(GameFAQs·스팀측 2표), 소수: StrategyWiki 23623+K. 대공 전용 잡기(지상 상대 불가) | 실발동 확정(게이지 소모)"
     },
     {
      "name": "러시안 비트(Russian Beat)",
      "command": "214214",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금·POW Lv2 전용, 하단. 실측 214214+P는 무피해 별도 지문(banks22)만 남김"
+     "status": "확정",
+     "notes": "올림픽 해금·POW Lv2 전용, 하단. 실측 214214+P는 무피해 별도 지문(banks22)만 남김 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -1294,8 +1308,8 @@
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "다운 유발, 가드 크러시치 높음(스팀)"
+     "status": "확정",
+     "notes": "다운 유발, 가드 크러시치 높음(스팀) | 실측: 뱅크[1] 피해9"
     },
     {
      "name": "전방전신(Zenpou Tenshin)",
@@ -1329,32 +1343,32 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "지상/공중 가능"
+     "status": "확정",
+     "notes": "지상/공중 가능 | 실측: 뱅크[22]"
     },
     {
      "name": "승룡열파(Shoryu Reppa)",
      "command": "23623",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236. 실측에서 236236+P는 초필이 아닌 6+P 지문으로 흡수 → 23623 지지(부정적 교차검증)"
+     "status": "확정",
+     "notes": "다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236. 실측에서 236236+P는 초필이 아닌 6+P 지문으로 흡수 → 23623 지지(부정적 교차검증) | 실발동 확정(게이지 소모)"
     },
     {
      "name": "신룡권(Shinryuken)",
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "다수결 236236+K(GameFAQs·스팀측), 소수: StrategyWiki 23623+K. 발동 중 레버·버튼 연타로 히트/대미지 증가"
+     "status": "확정",
+     "notes": "다수결 236236+K(GameFAQs·스팀측), 소수: StrategyWiki 23623+K. 발동 중 레버·버튼 연타로 히트/대미지 증가 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "질풍신뢰각(Shippu Jinraikyaku)",
      "command": "214214",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금·POW Lv2 전용"
+     "status": "확정",
+     "notes": "올림픽 해금·POW Lv2 전용 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -1394,8 +1408,8 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "지상/공중 가능"
+     "status": "확정",
+     "notes": "지상/공중 가능 | 실측: 뱅크[22] 피해8"
     },
     {
      "name": "진공아도권(Shinku Gadouken)",
@@ -1411,15 +1425,16 @@
      "command": "23623",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236"
+     "status": "확정",
+     "notes": "다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "필승무뢰권(Hisshou Burai Ken)",
      "command": "214214",
      "button": "K",
      "kind": "super",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실발동 확정(게이지 소모)"
     },
     {
      "name": "오토코미치(Otoko Michi)",
@@ -1427,7 +1442,7 @@
      "button": "P",
      "kind": "super",
      "status": "가이드만",
-     "notes": "올림픽 해금·POW Lv2 전용. ←모으고 →←→+P. 가드 불능, 명중 시 자신 체력도 대폭 소모"
+     "notes": "올림픽 해금·POW Lv2 전용. ←모으고 →←→+P. 가드 불능, 명중 시 자신 체력도 대폭 소모 | 게이지 소모 0 — 커맨드 표기 의심 또는 해금 전용"
     }
    ],
    "slot_suggestion": {
@@ -1449,8 +1464,8 @@
      "command": "6",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만",
-     "notes": "중단(노멀 캔슬 시 소멸)"
+     "status": "확정",
+     "notes": "중단(노멀 캔슬 시 소멸) | 실측: 뱅크[1]"
     },
     {
      "name": "파동권(Hadouken)",
@@ -1475,16 +1490,16 @@
      "command": "214",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "지상/공중 가능"
+     "status": "확정",
+     "notes": "지상/공중 가능 | 실측: 뱅크[2]"
     },
     {
      "name": "사쿠라 오토시(Sakura Otoshi)",
      "command": "623",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "발동 후 P를 타이밍 맞춰 최대 3회 추가입력"
+     "status": "확정",
+     "notes": "발동 후 P를 타이밍 맞춰 최대 3회 추가입력 | 실측: 뱅크[23]"
     },
     {
      "name": "진공파동권(Shinku Hadouken)",
@@ -1500,16 +1515,16 @@
      "command": "23623",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236"
+     "status": "확정",
+     "notes": "다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "하루이치방(Haru Ichiban)",
      "command": "214214",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "하단"
+     "status": "확정",
+     "notes": "하단 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "슌고쿠사츠(Shun Goku Satsu)",
@@ -1517,7 +1532,7 @@
      "button": "P",
      "kind": "super",
      "status": "가이드만",
-     "notes": "올림픽 해금·POW Lv2 전용. ←모으고 →←→+P. 가드 불능"
+     "notes": "올림픽 해금·POW Lv2 전용. ←모으고 →←→+P. 가드 불능 | 게이지 소모 0 — 커맨드 표기 의심 또는 해금 전용"
     }
    ],
    "slot_suggestion": {
@@ -1540,8 +1555,8 @@
      "button": "K",
      "kind": "command_normal",
      "air": true,
-     "status": "가이드만",
-     "notes": "공중 전용, 스팀 기준 3단기"
+     "status": "실측만",
+     "notes": "공중 전용, 스팀 기준 3단기 | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "소울 피스트(Soul Fist)",
@@ -1585,15 +1600,16 @@
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실발동 확정(게이지 소모)"
     },
     {
      "name": "발키리 턴(Valkyrie Turn)",
      "command": "63214",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "이동 후 K 추가입력 시에만 공격 발동. 3원천 모두 게이지 소모 초필로 분류. 약/강으로 궤도 변화(스팀)"
+     "status": "확정",
+     "notes": "이동 후 K 추가입력 시에만 공격 발동. 3원천 모두 게이지 소모 초필로 분류. 약/강으로 궤도 변화(스팀) | 실발동 확정(게이지 소모)"
     },
     {
      "name": "크립틱 니들(Cryptic Needle)",
@@ -1601,7 +1617,7 @@
      "button": "P",
      "kind": "super",
      "status": "가이드만",
-     "notes": "올림픽 해금·POW Lv2 전용. 실측 스윕에 지상 214214+P 입력 누락 — 미검증"
+     "notes": "올림픽 해금·POW Lv2 전용. 실측 스윕에 지상 214214+P 입력 누락 — 미검증 | 게이지 소모 0 — 커맨드 표기 의심 또는 해금 전용"
     }
    ],
    "slot_suggestion": {
@@ -1642,7 +1658,8 @@
      "command": "623",
      "button": "K",
      "kind": "special",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[23] 피해7"
     },
     {
      "name": "헬 캣(Hell Cat)",
@@ -1650,8 +1667,8 @@
      "button": "K",
      "kind": "throw",
      "near": true,
-     "status": "가이드만",
-     "notes": "근접 커맨드 잡기"
+     "status": "확정",
+     "notes": "근접 커맨드 잡기 | 실측: 뱅크[32]"
     },
     {
      "name": "캣 클린치(Cat Clinch/Fake Throw)",
@@ -1659,8 +1676,8 @@
      "button": "P",
      "kind": "command_normal",
      "near": true,
-     "status": "가이드만",
-     "notes": "P+K 동시. 무데미지로 잡고 점프 이탈. StrategyWiki 'Fake Throw'/스팀 'Cat Clinch', GameFAQs 미기재(2:1)"
+     "status": "실측만",
+     "notes": "P+K 동시. 무데미지로 잡고 점프 이탈. StrategyWiki 'Fake Throw'/스팀 'Cat Clinch', GameFAQs 미기재(2:1) | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정)"
     },
     {
      "name": "댄싱 플래시(Dancing Flash)",
@@ -1676,16 +1693,16 @@
      "command": "214214",
      "button": "P",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "다수결 P 또는 K 모두 가능(StrategyWiki·스팀 2표), 소수: GameFAQs K만 표기. P판=지상 접근/K판=공중 접근(스팀)"
+     "status": "확정",
+     "notes": "다수결 P 또는 K 모두 가능(StrategyWiki·스팀 2표), 소수: GameFAQs K만 표기. P판=지상 접근/K판=공중 접근(스팀) | 실발동 확정(게이지 소모)"
     },
     {
      "name": "ES 롤링 스크래치(ES Rolling Scratch)",
      "command": "236236",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "올림픽 해금·POW Lv2 전용. 발동 후 P 연타로 대미지 대부분 발생"
+     "status": "확정",
+     "notes": "올림픽 해금·POW Lv2 전용. 발동 후 P 연타로 대미지 대부분 발생 | 실발동 확정(게이지 소모)"
     }
    ],
    "slot_suggestion": {
@@ -1715,7 +1732,8 @@
      "command": "3",
      "button": "K",
      "kind": "command_normal",
-     "status": "가이드만"
+     "status": "확정",
+     "notes": "실측: 뱅크[23]"
     },
     {
      "name": "소닉 붐(Sonic Boom)",
@@ -1731,8 +1749,8 @@
      "command": "[2]8",
      "button": "K",
      "kind": "special",
-     "status": "가이드만",
-     "notes": "↓모으고 ↑+K. 명칭 소수의견: GameFAQs 'Flash Kick'. 실측 [2]8+P(dmg3)는 점프 공격 지문으로 판단"
+     "status": "확정",
+     "notes": "↓모으고 ↑+K. 명칭 소수의견: GameFAQs 'Flash Kick'. 실측 [2]8+P(dmg3)는 점프 공격 지문으로 판단 | 실측: 뱅크[3] 피해8"
     },
     {
      "name": "소닉 허리케인(Sonic Hurricane)",
@@ -1740,15 +1758,15 @@
      "button": "P",
      "kind": "super",
      "status": "가이드만",
-     "notes": "←모으고 →←→+P. Lv2는 허리케인 전방 발사. 실측 236236+P의 초필 지문(dmg7)이 이 기술의 간이입력 성립일 가능성"
+     "notes": "←모으고 →←→+P. Lv2는 허리케인 전방 발사. 실측 236236+P의 초필 지문(dmg7)이 이 기술의 간이입력 성립일 가능성 | 게이지 소모 0 — 커맨드 표기 의심 또는 해금 전용"
     },
     {
      "name": "서머솔트 스트라이크(Somersault Strike)",
      "command": "[1]319",
      "button": "K",
      "kind": "super",
-     "status": "가이드만",
-     "notes": "다수결 [1]319=↙모으고 ↘↙↗+K(GameFAQs·스팀측 2표), 소수: StrategyWiki [1]317(↖ 마무리). 스팀측 자료는 ↖ 마무리 불가 명시"
+     "status": "확정",
+     "notes": "다수결 [1]319=↙모으고 ↘↙↗+K(GameFAQs·스팀측 2표), 소수: StrategyWiki [1]317(↖ 마무리). 스팀측 자료는 ↖ 마무리 불가 명시 | 실발동 확정(게이지 소모)"
     },
     {
      "name": "크로스파이어 블리츠(Crossfire Blitz)",
@@ -1756,7 +1774,7 @@
      "button": "K",
      "kind": "super",
      "status": "가이드만",
-     "notes": "올림픽 해금·POW Lv2 전용. 명칭 이견: StrategyWiki 'Crossfire Assault'"
+     "notes": "올림픽 해금·POW Lv2 전용. 명칭 이견: StrategyWiki 'Crossfire Assault' | 게이지 소모 0 — 커맨드 표기 의심 또는 해금 전용"
     }
    ],
    "slot_suggestion": {

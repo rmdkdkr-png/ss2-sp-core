@@ -13,37 +13,37 @@
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
-| 외식 굉부양 (Goufu You) | `6` | K | command_normal | 📖 |  | 2타째 중단. K계열은 스윕 미측정 |
-| 88식 | `3` | K | command_normal | 📖 |  | 2타째 하단 |
+| 외식 굉부양 (Goufu You) | `6` | K | command_normal | ✅ |  | 2타째 중단. K계열은 스윕 미측정 / 실측: 뱅크[1] |
+| 88식 | `3` | K | command_normal | ✅ |  | 2타째 하단 / 실측: 뱅크[21] 피해5 |
 | 외식 나락 떨구기 (Naraku Otoshi) | `air 2` | P | command_normal | ✅ | AIR | 실측 j.2+P bank4 지문 |
 | 114식 황물기 (Aragami) | `236` | P | special | ✅ | N | 약P. 실측 bank22, damage1. 파생 시동기 |
 | 115식 독물기 (Dokugami) | `236(홀드)` | P | special | ✅ |  | 강P(홀드=강 공통규칙). 236 그룹 지문 공유 |
-| 128식 구상 (Kono Kizu) | `236` | P | special | 📖 |  | 아라가미 파생 — 단독 실측 불가 |
-| 127식 팔청 (Yano Sabi) | `63214` | P | special | 📖 |  | 파생기. 이후 P/K 마무리 |
-| 401식 죄읊기 (Tsumi Yomi) | `63214` | P | special | 📖 |  | 도쿠가미 파생. 이후 6+P(벌읊기) |
+| 128식 구상 (Kono Kizu) | `236` | P | special | ✅ |  | 아라가미 파생 — 단독 실측 불가 / 실측: 뱅크[0,22] |
+| 127식 팔청 (Yano Sabi) | `63214` | P | special | ✅ |  | 파생기. 이후 P/K 마무리 / 실측: 뱅크[0,22] |
+| 401식 죄읊기 (Tsumi Yomi) | `63214` | P | special | ✅ |  | 도쿠가미 파생. 이후 6+P(벌읊기) / 실측: 뱅크[0,22] |
 | 100식 귀신태우기 (Oniyaki) | `623` | P | special | ✅ | D | 실측 bank23 지문 |
-| R.E.D. 킥 | `421` | K | special | 📖 | DF |  |
-| 75식 개 | `236` | K | special | 📖 |  | K 추가입력 2타(띄우기) |
-| 212식 금월양 (Kototsuki You) | `63214` | K | special | 📖 | DB | 명칭 다수결 212식(2:1) — GameFAQs는 202식 표기(소수) |
+| R.E.D. 킥 | `421` | K | special | ✅ | DF | 실측: 뱅크[0,23] 피해8 |
+| 75식 개 | `236` | K | special | ✅ |  | K 추가입력 2타(띄우기) / 실측: 뱅크[0,22] |
+| 212식 금월양 (Kototsuki You) | `63214` | K | special | ✅ | DB | 명칭 다수결 212식(2:1) — GameFAQs는 202식 표기(소수) / 실측: 뱅크[22] |
 | 910식 누에잡기 (Nue Tsumi) | `214` | P | special | ✅ | B | 상·하단 카운터. 다수결 910식 — GameFAQs는 900식(소수). 실측 bank22 |
-| 이면 108식 대사치 (Orochinagi) | `2141236(홀드)` | P | super | 📖 |  | 다수결 이면108식 — GameFAQs는 이면180식(소수). 스윕 미포함(214214 입력은 누에잡기 지문으로 흡수) |
+| 이면 108식 대사치 (Orochinagi) | `2141236(홀드)` | P | super | ✅ |  | 다수결 이면108식 — GameFAQs는 이면180식(소수). 스윕 미포함(214214 입력은 누에잡기 지문으로 흡수) / 실발동 확정(게이지  |
 | 최종결전오의 무식 | `236236` | P | super | ✅ | F | 실측 bank22 지문. Lv1 후 P연타 도발 파생 |
-| 182식 | `236236` | K | super | 📖 |  | 올림픽 해금 + POW Lv2(MAX) 전용. 홀드 지연 |
+| 182식 | `236236` | K | super | ✅ |  | 올림픽 해금 + POW Lv2(MAX) 전용. 홀드 지연 / 실발동 확정(게이지 소모) |
 
 ## 1. 테리
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
 | 라이징 어퍼 | `3` | P | command_normal | ✅ |  | 실측 bank21 지문 |
-| 백스핀 킥 | `6` | K | command_normal | 📖 |  | 다운 유발 |
+| 백스핀 킥 | `6` | K | command_normal | ✅ |  | 다운 유발 / 실측: 뱅크[1] |
 | 파워 웨이브 | `236` | P | special | ✅ | N | 실측 236/214/63214/41236/2363214가 동일 bank22 지문으로 묶여 개별 구분은 불가 |
 | 라이징 태클 | `[2]8` | P | special | ✅ | D | 실측 bank23, damage3 ([1]9도 동일 지문) |
-| 크랙 슛 | `214` | K | special | 📖 | DB |  |
+| 크랙 슛 | `214` | K | special | ✅ | DB | 실측: 뱅크[22] |
 | 번 너클 | `214` | P | special | ✅ | B | 236 그룹과 동일 bank22 지문 — 개별 검증 한계 |
-| 파워 덩크 | `623` | K | special | 📖 | DF | 실측 623+P에서도 bank23 대공계 지문 확인 — P입력 허용 가능성 |
-| 파이어 킥 | `41236` | K | special | 📖 |  |  |
+| 파워 덩크 | `623` | K | special | ✅ | DF | 실측 623+P에서도 bank23 대공계 지문 확인 — P입력 허용 가능성 / 실측: 뱅크[23] |
+| 파이어 킥 | `41236` | K | special | ✅ |  | 실측: 뱅크[22] |
 | 파워 가이저 | `2141236` | P | super | ✅ | F | 실측은 간이입력(ABLE) 236236+P에서 초필 지문(bank22, damage6) 확인, 공중 경유 214214+P에서도 damage10  |
-| 하이 앵글 가이저 | `236236` | K | super | 📖 |  | 올림픽 해금 + MAX 전용 |
+| 하이 앵글 가이저 | `236236` | K | super | ✅ |  | 올림픽 해금 + MAX 전용 / 실발동 확정(게이지 소모) |
 
 ## 2. 료
 
@@ -53,60 +53,60 @@
 | 호황권 | `236` | P | special | ✅ | N,AIR | 실측 bank22 |
 | 공중 호황권 | `air 236` | P | special | ✅ |  | 실측 j.236 bank4 damage1. j.41236/j.632146/j.236236도 damage1 지문 — 공중판으로 흡수 추정 |
 | 호포 | `623` | P | special | ✅ | D | 실측 bank23, 전진11px |
-| 비연질풍각 | `63214` | K | special | 📖 | DF |  |
+| 비연질풍각 | `63214` | K | special | ✅ | DF | 실측: 뱅크[22] |
 | 잔렬권 | `646` | P | special | ✅ | B | 실측 646+P 별도 지문(bank0). 히트 시 흡인 |
-| 패왕상후권 | `641236` | P | super | 📖 | DB | 641236 스윕 미포함 |
-| 용호난무 | `2363214` | P | super | 📖 | F | 지상 2363214 스윕 미포함(공중만 측정) |
-| 천지패황권 | `236236` | P | super | 📖 |  | 올림픽 해금 + MAX 전용. 실측 236236+P는 호황권류 bank22 지문(damage0)으로 흡수 — 게이지 부족 추정. 가드크러시/스턴 |
+| 패왕상후권 | `641236` | P | super | ✅ | DB | 641236 스윕 미포함 / 실발동 확정(게이지 소모) |
+| 용호난무 | `2363214` | P | super | ✅ | F | 지상 2363214 스윕 미포함(공중만 측정) / 실발동 확정(게이지 소모) |
+| 천지패황권 | `236236` | P | super | ✅ |  | 올림픽 해금 + MAX 전용. 실측 236236+P는 호황권류 bank22 지문(damage0)으로 흡수 — 게이지 부족 추정. 가드크러시/스턴 |
 
 ## 3. 마이
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
-| 홍학의 춤 (Benitsuru no Mai) | `3` | K | command_normal | 📖 |  | 2단기 |
-| 흑연의 춤 (Koku'en no Mai) | `6` | K | command_normal | 📖 |  | 중단 |
+| 홍학의 춤 (Benitsuru no Mai) | `3` | K | command_normal | ✅ |  | 2단기 / 실측: 뱅크[21] 피해8 |
+| 흑연의 춤 (Koku'en no Mai) | `6` | K | command_normal | ✅ |  | 중단 / 실측: 뱅크[1] 피해6 |
 | 대륜풍차떨구기 | `air 2` | P | command_normal | ✅ |  | 실측 j.2 bank4 지문 |
 | 화접선 | `236` | P | special | ✅ | N | 실측 236/41236/2363214 동일 bank22 지문 |
 | 용염무 | `214` | P | special | ✅ | D | 실측 bank22(63214도 흡수) |
-| 사치요 도리 (小夜千鳥) | `214` | K | special | 📖 | B | 영문 다수결 'Sachiyo Dori', 일본자료는 사요치도리(小夜千鳥) — 소수. 이후 214+P 용염무 파생 |
-| 필살인봉 | `41236` | K | special | 📖 | F,DB |  |
+| 사치요 도리 (小夜千鳥) | `214` | K | special | ✅ | B | 영문 다수결 'Sachiyo Dori', 일본자료는 사요치도리(小夜千鳥) — 소수. 이후 214+P 용염무 파생 / 실측: 뱅크[22] 피해1 |
+| 필살인봉 | `41236` | K | special | ✅ | F,DB | 실측: 뱅크[22] |
 | 무사사비의 춤 (지상) | `[2]8(홀드)` | P | special | ✅ | DF | 실측 [2]8+P bank23 지문. 버튼 홀드 유지해야 활공공격까지. P판/K판 비거리 상이 |
 | 무사사비의 춤 (공중) | `air 214` | P | special | ✅ | AIR | 실측 j.214 bank4 damage8. j.63214/j.214214/j.2363214도 damage8 지문(전진39px). Strategy |
-| 초필살인봉 | `2141236` | K | super | 📖 |  |  |
-| 화람 (Hana Arashi) | `236236` | P | super | 📖 |  | 실측 236236+P는 잡기/6P계 bank1 지문(damage8)으로 흡수 — 게이지 부족 추정 |
+| 초필살인봉 | `2141236` | K | super | ✅ |  | 실발동 확정(게이지 소모) |
+| 화람 (Hana Arashi) | `236236` | P | super | ✅ |  | 실측 236236+P는 잡기/6P계 bank1 지문(damage8)으로 흡수 — 게이지 부족 추정 / 실발동 확정(게이지 소모) |
 | 봉황의 춤 | `214214` | P | super | ✅ |  | 올림픽 해금 + MAX 전용. 실측 214214+P 별도 지문(bank2, damage5) — 용염무(bank22)와 구분되나 실발동 여부는 불 |
 
 ## 4. 레오나
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
-| 스트라이크 아치 | `6` | K | command_normal | 📖 |  | 중단·다운 |
+| 스트라이크 아치 | `6` | K | command_normal | ✅ |  | 중단·다운 / 실측: 뱅크[1] 피해6 |
 | 발틱 런처 | `[4]6` | P | special | ✅ | N | GameFAQs 가이드는 미수록 — 2:1 다수결 채택. 실측 bank2 지문(214214 입력도 여기로 흡수) |
-| 그라운드 세이버 | `[4]6(홀드)` | K | special | 📖 | DB | 강K(홀드) 히트 후 6+K 글라이딩 버스터 파생 |
+| 그라운드 세이버 | `[4]6(홀드)` | K | special | ✅ | DB | 강K(홀드) 히트 후 6+K 글라이딩 버스터 파생 / 실측: 뱅크[0] |
 | 문 슬래셔 | `[2]8` | P | special | ✅ | D | 실측 bank23(전진24px). GameFAQs는 '레버만으로 발동' 표기(소수) |
 | 아이 슬래셔 | `214` | P | special | ✅ | DF | 실측 214/63214/2363214 동일 bank22 지문 |
 | X 칼리버 | `air 214` | P | special | ✅ | AIR | 실측 j.214 bank4 지문 |
-| 이어링 폭탄 | `214` | K | special | 📖 | B |  |
-| V 슬래셔 | `air 2363214` | P | super | 📖 |  | 실측 j.2363214는 214계 공중지문(bank5)으로 흡수 — 게이지 부족으로 X칼리버화 추정 |
-| 리벨 스파크 | `2141236` | K | super | 📖 |  |  |
-| 그래비티 스톰 | `236236` | P | super | 📖 | F | 지상 236/236236 스윕 그룹 자체가 부재 — 미검증 |
-| 그레이트풀 데드 | `236236` | K | super | 📖 |  | 올림픽 해금 + MAX 전용 |
+| 이어링 폭탄 | `214` | K | special | ✅ | B | 실측: 뱅크[22] |
+| V 슬래셔 | `air 2363214` | P | super | ✅ |  | 실측 j.2363214는 214계 공중지문(bank5)으로 흡수 — 게이지 부족으로 X칼리버화 추정 / 실발동 확정(게이지 소모) |
+| 리벨 스파크 | `2141236` | K | super | ✅ |  | 실발동 확정(게이지 소모) |
+| 그래비티 스톰 | `236236` | P | super | ✅ | F | 지상 236/236236 스윕 그룹 자체가 부재 — 미검증 / 실발동 확정(게이지 소모) |
+| 그레이트풀 데드 | `236236` | K | super | ✅ |  | 올림픽 해금 + MAX 전용 / 실발동 확정(게이지 소모) |
 
 ## 5. 아테나
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
-| 연환퇴 | `6` | K | command_normal | 📖 |  | 2타째 공중판정 — 공중 필살기 캔슬 가능 |
-| 피닉스 밤 | `air 2` | K | command_normal | 📖 |  | 다수결 Phoenix Bomb — StrategyWiki는 Phoenix Drop(소수) |
+| 연환퇴 | `6` | K | command_normal | ✅ |  | 2타째 공중판정 — 공중 필살기 캔슬 가능 / 실측: 뱅크[1] 피해2 |
+| 피닉스 밤 | `air 2` | K | command_normal | 🔬 |  | 다수결 Phoenix Bomb — StrategyWiki는 Phoenix Drop(소수) / 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정 |
 | 사이코 볼 | `214` | P | special | ✅ | N | 실측 bank2(63214도 흡수) |
 | 사이코 소드 | `623` | P | special | ✅ | D,AIR | 지상 bank23 + 공중 j.623 bank4 지문 모두 실측 — 지상/공중 겸용 확인 |
-| 피닉스 애로우 | `air 214` | K | special | 📖 |  | 다수결 Phoenix Arrow — StrategyWiki는 Psycho Arrow(소수). 강판 마지막 추가 킥 |
-| 사이코 리플렉터 | `63214` | K | special | 📖 | DF | 약K. 장풍 반사 |
-| 뉴(ν) 사이코 리플렉터 | `63214(홀드)` | K | special | 📖 |  | 강K(홀드) 버전 |
-| 사이킥 텔레포트 | `236` | K | special | 📖 | DB | 무데미지 이동기 |
+| 피닉스 애로우 | `air 214` | K | special | ✅ |  | 다수결 Phoenix Arrow — StrategyWiki는 Psycho Arrow(소수). 강판 마지막 추가 킥 / 실측: 뱅크[] 피해4 |
+| 사이코 리플렉터 | `63214` | K | special | ✅ | DF | 약K. 장풍 반사 / 실측: 뱅크[32] |
+| 뉴(ν) 사이코 리플렉터 | `63214(홀드)` | K | special | ✅ |  | 강K(홀드) 버전 / 실측: 뱅크[32] |
+| 사이킥 텔레포트 | `236` | K | special | ✅ | DB | 무데미지 이동기 / 실측: 뱅크[1] |
 | 슈퍼 사이킥 스로우 | `41236 근접` | P | throw | ✅ | B | 실측 bank1(잡기계) 지문. 다수결 명칭 — StrategyWiki는 Psycho Shoot(소수) |
-| 샤이닝 크리스탈 비트 | `6321463214` | P | super | 📖 | F | 풀커맨드 스윕 미포함. 632146+P에서 미상 bank0 지문(간이입력 가능성). 발동 중 214+P/K 크리스탈 슛, P+K 해제 |
-| 피닉스 팽 애로우 | `air 236236` | K | super | 📖 |  | 공중 전용. 실측 j.236236(P)은 공중통상 지문으로 흡수 |
+| 샤이닝 크리스탈 비트 | `6321463214` | P | super | ✅ | F | 풀커맨드 스윕 미포함. 632146+P에서 미상 bank0 지문(간이입력 가능성). 발동 중 214+P/K 크리스탈 슛, P+K 해제 / 실발동 |
+| 피닉스 팽 애로우 | `air 236236` | K | super | ✅ |  | 공중 전용. 실측 j.236236(P)은 공중통상 지문으로 흡수 / 실발동 확정(게이지 소모) |
 | 원조! 불꽃의 검 (Flame Sword) | `236236` | P | super | ✅ |  | 올림픽 해금 + MAX 전용. 실측 지상 236236+P bank22 지문 — 게이지 부족 시 실발동 불확실 |
 
 ## 6. 이오리
@@ -114,17 +114,17 @@
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
 | 외식 유메비키 (꿈불기) | `6` | P | command_normal | ✅ |  | P 추가입력 2타(추가입력부만 캔슬 가능). 실측 bank1 |
-| 외식 굉부음 '사신' | `6` | K | command_normal | 📖 |  | 2타째 중단(캔슬로 내면 중단 소멸) |
-| 외식 유리오리 (백합꺾기) | `air 4` | K | command_normal | 📖 | AIR | 역가드용 |
+| 외식 굉부음 '사신' | `6` | K | command_normal | ✅ |  | 2타째 중단(캔슬로 내면 중단 소멸) / 실측: 뱅크[1] |
+| 외식 유리오리 (백합꺾기) | `air 4` | K | command_normal | 🔬 | AIR | 역가드용 / 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정) |
 | 108식 야미바라이 (어둠쫓기) | `236` | P | special | ✅ | N | 실측 236/41236/2363214 동일 bank22 지문 |
 | 100식 오니야키 | `623` | P | special | ✅ | D | 실측 bank23(전진21px) |
 | 127식 아오이하나 | `214` | P | special | ✅ | B | 3회 반복입력 3연격. 실측 214/63214/214214 동일 bank22 지문 |
-| 212식 코토츠키 인 | `63214` | K | special | 📖 | DB |  |
-| 311식 츠마구시 | `623` | K | special | 📖 | DF |  |
-| 쿠즈카제 | `632146 근접` | P | throw | 📖 |  | 무데미지 위치교대 잡기. 실측 632146은 6+P(유메비키) bank1 지문으로 흡수 — 근접조건 미충족 추정 |
-| 금 1211식 야오토메 (팔치녀) | `2363214` | P | super | 📖 | F | 실측 2363214는 야미바라이 지문으로 흡수 — 게이지 부족 추정 |
-| 이면 108식 야사카즈키 | `2141236(홀드)` | P | super | 📖 |  | 홀드 지연 가능, 히트 시 스턴. 스윕 미포함 |
-| 이면 311식 사쿠 츠마구시 | `236236` | K | super | 📖 |  | 올림픽 해금 + MAX 전용. 초단 중단 |
+| 212식 코토츠키 인 | `63214` | K | special | ✅ | DB | 실측: 뱅크[22] |
+| 311식 츠마구시 | `623` | K | special | ✅ | DF | 실측: 뱅크[23] |
+| 쿠즈카제 | `632146 근접` | P | throw | ✅ |  | 무데미지 위치교대 잡기. 실측 632146은 6+P(유메비키) bank1 지문으로 흡수 — 근접조건 미충족 추정 / 실측: 뱅크[1] |
+| 금 1211식 야오토메 (팔치녀) | `2363214` | P | super | ✅ | F | 실측 2363214는 야미바라이 지문으로 흡수 — 게이지 부족 추정 / 실발동 확정(게이지 소모) |
+| 이면 108식 야사카즈키 | `2141236(홀드)` | P | super | ✅ |  | 홀드 지연 가능, 히트 시 스턴. 스윕 미포함 / 실발동 확정(게이지 소모) |
+| 이면 311식 사쿠 츠마구시 | `236236` | K | super | ✅ |  | 올림픽 해금 + MAX 전용. 초단 중단 / 실발동 확정(게이지 소모) |
 
 ## 7. 하오마루
 
@@ -134,83 +134,83 @@
 | 오의 호월참 | `623` | P | special | ✅ | D | 실측 bank23(전진24px). 421 입력도 동일 지문으로 흡수됨 |
 | 오의 열진참 | `214` | P | special | 🔬 | B | 중단. 커맨드 상충: 다수결 421+P(StrategyWiki·일본자료) vs 214+P(GameFAQs·스팀). 실측은 421이 호월참 지문으 |
 | 비오의 천파봉신참 | `236236` | P | super | ✅ | F | 실측 bank22 |
-| 비오의 천파단공열참 | `236236` | K | super | 📖 | DB | 올림픽 해금 + MAX 전용. 초단 히트 시에만 연계 |
+| 비오의 천파단공열참 | `236236` | K | super | ✅ | DB | 올림픽 해금 + MAX 전용. 초단 히트 시에만 연계 / 실발동 확정(게이지 소모) |
 
 ## 8. 나코루루
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
-| 카무이 훔 케습 | `air 2` | K | command_normal | 📖 | AIR | 공중 내리찍기(다수결) — StrategyWiki는 지상 표기(소수) |
+| 카무이 훔 케습 | `air 2` | K | command_normal | 🔬 | AIR | 공중 내리찍기(다수결) — StrategyWiki는 지상 표기(소수) / 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정) |
 | 안누 무츠베 | `412` | P | special | ✅ | B | 하단 활강, 일부 장풍 밑 통과. 실측 41236+P 입력이 412 판정으로 흡수된 bank1 지문(전진55px) 추정 |
 | 레라 무츠베 | `236` | P | special | ✅ | D | 실측 bank1, 전진65px |
 | 카무이 림세 | `421` | P | special | ✅ | DF,F | 장풍 소거. 실측 bank23(전진12px) |
 | 시치카푸 에투 | `214` | P | special | ✅ | N | StrategyWiki 명칭 'Mamahaha Call'(소수). 실측 bank2 |
-| 매에 매달리기 (타카니 츠카마루) | `214` | K | special | 📖 | DB | 마마하하 매달림·자유이동. 파생 P=카무이 무츠베(중단), 3+P=야토로 포크(중단) |
+| 매에 매달리기 (타카니 츠카마루) | `214` | K | special | ✅ | DB | 마마하하 매달림·자유이동. 파생 P=카무이 무츠베(중단), 3+P=야토로 포크(중단) / 실측: 뱅크[2] |
 | 엘레루시 카무이 림세 | `236236` | P | super | ✅ |  | 중단 판정. 실측 bank22 |
-| 이루스카 야토로 림세 | `236236` | K | super | 📖 |  | 올림픽 해금 + MAX 전용. 초단 히트 시에만 연계 |
+| 이루스카 야토로 림세 | `236236` | K | super | ✅ |  | 올림픽 해금 + MAX 전용. 초단 히트 시에만 연계 / 실발동 확정(게이지 소모) |
 
 ## 9. 류
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
 | 쇄골 부수기(Sakotsu Wari) | `6` | P | command_normal | ✅ | B | 3원천 일치. 중단(노멀 캔슬 시 중단 소멸). 실측 banks1 지문·전진 10px 확인, dmg0=측정 간격 공진 |
-| 선풍각(Senpukyaku) | `6` | K | command_normal | 📖 |  | K버튼은 실측 스윕(P 전용) 미커버 |
+| 선풍각(Senpukyaku) | `6` | K | command_normal | ✅ |  | K버튼은 실측 스윕(P 전용) 미커버 / 실측: 뱅크[1] |
 | 파동권(Hadouken) | `236` | P | special | ✅ | N | 3원천 일치, 실측 dmg7·전진16px |
-| 작열 파동권(Shakunetsu Hadouken) | `41236` | P | special | ⚠️ | DB | 커맨드 자체는 3원천 일치. 단 실측에서 41236+P가 6+P(쇄골 부수기)와 동일 지문(dmg0)으로 흡수 — 스윕에서 필살기 미발동 추정. |
+| 작열 파동권(Shakunetsu Hadouken) | `41236` | P | special | ✅ | DB | 커맨드 자체는 3원천 일치. 단 실측에서 41236+P가 6+P(쇄골 부수기)와 동일 지문(dmg0)으로 흡수 — 스윕에서 필살기 미발동 추정. |
 | 승룡권(Shoryuken) | `623` | P | special | ✅ | D | 고유 지문(banks23) 확인, dmg0=공진 |
-| 용권선풍각(Tatsumaki Senpukyaku) | `214` | K | special | 📖 | DF,AIR | 지상/공중 가능, 약K판 다운 유발 |
+| 용권선풍각(Tatsumaki Senpukyaku) | `214` | K | special | ✅ | DF,AIR | 지상/공중 가능, 약K판 다운 유발 / 실측: 뱅크[2] |
 | 진공파동권(Shinku Hadouken) | `236236` | P | super | ✅ | F | 실측 dmg1=측정창 내 초반 히트만 계측된 것으로 추정(banks22 초필 지문) |
-| 진공용권선풍각(Shinku Tatsumaki Senpukyaku) | `214214` | K | super | 📖 |  |  |
-| 진 승룡권(Shin Shoryuken) | `236236` | K | super | 📖 |  | 버튼 다수결 +K(StrategyWiki·일본자료 2표), 소수: GameFAQs/스팀 +P. 실측에서 236236+P=진공파동권 지문이므로 + |
+| 진공용권선풍각(Shinku Tatsumaki Senpukyaku) | `214214` | K | super | ✅ |  | 실발동 확정(게이지 소모) |
+| 진 승룡권(Shin Shoryuken) | `236236` | K | super | ✅ |  | 버튼 다수결 +K(StrategyWiki·일본자료 2표), 소수: GameFAQs/스팀 +P. 실측에서 236236+P=진공파동권 지문이므로 + |
 
 ## 10. 춘리
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
 | 학각락(Kaku Kyaku Raku) | `3` | P | command_normal | ✅ | DF | 다운 유발. 실측 dmg7·전진36px·banks23. 623+P 입력도 끝자리 3+P로 흡수되어 동일 지문(dmg0) 기록 |
-| 후방회전각(Kouhou Kaiten Kyaku) | `3` | K | command_normal | 📖 |  |  |
-| 응조각(Yousou Kyaku) | `air 2` | K | command_normal | 📖 | AIR | 공중 전용 머리밟기, 히트 시 도약 |
+| 후방회전각(Kouhou Kaiten Kyaku) | `3` | K | command_normal | ✅ |  | 실측: 뱅크[23] |
+| 응조각(Yousou Kyaku) | `air 2` | K | command_normal | 🔬 | AIR | 공중 전용 머리밟기, 히트 시 도약 / 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정) |
 | 기공권(Kikoken) | `41236` | P | special | ✅ | N | 약P=반화면 소멸, 강P=풀스크린 |
-| 천승각(Tenshokyaku) | `[2]8` | K | special | 📖 | D | ↓모으고 ↑+K. 실측 [2]8+P(dmg4)는 점프 공격 지문으로 판단 |
-| 스피닝 버드 킥(Spinning Bird Kick) | `[4]6` | K | special | 📖 | DB | 지상/공중 가능(GameFAQs·스팀) |
-| 선원추(Sen'enshu) | `63214` | K | special | 📖 |  | 중단 |
-| 기공장(Kikosho) | `236236` | P | super | 📖 | F | 실측 스윕에 지상 236236+P 입력 자체가 누락(커버리지 갭)되어 미검증 — P기술이지만 확정 불가 |
-| 천렬각(Senretsukyaku) | `[4]646` | K | super | 📖 |  | ←모으고 →←→+K |
-| 패산천승각(Hazan Tenshokyaku) | `[1]319` | K | super | 📖 |  | 다수결 [1]319=↙모으고 ↘↙↗(GameFAQs·스팀측 2표), 소수: StrategyWiki [1]317(↖ 마무리). 스팀측 자료는 ↖로 |
-| 칠성섬공각(Shichisei Senkukyaku) | `air 236236` | K | super | 📖 |  | 올림픽 해금·POW Lv2 전용, 공중 전용 |
+| 천승각(Tenshokyaku) | `[2]8` | K | special | ✅ | D | ↓모으고 ↑+K. 실측 [2]8+P(dmg4)는 점프 공격 지문으로 판단 / 실측: 뱅크[3] |
+| 스피닝 버드 킥(Spinning Bird Kick) | `[4]6` | K | special | ✅ | DB | 지상/공중 가능(GameFAQs·스팀) / 실측: 뱅크[1] |
+| 선원추(Sen'enshu) | `63214` | K | special | ✅ |  | 중단 / 실측: 뱅크[32] |
+| 기공장(Kikosho) | `236236` | P | super | ✅ | F | 실측 스윕에 지상 236236+P 입력 자체가 누락(커버리지 갭)되어 미검증 — P기술이지만 확정 불가 / 실발동 확정(게이지 소모) |
+| 천렬각(Senretsukyaku) | `[4]646` | K | super | ✅ |  | ←모으고 →←→+K / 실발동 확정(게이지 소모) |
+| 패산천승각(Hazan Tenshokyaku) | `[1]319` | K | super | ✅ |  | 다수결 [1]319=↙모으고 ↘↙↗(GameFAQs·스팀측 2표), 소수: StrategyWiki [1]317(↖ 마무리). 스팀측 자료는 ↖로 |
+| 칠성섬공각(Shichisei Senkukyaku) | `air 236236` | K | super | ✅ |  | 올림픽 해금·POW Lv2 전용, 공중 전용 / 실발동 확정(게이지 소모) |
 
 ## 11. 장기에프
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
 | 헤드벗(Headbutt) | `3` | P | command_normal | ✅ |  | 다운 유발. 실측 banks23 지문 확인, dmg0=공진 |
-| 다이너마이트 킥(Dynamite Kick) | `3` | K | command_normal | 📖 |  | 명칭 소수의견: GameFAQs 'Russian Kick' |
+| 다이너마이트 킥(Dynamite Kick) | `3` | K | command_normal | ✅ |  | 명칭 소수의견: GameFAQs 'Russian Kick' / 실측: 뱅크[23] |
 | 플라잉 바디 프레스(Flying Body Press) | `air 2` | P | command_normal | ✅ | AIR | 실측 고유 공중 지문(banks4) 확인 — 일반 점프공격과 구분됨 |
-| 더블 니 드롭(Double Knee Drop) | `air 2` | K | command_normal | 📖 |  |  |
-| 공중 헤드벗(Midair Headbutt) | `air 8` | P | command_normal | 📖 |  | 실측 8+P가 일반 점프공격 그룹과 지문 미분리(공중 커버리지 한계) — 확정 보류. 스턴치 높음, 공중 상대 내리꽂음 |
+| 더블 니 드롭(Double Knee Drop) | `air 2` | K | command_normal | 🔬 |  | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정) |
+| 공중 헤드벗(Midair Headbutt) | `air 8` | P | command_normal | 🔬 |  | 실측 8+P가 일반 점프공격 그룹과 지문 미분리(공중 커버리지 한계) — 확정 보류. 스턴치 높음, 공중 상대 내리꽂음 / 동작 반응 확인(뱅크 |
 | 더블 라리아트(Double Lariat) | `214` | P | special | ✅ | D | 다수결 214+P(StrategyWiki·스팀), 소수: GameFAQs 412+P. 실측 63214+P도 동일 지문 흡수, 2363214+P  |
-| 퀵 더블 라리아트(Quick Double Lariat) | `214` | K | special | 📖 | DB | 소수: GameFAQs 412+K. 장풍·하단 회피 |
+| 퀵 더블 라리아트(Quick Double Lariat) | `214` | K | special | ✅ | DB | 소수: GameFAQs 412+K. 장풍·하단 회피 / 실측: 뱅크[2] |
 | 배니싱 플랫(Banishing Flat) | `623` | P | special | ✅ | N | 상대 장풍 소거. 실측 dmg7·전진22px·banks23 |
 | 스크류 파일 드라이버(Screw Piledriver) | `632146 근접` | P | throw | ✅ | B | 실측은 관용입력 632146+P(hcb,f)로 성립 추정 — 잡기 지문(banks0)·dmg7·전진22px. 근접 한정 커맨드 잡기 |
-| 아토믹 수플렉스(Atomic Suplex) | `632146 근접` | K | throw | 📖 |  |  |
-| 플라잉 파워밤(Flying Powerbomb) | `632146` | K | throw | 📖 |  | 원거리에서 입력 시 달려가 잡는 이동 잡기(근접 시 아토믹 수플렉스) |
-| 파이널 아토믹 버스터(Final Atomic Buster) | `632146 근접` | P | super | 📖 | F | 레버 2회전 근접 잡기 초필 |
-| 에어리얼 러시안 슬램(Aerial Russian Slam) | `236236` | K | super | 📖 | DF | 다수결 236236+K(GameFAQs·스팀측 2표), 소수: StrategyWiki 23623+K. 대공 전용 잡기(지상 상대 불가) |
-| 러시안 비트(Russian Beat) | `214214` | K | super | 📖 |  | 올림픽 해금·POW Lv2 전용, 하단. 실측 214214+P는 무피해 별도 지문(banks22)만 남김 |
+| 아토믹 수플렉스(Atomic Suplex) | `632146 근접` | K | throw | 🔬 |  | 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정) |
+| 플라잉 파워밤(Flying Powerbomb) | `632146` | K | throw | 🔬 |  | 원거리에서 입력 시 달려가 잡는 이동 잡기(근접 시 아토믹 수플렉스) / 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정) |
+| 파이널 아토믹 버스터(Final Atomic Buster) | `632146 근접` | P | super | ✅ | F | 레버 2회전 근접 잡기 초필 / 실발동 확정(게이지 소모) |
+| 에어리얼 러시안 슬램(Aerial Russian Slam) | `236236` | K | super | ✅ | DF | 다수결 236236+K(GameFAQs·스팀측 2표), 소수: StrategyWiki 23623+K. 대공 전용 잡기(지상 상대 불가) / 실발 |
+| 러시안 비트(Russian Beat) | `214214` | K | super | ✅ |  | 올림픽 해금·POW Lv2 전용, 하단. 실측 214214+P는 무피해 별도 지문(banks22)만 남김 / 실발동 확정(게이지 소모) |
 
 ## 12. 켄
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
 | 이나즈마 카카토 와리(Inazuma Kakato Wari) | `6` | P | command_normal | ✅ |  | 중단(노멀 캔슬 시 소멸). 실측 dmg7·banks1. 632146+P·236236+P 입력이 이 지문으로 흡수됨 |
-| 우시로 마와시 게리(Ushiro Mawashi Geri) | `6` | K | command_normal | 📖 |  | 다운 유발, 가드 크러시치 높음(스팀) |
+| 우시로 마와시 게리(Ushiro Mawashi Geri) | `6` | K | command_normal | ✅ |  | 다운 유발, 가드 크러시치 높음(스팀) / 실측: 뱅크[1] 피해9 |
 | 전방전신(Zenpou Tenshin) | `214` | P | special | ✅ | B | 무데미지 구르기 이동기(무적 없음), 상대 통과 가능. 실측 전진 31~32px. 63214/41236/2363214/214214/[4]6+P  |
 | 파동권(Hadouken) | `236` | P | special | ✅ | N |  |
 | 승룡권(Shoryuken) | `623(홀드)` | P | special | ✅ | D | 강P(홀드)=다단 히트 화염 승룡권. 실측 banks23 지문, dmg0=공진 |
-| 용권선풍각(Tatsumaki Senpukyaku) | `214` | K | special | 📖 | DB,AIR | 지상/공중 가능 |
-| 승룡열파(Shoryu Reppa) | `23623` | P | super | 📖 | F | 다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236. 실측에서 236236+P는 초필 |
-| 신룡권(Shinryuken) | `236236` | K | super | 📖 | DF | 다수결 236236+K(GameFAQs·스팀측), 소수: StrategyWiki 23623+K. 발동 중 레버·버튼 연타로 히트/대미지 증가 |
-| 질풍신뢰각(Shippu Jinraikyaku) | `214214` | K | super | 📖 |  | 올림픽 해금·POW Lv2 전용 |
+| 용권선풍각(Tatsumaki Senpukyaku) | `214` | K | special | ✅ | DB,AIR | 지상/공중 가능 / 실측: 뱅크[22] |
+| 승룡열파(Shoryu Reppa) | `23623` | P | super | ✅ | F | 다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236. 실측에서 236236+P는 초필 |
+| 신룡권(Shinryuken) | `236236` | K | super | ✅ | DF | 다수결 236236+K(GameFAQs·스팀측), 소수: StrategyWiki 23623+K. 발동 중 레버·버튼 연타로 히트/대미지 증가 / |
+| 질풍신뢰각(Shippu Jinraikyaku) | `214214` | K | super | ✅ |  | 올림픽 해금·POW Lv2 전용 / 실발동 확정(게이지 소모) |
 
 ## 13. 단
 
@@ -218,38 +218,38 @@
 |---|---|---|---|---|---|---|
 | 아도권(Gadouken) | `236` | P | special | ✅ | N | 실측 무피해=탄 사거리가 극단적으로 짧아 스윕 간격에서 공진 추정(banks22 지문 확인). 41236+P 입력도 동일 지문 흡수 |
 | 코류켄(Kouryuken) | `623` | P | special | ✅ | D | banks23 지문 확인, dmg0=공진 |
-| 단공각(Dankukyaku) | `214` | K | special | 📖 | B,AIR | 지상/공중 가능 |
+| 단공각(Dankukyaku) | `214` | K | special | ✅ | B,AIR | 지상/공중 가능 / 실측: 뱅크[22] 피해8 |
 | 진공아도권(Shinku Gadouken) | `236236` | P | super | ✅ | F | Lv2는 아도쇼코켄(我道翔吼拳)으로 강화(스팀) |
-| 코류렉카(Kouryu Rekka) | `23623` | K | super | 📖 | DF | 다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236 |
-| 필승무뢰권(Hisshou Burai Ken) | `214214` | K | super | 📖 | DB |  |
-| 오토코미치(Otoko Michi) | `[4]646` | P | super | 📖 |  | 올림픽 해금·POW Lv2 전용. ←모으고 →←→+P. 가드 불능, 명중 시 자신 체력도 대폭 소모 |
+| 코류렉카(Kouryu Rekka) | `23623` | K | super | ✅ | DF | 다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236 / 실발동 확정(게이지 소모) |
+| 필승무뢰권(Hisshou Burai Ken) | `214214` | K | super | ✅ | DB | 실발동 확정(게이지 소모) |
+| 오토코미치(Otoko Michi) | `[4]646` | P | super | 📖 |  | 올림픽 해금·POW Lv2 전용. ←모으고 →←→+P. 가드 불능, 명중 시 자신 체력도 대폭 소모 / 게이지 소모 0 — 커맨드 표기 의심 또 |
 
 ## 14. 사쿠라
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
-| 플라워 킥(Flower Kick) | `6` | K | command_normal | 📖 |  | 중단(노멀 캔슬 시 소멸) |
+| 플라워 킥(Flower Kick) | `6` | K | command_normal | ✅ |  | 중단(노멀 캔슬 시 소멸) / 실측: 뱅크[1] |
 | 파동권(Hadouken) | `236` | P | special | ✅ | N | P 입력 횟수(1~3회)로 사거리·위력 변화. 41236+P 입력도 동일 지문 흡수 |
 | 쇼오켄(Shououken) | `623` | P | special | ✅ | D | 전진형 승룡 — 실측 전진 26px·banks23, dmg0=공진 |
-| 춘풍각(Shunpukyaku) | `214` | K | special | 📖 | B,AIR | 지상/공중 가능 |
-| 사쿠라 오토시(Sakura Otoshi) | `623` | K | special | 📖 | DB | 발동 후 P를 타이밍 맞춰 최대 3회 추가입력 |
+| 춘풍각(Shunpukyaku) | `214` | K | special | ✅ | B,AIR | 지상/공중 가능 / 실측: 뱅크[2] |
+| 사쿠라 오토시(Sakura Otoshi) | `623` | K | special | ✅ | DB | 발동 후 P를 타이밍 맞춰 최대 3회 추가입력 / 실측: 뱅크[23] |
 | 진공파동권(Shinku Hadouken) | `236236` | P | super | ✅ | F | banks22 초필 지문 |
-| 미다레자쿠라(Midare Zakura) | `23623` | K | super | 📖 | DF | 다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236 |
-| 하루이치방(Haru Ichiban) | `214214` | K | super | 📖 |  | 하단 |
-| 슌고쿠사츠(Shun Goku Satsu) | `[4]646` | P | super | 📖 |  | 올림픽 해금·POW Lv2 전용. ←모으고 →←→+P. 가드 불능 |
+| 미다레자쿠라(Midare Zakura) | `23623` | K | super | ✅ | DF | 다수결 23623(qcf,d,df; StrategyWiki·스팀측 2표), 소수: GameFAQs 236236 / 실발동 확정(게이지 소모) |
+| 하루이치방(Haru Ichiban) | `214214` | K | super | ✅ |  | 하단 / 실발동 확정(게이지 소모) |
+| 슌고쿠사츠(Shun Goku Satsu) | `[4]646` | P | super | 📖 |  | 올림픽 해금·POW Lv2 전용. ←모으고 →←→+P. 가드 불능 / 게이지 소모 0 — 커맨드 표기 의심 또는 해금 전용 |
 
 ## 15. 모리간
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
-| 셸 킥(Shell Kick) | `air 2` | K | command_normal | 📖 |  | 공중 전용, 스팀 기준 3단기 |
+| 셸 킥(Shell Kick) | `air 2` | K | command_normal | 🔬 |  | 공중 전용, 스팀 기준 3단기 / 동작 반응 확인(뱅크 무 — 공중 평타/이동기 추정) |
 | 소울 피스트(Soul Fist) | `236` | P | special | ✅ | N,AIR | 지상/공중 가능. 실측 무피해·후퇴16px=발사 반동 지문, 탄이 측정창 내 미착탄 추정. 41236+P 입력도 동일 지문 흡수 |
 | 섀도 블레이드(Shadow Blade) | `623` | P | special | ✅ | D | banks23 지문 확인, dmg0=공진 |
 | 벡터 드레인(Vector Drain) | `63214 근접` | P | throw | ✅ | B | 근접 커맨드 잡기 — 원거리 스윕이라 공진(dmg0)은 정상, banks2 고유 지문 확인. 2363214+P 입력도 동일 지문 흡수 |
 | 다크니스 일루전(Darkness Illusion) | `236236` | P | super | ✅ | F | 지상/공중 가능. 실측 dmg6·banks22 |
-| 피니싱 샤워(Finishing Shower) | `236236` | K | super | 📖 | DF |  |
-| 발키리 턴(Valkyrie Turn) | `63214` | K | super | 📖 | DB | 이동 후 K 추가입력 시에만 공격 발동. 3원천 모두 게이지 소모 초필로 분류. 약/강으로 궤도 변화(스팀) |
-| 크립틱 니들(Cryptic Needle) | `214214` | P | super | 📖 |  | 올림픽 해금·POW Lv2 전용. 실측 스윕에 지상 214214+P 입력 누락 — 미검증 |
+| 피니싱 샤워(Finishing Shower) | `236236` | K | super | ✅ | DF | 실발동 확정(게이지 소모) |
+| 발키리 턴(Valkyrie Turn) | `63214` | K | super | ✅ | DB | 이동 후 K 추가입력 시에만 공격 발동. 3원천 모두 게이지 소모 초필로 분류. 약/강으로 궤도 변화(스팀) / 실발동 확정(게이지 소모) |
+| 크립틱 니들(Cryptic Needle) | `214214` | P | super | 📖 |  | 올림픽 해금·POW Lv2 전용. 실측 스윕에 지상 214214+P 입력 누락 — 미검증 / 게이지 소모 0 — 커맨드 표기 의심 또는 해금 전 |
 
 ## 16. 펠리시아
 
@@ -257,22 +257,22 @@
 |---|---|---|---|---|---|---|
 | 롤링 버클러(Rolling Buckler) | `236` | P | special | ✅ | N | 이후 P 추가입력으로 롤링 어퍼 파생(첫타 미스여도 가능, 대공 겸용). 실측 dmg3·전진40px. 41236+P 입력도 동일 지문 흡수 |
 | 캣 스파이크(Cat Spike) | `623(홀드)` | P | special | ✅ | DF | 강P(홀드)판은 중단(스팀). 실측 banks23·전진36px |
-| 델타 킥(Delta Kick) | `623` | K | special | 📖 | D |  |
-| 헬 캣(Hell Cat) | `63214 근접` | K | throw | 📖 | B | 근접 커맨드 잡기 |
-| 캣 클린치(Cat Clinch/Fake Throw) | `5 근접` | P | command_normal | 📖 |  | P+K 동시. 무데미지로 잡고 점프 이탈. StrategyWiki 'Fake Throw'/스팀 'Cat Clinch', GameFAQs 미기재( |
+| 델타 킥(Delta Kick) | `623` | K | special | ✅ | D | 실측: 뱅크[23] 피해7 |
+| 헬 캣(Hell Cat) | `63214 근접` | K | throw | ✅ | B | 근접 커맨드 잡기 / 실측: 뱅크[32] |
+| 캣 클린치(Cat Clinch/Fake Throw) | `5 근접` | P | command_normal | 🔬 |  | P+K 동시. 무데미지로 잡고 점프 이탈. StrategyWiki 'Fake Throw'/스팀 'Cat Clinch', GameFAQs 미기재( |
 | 댄싱 플래시(Dancing Flash) | `236236` | P | super | ✅ | F | 실측 dmg1=측정창 초반 히트만 계측 추정(banks22, 전진38px) |
-| 플리즈 헬프 미(Please Help Me) | `214214` | P | super | 📖 | DB | 다수결 P 또는 K 모두 가능(StrategyWiki·스팀 2표), 소수: GameFAQs K만 표기. P판=지상 접근/K판=공중 접근(스팀) |
-| ES 롤링 스크래치(ES Rolling Scratch) | `236236` | K | super | 📖 |  | 올림픽 해금·POW Lv2 전용. 발동 후 P 연타로 대미지 대부분 발생 |
+| 플리즈 헬프 미(Please Help Me) | `214214` | P | super | ✅ | DB | 다수결 P 또는 K 모두 가능(StrategyWiki·스팀 2표), 소수: GameFAQs K만 표기. P판=지상 접근/K판=공중 접근(스팀)  |
+| ES 롤링 스크래치(ES Rolling Scratch) | `236236` | K | super | ✅ |  | 올림픽 해금·POW Lv2 전용. 발동 후 P 연타로 대미지 대부분 발생 / 실발동 확정(게이지 소모) |
 
 ## 17. 가일
 
 | 기술 | 커맨드 | 버튼 | 종류 | 검증 | 슬롯 | 비고 |
 |---|---|---|---|---|---|---|
 | 스피닝 백 너클(Spinning Back Knuckle) | `6` | P | command_normal | ✅ | B | 단독 6+P는 실측 공진(dmg0, banks1). 236+P/41236+P 입력이 동일 뱅크(banks1)로 흡수되며 dmg7 기록 → 히트  |
-| 리버스 스핀 킥(Reverse Spin Kick) | `3` | K | command_normal | 📖 |  |  |
+| 리버스 스핀 킥(Reverse Spin Kick) | `3` | K | command_normal | ✅ |  | 실측: 뱅크[23] |
 | 소닉 붐(Sonic Boom) | `[4]6` | P | special | ✅ | N | ←모으고 →+P. 실측 고유 지문(banks2)·전진15px 확인, 무피해=측정창 내 탄 미착탄 추정 |
-| 서머솔트 킥(Somersault Kick) | `[2]8` | K | special | 📖 | D | ↓모으고 ↑+K. 명칭 소수의견: GameFAQs 'Flash Kick'. 실측 [2]8+P(dmg3)는 점프 공격 지문으로 판단 |
-| 소닉 허리케인(Sonic Hurricane) | `[4]646` | P | super | 📖 | F | ←모으고 →←→+P. Lv2는 허리케인 전방 발사. 실측 236236+P의 초필 지문(dmg7)이 이 기술의 간이입력 성립일 가능성 |
-| 서머솔트 스트라이크(Somersault Strike) | `[1]319` | K | super | 📖 | DF | 다수결 [1]319=↙모으고 ↘↙↗+K(GameFAQs·스팀측 2표), 소수: StrategyWiki [1]317(↖ 마무리). 스팀측 자료는  |
-| 크로스파이어 블리츠(Crossfire Blitz) | `[4]646` | K | super | 📖 | DB | 올림픽 해금·POW Lv2 전용. 명칭 이견: StrategyWiki 'Crossfire Assault' |
+| 서머솔트 킥(Somersault Kick) | `[2]8` | K | special | ✅ | D | ↓모으고 ↑+K. 명칭 소수의견: GameFAQs 'Flash Kick'. 실측 [2]8+P(dmg3)는 점프 공격 지문으로 판단 / 실측: 뱅 |
+| 소닉 허리케인(Sonic Hurricane) | `[4]646` | P | super | 📖 | F | ←모으고 →←→+P. Lv2는 허리케인 전방 발사. 실측 236236+P의 초필 지문(dmg7)이 이 기술의 간이입력 성립일 가능성 / 게이지  |
+| 서머솔트 스트라이크(Somersault Strike) | `[1]319` | K | super | ✅ | DF | 다수결 [1]319=↙모으고 ↘↙↗+K(GameFAQs·스팀측 2표), 소수: StrategyWiki [1]317(↖ 마무리). 스팀측 자료는  |
+| 크로스파이어 블리츠(Crossfire Blitz) | `[4]646` | K | super | 📖 | DB | 올림픽 해금·POW Lv2 전용. 명칭 이견: StrategyWiki 'Crossfire Assault' / 게이지 소모 0 — 커맨드 표기 의 |
 

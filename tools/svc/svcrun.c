@@ -123,10 +123,11 @@ int main(int argc,char**argv){
       if(k>=2 && !strcmp(cmd,"w")){
         static FILE *csv = NULL;
         if(!csv){ const char*cp=getenv("PROBE_CSV"); csv=fopen(cp?cp:"probe.csv","w");
-          fprintf(csv,"tag,frame,bank,hp2,p1x,p2x,anim,chr,style,p1y\n"); }
-        fprintf(csv,"%s,%ld,%d,%d,%d,%d,%d,%d,%d,%d\n", arg, frame,
+          fprintf(csv,"tag,frame,bank,hp2,p1x,p2x,anim,chr,style,p1y,kanim,pow1,pow2\n"); }
+        fprintf(csv,"%s,%ld,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", arg, frame,
                 ram[0x09AD], ram[0x08CF], ram[0x092E], ram[0x0934],
-                ram[0x0C7E], ram[0x08A0], ram[0x08BE], ram[0x0930]);
+                ram[0x0C7E], ram[0x08A0], ram[0x08BE], ram[0x0930],
+                ram[0x0C7F], ram[0x0963], ram[0x0AE3]);
         fflush(csv); continue;
       }
       if(k>=1){ dump(cmd,ram,rlen); printf("  [%ld] %s 덤프\n",frame,cmd); }
