@@ -167,6 +167,11 @@ static int       hold_elapsed;     /* 버튼 스텝 유지 누적 (강약 판정
 static const svc_move *chain_tbl;  /* 마지막 발동 기술의 소속 표 (파생 인덱스 해석용) */
 static const svc_move *chain_mv;   /* 마지막 발동 기술 */
 static int       chain_left;       /* 파생 입력 창 (매크로 끝난 뒤 프레임) — 실측 +2~36f */
+static uint32_t  frames;           /* 엔진 프레임 카운터 */
+static uint32_t  my_attack_at;     /* 유저가 직접 평타(A/B)를 누른 프레임 — 킬캔슬 판정 */
+static uint32_t  hit_at;           /* P2 체력이 깎인 프레임 — 히트 캔슬만 허용 (헛침 즉시주입은 leak) */
+static uint8_t   prev_pad_btn;
+static uint8_t   prev_hp2v;
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
 int  svcsp_disp_seq;       /* 새 발동마다 +1. 프론트가 엣지 검출 */
 const char *svcsp_last_name = 0;
@@ -388,7 +393,21 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
 {
    uint16_t edge = (uint16_t)(trig & ~prev_trig);
    prev_trig = trig;
+   frames++;
    if (chain_left > 0) chain_left--;
+   /* 유저가 직접 누른 평타 감지 — 매크로 중이 아닐 때의 A/B 새 눌림 */
+   if (!svc_active())
+   {
+      uint8_t btn = (uint8_t)(pad & (PAD_A | PAD_B));
+      if (btn & (uint8_t)~prev_pad_btn) my_attack_at = frames;
+      prev_pad_btn = btn;
+   }
+   /* 히트 감지 — P2 체력 감소 순간 (킬캔슬은 히트에서만 연다. 가드·헛침 캔슬 불가 실측) */
+   {
+      uint8_t h2 = CPUExRAM[OFF_HP2];
+      if (h2 < prev_hp2v) hit_at = frames;
+      prev_hp2v = h2;
+   }
 
    if (svc_in_battle()) { if (warm < 1000) warm++; }
    else warm = 0;
@@ -457,7 +476,15 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       if (m)
       {
          int need_ground = !(m->flags & 4);
-         if ((need_ground && svc_airborne()) || !svc_actable())
+         /* 킬캔슬: 자기 평타 직후(24f)의 X 는 회복을 기다리지 않는다 —
+            캔슬창이 히트 후 0~8f 라서 기다리면 놓친다 (실측 §19).
+            히트가 아니면 게임이 그냥 먹는다 (가드·헛침 캔슬 불가 실측). */
+         int kill_cancel = (frames - my_attack_at) <= 24
+                        && (frames - hit_at) <= 14
+                        && !svc_airborne();
+         if (need_ground && svc_airborne())
+            { pending = m; pending_left = PENDING_FRAMES; }
+         else if (!svc_actable() && !kill_cancel)
             { pending = m; pending_left = PENDING_FRAMES; }
          else
             svc_compile(m);
@@ -473,6 +500,7 @@ void svcsp_reset(void)
    q_n = q_i = q_left = 0;
    pending = 0; pending_left = 0;
    prev_trig = 0; prev_pad_dir = 0;
+   prev_pad_btn = 0; my_attack_at = 0; hit_at = 0; prev_hp2v = 255; frames = 100;
    warm = 0; verify_left = 0;
    hold_elapsed = 0; svcsp_last_strong = 0;
    chain_mv = 0; chain_tbl = 0; chain_left = 0;
