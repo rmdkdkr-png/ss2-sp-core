@@ -53,10 +53,12 @@ extern uint8_t CPUExRAM[16384];
 /* ── 타이밍 (실측 §2·§7: 창 2~4프레임, 5 이상은 시간 초과) ────────── */
 static int svc_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SVCSP_STEP"); v=e?atoi(e):3;} return v; }
 #define STEP_FRAMES  svc_step_frames()
-#define HOLD_FRAMES  3          /* 마지막 방향+버튼 유지 (실측기와 동일) */
+#define HOLD_FRAMES  3          /* 탭 = 약. 마지막 방향 유지한 채 버튼 3프레임 (실측기와 동일) */
+#define MAX_HOLD     20         /* 트리거를 잡고 있으면 여기까지 늘어난다 = 강.
+                                   실측: 16f 홀드 = 독물기(지속 92f+, 전진 2.4배). 3f = 황물기 */
 #define TAIL_FRAMES  2
 #define MAX_STEPS    16
-#define PENDING_FRAMES 150       /* 착지·경직 대기 상한 — MotM 평타 회복이 ~75f 라 SS2(40)보다 길다 */
+#define PENDING_FRAMES 150       /* 착지·경직 대기 상한 — MotM 평타 회복 후 여유 */
 
 /* ── 기술표 ──────────────────────────────────────────────────────
    모션 바이트 = 패드 비트 (2=0x02 3=0x0A 6=0x08 1=0x06 4=0x04), 오른쪽 볼 때 기준.
@@ -90,7 +92,7 @@ static const unsigned char mo_basic[] = {0x00};
 static const svc_move svc_basic = { "펀치", mo_basic, 1, PAD_A, 0 };
 
 /* ── 상태 ────────────────────────────────────────────────────────── */
-typedef struct { uint8_t pad; uint8_t frames; } svc_step;
+typedef struct { uint8_t pad; uint8_t frames; uint8_t sustain; } svc_step;
 static svc_step  q[MAX_STEPS];
 static int       q_n, q_i, q_left;
 static uint16_t  prev_trig;
@@ -100,8 +102,10 @@ static int       pending_left;
 static int       warm;             /* 전투 게이트 연속 프레임 */
 static int       verify_left;
 static int       svc_is_rom;       /* 헤더 판별 결과 */
+static int       hold_elapsed;     /* 버튼 스텝 유지 누적 (강약 판정) */
 const char *svcsp_last_name = 0;
 int         svcsp_last_ok   = -1;
+int         svcsp_last_strong = 0; /* 마지막 발동이 강(홀드)이었는지 — 표시용 */
 
 static int svc_active(void) { return q_left > 0 || q_i < q_n; }
 
@@ -167,16 +171,19 @@ static void svc_compile(const svc_move *m)
    {
       uint8_t d = m->motion[i];
       if (mirror) d = svc_mirror(d);
-      q[q_n].pad = d; q[q_n].frames = (uint8_t)STEP_FRAMES; q_n++;
+      q[q_n].pad = d; q[q_n].frames = (uint8_t)STEP_FRAMES; q[q_n].sustain = 0; q_n++;
       last = d;
    }
-   q[q_n].pad = (uint8_t)(last | m->btn); q[q_n].frames = HOLD_FRAMES; q_n++;
-   q[q_n].pad = 0; q[q_n].frames = TAIL_FRAMES; q_n++;
+   /* 버튼 스텝 — 트리거를 잡고 있으면 늘어난다 (탭=약 황물기 / 홀드=강 독물기) */
+   q[q_n].pad = (uint8_t)(last | m->btn); q[q_n].frames = HOLD_FRAMES; q[q_n].sustain = 1; q_n++;
+   q[q_n].pad = 0; q[q_n].frames = TAIL_FRAMES; q[q_n].sustain = 0; q_n++;
 
    q_left = q[0].frames;
+   hold_elapsed = 0;
    verify_left = 60;
    svcsp_last_name = m->name;
    svcsp_last_ok = -1;
+   svcsp_last_strong = 0;
    if (svc_dbg()) fprintf(stderr, "[svcsp] compile %s steps=%d mirror=%d\n", m->name, q_n, mirror);
 }
 
@@ -228,9 +235,16 @@ static const svc_move *svc_resolve(uint8_t held)
    return &svc_basic;
 }
 
-static uint8_t svc_step_out(void)
+/* held = 트리거(X/R)가 아직 눌려 있는가. 버튼 스텝에서 잡고 있으면
+   프레임을 소비하지 않고 늘린다 → 게임이 홀드 = 강(독물기)으로 받는다. */
+static uint8_t svc_step_out(int held)
 {
    uint8_t out = q[q_i].pad;
+   if (q[q_i].sustain && held && hold_elapsed < MAX_HOLD)
+   {
+      if (++hold_elapsed >= 9) svcsp_last_strong = 1;
+      return out;
+   }
    if (--q_left <= 0)
    {
       if (++q_i < q_n) q_left = q[q_i].frames;
@@ -278,7 +292,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       else if (--pending_left <= 0) pending = 0;
    }
 
-   if (svc_active()) return svc_step_out();
+   if (svc_active()) return svc_step_out(trig & 1u);
 
    if ((edge & 1u) && !svc_in_battle() && svc_dbg())
       fprintf(stderr, "[svcsp] gate-fail chr=%d chr2=%d style=%d timer=%d y=%d\n",
@@ -300,7 +314,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       }
    }
 
-   if (svc_active()) return svc_step_out();   /* 트리거 프레임에도 첫 스텝이 나간다 */
+   if (svc_active()) return svc_step_out(trig & 1u);   /* 트리거 프레임에도 첫 스텝이 나간다 */
    return pad;
 }
 
@@ -310,5 +324,6 @@ void svcsp_reset(void)
    pending = 0; pending_left = 0;
    prev_trig = 0; prev_pad_dir = 0;
    warm = 0; verify_left = 0;
+   hold_elapsed = 0; svcsp_last_strong = 0;
    svcsp_last_ok = -1; svcsp_last_name = 0;
 }

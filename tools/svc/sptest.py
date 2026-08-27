@@ -68,3 +68,20 @@ if os.path.exists(ss2st):
     ok=os.path.exists('svc_ss2ok.ram'); npass+=ok
     print('%-10s %s'%('SS2불간섭','PASS' if ok else 'FAIL'))
 print('== %d 통과 =='%npass)
+
+# 홀드 = 강 (독물기) — X 를 잡고 있으면 버튼 스텝이 늘어난다
+SAMH=(6,14,22,30,40,52,66,82,100)
+sc=['1 -']
+for tag,pre in (('h탭',['1 X']),('h꾹',['40 X'])):
+    sc+=['!load svc_c0_0.st','30 -']+pre
+    prev=0
+    for s2 in SAMH: sc+=['%d -'%(s2-prev),'!w %s@%d'%(tag,s2)]; prev=s2
+run(sc,'spH.csv')
+rows={}
+for r in csv.DictReader(open('spH.csv')):
+    t,at=r['tag'].rsplit('@',1); rows.setdefault(t,{})[int(at)]=r
+dur={t:sum(1 for s2 in SAMH if s2 in rows.get(t,{}) and int(rows[t][s2]['bank'])==22) for t in ('h탭','h꾹')}
+ok=dur['h꾹']>dur['h탭']>=3
+npass+=ok
+print('%-10s 탭 %d표본 / 꾹 %d표본 %s'%('홀드=강',dur['h탭'],dur['h꾹'],'PASS' if ok else 'FAIL'))
+print('== 최종 %d 통과 =='%npass)

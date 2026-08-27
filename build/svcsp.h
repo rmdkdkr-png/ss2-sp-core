@@ -24,7 +24,8 @@ void svcsp_set_ram(void *ram);    /* NGP.emu 쪽에서 부팅 때 한 번 */
 
 /* 디버그/표시용 */
 extern const char *svcsp_last_name;
-extern int         svcsp_last_ok;   /* -1 미판정 · 0 불발 · 1 발동 */
+extern int         svcsp_last_ok;     /* -1 미판정 · 0 불발 · 1 발동 */
+extern int         svcsp_last_strong; /* 마지막 발동이 강(홀드)이었는지 */
 
 #ifdef __cplusplus
 }
