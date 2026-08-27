@@ -390,6 +390,9 @@ extern uint8_t svcsp_frame(uint8_t pad, uint16_t trig);
 extern void    svcsp_reset(void);
 extern void    svcsp_set_rom(const void *rom, unsigned len);
 extern int     svcsp_rom_ok(void);
+extern char    svcsp_last_disp[64];
+extern int     svcsp_disp_seq;
+static bool    svcsp_toast_on = true;
 extern const char *ss2sp_last_name;
 /* ── SS2 캐릭터 해설 엔진 (ss2comm.c) ── */
 extern void        ss2comm_set_ram(void *p);
@@ -507,6 +510,11 @@ static void check_variables(void)
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       ss2comm_set_duo(!strcmp(var.value, "enabled"));
+
+   var.key   = "ngp_svcsp_toast";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      svcsp_toast_on = strcmp(var.value, "disabled") ? true : false;
 
    var.key   = "ngp_ss2sp_comm_draw";
    var.value = NULL;
@@ -790,7 +798,18 @@ static void update_input(void)
          comm_prev = now;
       }
       if (svcsp_rom_ok())
+      {
          input_buf = svcsp_frame(input_buf, trig);   /* SvC — 자기 엔진이 받는다 */
+         {                                           /* 기술명 토스트 */
+            static int disp_seen;
+            if (svcsp_disp_seq != disp_seen)
+            {
+               disp_seen = svcsp_disp_seq;
+               if (svcsp_toast_on && svcsp_last_disp[0])
+                  ss2comm_toast(svcsp_last_disp, 80);
+            }
+         }
+      }
       else
          input_buf = ss2sp_frame(input_buf, trig);
       if (ss2sp_card_block)      /* 카드가 없어 걸러진 순간 — 왜 안 나갔는지 알려 준다 */

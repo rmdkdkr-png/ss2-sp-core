@@ -139,6 +139,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "above",
    },
    {
+      "ngp_svcsp_toast",
+      "SvC 기술명 표시",
+      NULL,
+      "원버튼으로 기술이 나갈 때 기술명과 커맨드(화살표+버튼)를 화면 위에 잠깐 띄웁니다. (SNK vs. Capcom MotM 전용)",
+      NULL,
+      "system",
+      {
+         { "enabled",  "켬" },
+         { "disabled", "끔" },
+         { NULL, NULL },
+      },
+      "enabled"
+   },
+   {
       "ngp_ss2sp_sides",
       "SS2 Side Art Pillars",
       NULL,

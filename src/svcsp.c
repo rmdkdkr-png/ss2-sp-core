@@ -86,6 +86,8 @@ static int       warm;             /* 전투 게이트 연속 프레임 */
 static int       verify_left;
 static int       svc_is_rom;       /* 헤더 판별 결과 */
 static int       hold_elapsed;     /* 버튼 스텝 유지 누적 (강약 판정) */
+char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
+int  svcsp_disp_seq;       /* 새 발동마다 +1. 프론트가 엣지 검출 */
 const char *svcsp_last_name = 0;
 int         svcsp_last_ok   = -1;
 int         svcsp_last_strong = 0; /* 마지막 발동이 강(홀드)이었는지 — 표시용 */
@@ -168,6 +170,46 @@ static void svc_compile(const svc_move *m)
    hold_elapsed = 0;
    verify_left = 60;
    svcsp_last_name = m->name;
+   /* 표시 문자열: 이름(괄호 별칭은 잘라냄) + 화살표(표기 기준, 미러 안 함) + 버튼 */
+   if (m->motion[0])
+   {
+      static const char *AR[16] = {0};
+      const char *arrows[16]; int na=0, wi=0, ci;
+      char nb[32];
+      (void)AR;
+      for (ci = 0; ci < m->len && na < 12; ci++)
+      {
+         const char *a2 = 0;
+         switch (m->motion[ci]) {
+            case 0x01: a2="\xe2\x86\x91"; break;   /* ↑ */
+            case 0x09: a2="\xe2\x86\x97"; break;   /* ↗ */
+            case 0x08: a2="\xe2\x86\x92"; break;   /* → */
+            case 0x0A: a2="\xe2\x86\x98"; break;   /* ↘ */
+            case 0x02: a2="\xe2\x86\x93"; break;   /* ↓ */
+            case 0x06: a2="\xe2\x86\x99"; break;   /* ↙ */
+            case 0x04: a2="\xe2\x86\x90"; break;   /* ← */
+            case 0x05: a2="\xe2\x86\x96"; break;   /* ↖ */
+         }
+         if (!a2) continue;
+         arrows[na++] = a2;
+         if (ci == 0 && (m->flags & 16)) arrows[na++] = a2;   /* 모으기: 첫 방향 두 번 */
+      }
+      for (wi = 0; wi < (int)sizeof nb - 1 && m->name[wi]; wi++)
+      {
+         if (m->name[wi] == '(' || (m->name[wi]==' ' && m->name[wi+1]=='(')) break;
+         nb[wi] = m->name[wi];
+      }
+      while (wi > 0 && nb[wi-1] == ' ') wi--;
+      nb[wi] = 0;
+      {
+         int n2 = snprintf(svcsp_last_disp, sizeof svcsp_last_disp, "%s ", nb);
+         for (ci = 0; ci < na && n2 < (int)sizeof svcsp_last_disp - 8; ci++)
+            n2 += snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "%s", arrows[ci]);
+         snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "+%s",
+                  (m->btn & PAD_A) ? "P" : "K");
+      }
+      svcsp_disp_seq++;
+   }
    svcsp_last_ok = -1;
    svcsp_last_strong = 0;
    if (svc_dbg()) fprintf(stderr, "[svcsp] compile %s steps=%d mirror=%d\n", m->name, q_n, mirror);

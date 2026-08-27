@@ -1406,11 +1406,18 @@ static int cm_draw = 4;   /* 기본: 화면 밖 위 띠 (아래는 어색하다�
 void ss2comm_draw_enable(int mode){ cm_draw = mode; }
 /* 0 끔 / 1 화면 밖 아래 띠 / 2 화면 안 위 / 3 화면 안 아래 / 4 화면 밖 위 띠 */
 
+/* 자동 생성 글꼴에 없는 몇 자만 손으로 보강한다 (K·X — svcsp 기술 표기용) */
+static const ss2glyph SS2FONT_X8[] = {
+  {0x004B,{0x88,0x90,0xA0,0xC0,0xA0,0x90,0x88,0x00}},   /* K */
+  {0x0058,{0x88,0x88,0x50,0x20,0x50,0x88,0x88,0x00}},   /* X */
+};
 static const ss2glyph *glyph_of(unsigned cp){
   int lo=0, hi=SS2FONT_N-1;
   while(lo<=hi){ int mid=(lo+hi)>>1;
     if(SS2FONT[mid].cp==cp) return &SS2FONT[mid];
     if(SS2FONT[mid].cp<cp) lo=mid+1; else hi=mid-1; }
+  { unsigned i; for(i=0;i<sizeof SS2FONT_X8/sizeof SS2FONT_X8[0];i++)
+      if(SS2FONT_X8[i].cp==cp) return &SS2FONT_X8[i]; }
   return 0;
 }
 /* UTF-8 한 글자 → 코드포인트 (BMP까지) */
@@ -2043,11 +2050,17 @@ static int draw_line(uint16_t *fb,int pitch_px,int x0,int x1,const char *s,const
 
 /* ── 큰 글씨(갈무리11) — 화면 안 말풍선 전용. 8×8은 작아서 읽기 힘들다는 지적 반영 ── */
 #include "ss2comm_font11.h"
+static const ss2glyph11 SS2FONT11_X[] = {
+  {0x004B,7,{0,0x8800,0x9000,0xA000,0xC000,0xC000,0xA000,0x9000,0x8800,0x8800,0,0,0}},  /* K */
+  {0x0058,7,{0,0x8800,0x8800,0x5000,0x2000,0x2000,0x5000,0x8800,0x8800,0,0,0,0}},       /* X */
+};
 static const ss2glyph11 *glyph11_of(unsigned cp){
   int lo=0, hi=SS2FONT11_N-1;
   while(lo<=hi){ int mid=(lo+hi)>>1;
     if(SS2FONT11[mid].cp==cp) return &SS2FONT11[mid];
     if(SS2FONT11[mid].cp<cp) lo=mid+1; else hi=mid-1; }
+  { unsigned i; for(i=0;i<sizeof SS2FONT11_X/sizeof SS2FONT11_X[0];i++)
+      if(SS2FONT11_X[i].cp==cp) return &SS2FONT11_X[i]; }
   return 0;
 }
 static int adv11(unsigned cp){
@@ -2215,12 +2228,40 @@ void ss2comm_set_ref(int on){
 /* 캐릭터챗 온오프 — 심판과 따로 끈다. 조합 넷: 둘 다 / 캐릭터만 / 쿠로코만 / 무음 */
 void ss2comm_set_chat(int on){ chat_enabled = !!on; }
 
+/* ── 기술명 토스트 — 해설층과 독립. svcsp 가 기술을 쏠 때 한 줄 띄운다 ── */
+static char toast_txt[64];
+static int  toast_left;
+void ss2comm_toast(const char *t, int frames){
+  if(!t || !*t) return;
+  snprintf(toast_txt, sizeof toast_txt, "%s", t);
+  toast_left = frames;
+}
+static void toast_render(uint16_t *fb, int pitch_px, int w, int h){
+  int tw, x0, x1, x, y, y0, band;
+  if(toast_left <= 0) return;
+  toast_left--;
+  tw = line_w11(toast_txt, toast_txt + sizeof toast_txt);
+  if(tw <= 0 || tw > w) return;
+  /* 위 띠 모드(4)면 게임 그림이 띠 높이만큼 내려가 있다 — 그 아래, HP 바 아래에 띄운다.
+     (띠 안에 그리면 띠 지우기가 바로 덮는다 — 실측) */
+  band = (cm_on && cm_draw==4) ? SS2_BAND_H : 0;
+  y0 = band + 30;
+  x0 = (w - tw)/2; x1 = x0 + tw;
+  for(y=y0-2; y<y0+13 && y<h+band; y++)          /* 반투명 띠 (RGB565 절반 감광) */
+    for(x=x0-5; x<x1+5; x++)
+      if(x>=0 && x<w && y>=0) fb[y*pitch_px+x] = (uint16_t)((fb[y*pitch_px+x]>>1) & 0x7BEF);
+  draw_line11(fb, pitch_px, 0, w, toast_txt, toast_txt + sizeof toast_txt,
+              y0, 0, h+band, 999, 0xFFFF, 0);
+}
+
 void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   const char *line, *end, *seg[BOX_MAXL+1];
   int age=0, x, y, top, bot, mood, hit, spk, tx0, x1, maxw, show, i, nl, boxh, ty, lh;
   int band, bandTop, small;
   uint16_t col;
-  if(!cm_on || !cm_draw || !fb) return;
+  if(!fb) return;
+  toast_render(fb, pitch_px, w, h);              /* 해설 온오프와 무관하게 그린다 */
+  if(!cm_on || !cm_draw) return;
   band    = (cm_draw==1 || cm_draw==4);
   bandTop = (cm_draw==4);
   line    = ss2comm_current(&age);

@@ -26,6 +26,8 @@ void svcsp_set_ram(void *ram);    /* NGP.emu 쪽에서 부팅 때 한 번 */
 extern const char *svcsp_last_name;
 extern int         svcsp_last_ok;     /* -1 미판정 · 0 불발 · 1 발동 */
 extern int         svcsp_last_strong; /* 마지막 발동이 강(홀드)이었는지 */
+extern char        svcsp_last_disp[64]; /* "황물기 ↓↘→+P" — 표시용 */
+extern int         svcsp_disp_seq;      /* 새 발동마다 +1 */
 
 #ifdef __cplusplus
 }
