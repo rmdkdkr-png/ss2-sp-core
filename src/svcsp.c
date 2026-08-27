@@ -60,34 +60,17 @@ static int svc_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("
 #define MAX_STEPS    16
 #define PENDING_FRAMES 150       /* 착지·경직 대기 상한 — MotM 평타 회복 후 여유 */
 
-/* ── 기술표 ──────────────────────────────────────────────────────
+/* ── 기술표 — 자동 생성 헤더 (tools/svc/gen_svc_moves.py ← moves.json) ──
    모션 바이트 = 패드 비트 (2=0x02 3=0x0A 6=0x08 1=0x06 4=0x04), 오른쪽 볼 때 기준.
-   flags: 1=근접 4=공중 8=미검증 */
-typedef struct { const char *name; const unsigned char *motion; unsigned char len;
-                 unsigned char btn; unsigned char flags; } svc_move;
+   flags: 1=근접 4=공중 8=미검증 16=모으기(첫 방향을 CHARGE_FRAMES 유지) */
+#include "svcsp_moves.h"
 
-static const unsigned char mo_236[]    = {0x02,0x0A,0x08};
-static const unsigned char mo_623[]    = {0x08,0x02,0x0A};
-static const unsigned char mo_214[]    = {0x02,0x06,0x04};
-static const unsigned char mo_236x2[]  = {0x02,0x0A,0x08,0x02,0x0A,0x08};
-static const unsigned char mo_nanmu[]  = {0x02,0x0A,0x08,0x0A,0x02,0x06,0x04};
-static const unsigned char mo_air_d[]  = {0x02};
+#define CHARGE_FRAMES 40        /* 모으기 유지 (실측기 규격과 동일) */
 
-/* 쿄 (ID 0) — 전 기술 실측 근거: SWEEP2 [0], SVC_MEMO §8·§12 */
-static const svc_move mv_kyo[] = {
-  /* 0 */ {"황물기(236P)",   mo_236,   3, PAD_A, 0},   /* 뱅크 22, 렛카 시동 */
-  /* 1 */ {"오니야키(623P)", mo_623,   3, PAD_A, 0},   /* 뱅크 23, 대공 */
-  /* 2 */ {"팔청(214P)",     mo_214,   3, PAD_A, 1},   /* 뱅크 0, 근접 타격 피해5 */
-  /* 3 */ {"초필(236236P)",  mo_236x2, 6, PAD_A, 8},   /* 게이지 조건 미확인 */
-  /* 4 */ {"난무형",         mo_nanmu, 7, PAD_A, 8},
-  /* 5 */ {"공중 ↓P",        mo_air_d, 1, PAD_A, 4},   /* 나락떨구기 추정, 뱅크 4 */
-};
-
-/* 슬롯: N F B D DF DB AIR — 값은 mv_kyo 인덱스, -1 = 없음 */
+/* 슬롯 인덱스: N F B D DF DB AIR */
 enum { SL_N, SL_F, SL_B, SL_D, SL_DF, SL_DB, SL_AIR, SL_COUNT };
-static const signed char slot_kyo[SL_COUNT] = { 0, 3, 2, 1, 1, 4, 5 };
 
-/* 아직 기술표가 없는 캐릭터 → 그냥 펀치 */
+/* 기술표가 없는 캐릭터 → 그냥 펀치 */
 static const unsigned char mo_basic[] = {0x00};
 static const svc_move svc_basic = { "펀치", mo_basic, 1, PAD_A, 0 };
 
@@ -171,7 +154,10 @@ static void svc_compile(const svc_move *m)
    {
       uint8_t d = m->motion[i];
       if (mirror) d = svc_mirror(d);
-      q[q_n].pad = d; q[q_n].frames = (uint8_t)STEP_FRAMES; q[q_n].sustain = 0; q_n++;
+      q[q_n].pad = d;
+      /* 모으기 기술은 첫 방향을 길게 잡는다 ([4]6 의 4 부분) */
+      q[q_n].frames = (uint8_t)((i == 0 && (m->flags & 16)) ? CHARGE_FRAMES : STEP_FRAMES);
+      q[q_n].sustain = 0; q_n++;
       last = d;
    }
    /* 버튼 스텝 — 트리거를 잡고 있으면 늘어난다 (탭=약 황물기 / 홀드=강 독물기) */
@@ -205,8 +191,9 @@ static const svc_move *svc_resolve(uint8_t held)
    int ntbl;
    int chr = CPUExRAM[OFF_CHAR1];
 
-   if (chr == 0) { map = slot_kyo; tbl = mv_kyo; ntbl = (int)(sizeof mv_kyo / sizeof mv_kyo[0]); }
-   else return &svc_basic;               /* 기술표 없는 캐릭터 — v1 은 쿄만 */
+   if (chr < SVC_CHAR_COUNT && svc_chars[chr].mv && svc_chars[chr].n)
+      { map = svc_chars[chr].slots; tbl = svc_chars[chr].mv; ntbl = svc_chars[chr].n; }
+   else return &svc_basic;               /* 기술표 없는 캐릭터 */
 
    if (svc_airborne())
    {
