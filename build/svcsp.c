@@ -70,6 +70,84 @@ static int svc_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("
 /* 슬롯 인덱스: N F B D DF DB AIR */
 enum { SL_N, SL_F, SL_B, SL_D, SL_DF, SL_DB, SL_AIR, SL_COUNT };
 
+static int svc_in_battle(void);   /* 아래에 정의 — cur_char 가 먼저 쓴다 */
+
+/* ── 런타임 슬롯 — 오버레이 메뉴에서 바꿀 수 있게 표를 복사해 둔다 ── */
+static signed char svc_slot_run[SVC_CHAR_COUNT][7];
+static int svc_slot_ready;
+static void svc_slots_ensure(void)
+{
+   int c, k;
+   if (svc_slot_ready) return;
+   for (c = 0; c < SVC_CHAR_COUNT; c++)
+      for (k = 0; k < 7; k++) svc_slot_run[c][k] = svc_chars[c].slots[k];
+   svc_slot_ready = 1;
+}
+
+/* ── 오버레이 메뉴용 조회 API (ss2sp 의 style API 와 같은 역할) ── */
+int svcsp_char_count(void) { return SVC_CHAR_COUNT; }
+const char *svcsp_char_name(int c)
+{ return (c >= 0 && c < SVC_CHAR_COUNT) ? svc_chars[c].name : ""; }
+int svcsp_cur_char(void)
+{
+#ifdef SS2SP_RAM_POINTER
+   if (!CPUExRAM) return -1;
+#endif
+   if (!svc_in_battle()) return -1;
+   return CPUExRAM[OFF_CHAR1];
+}
+int svcsp_move_count(int c)
+{ return (c >= 0 && c < SVC_CHAR_COUNT) ? svc_chars[c].n : 0; }
+const char *svcsp_move_name(int c, int i)
+{
+   if (c < 0 || c >= SVC_CHAR_COUNT || i < 0 || i >= svc_chars[c].n) return "";
+   return svc_chars[c].mv[i].name;
+}
+int svcsp_move_flags(int c, int i)
+{
+   if (c < 0 || c >= SVC_CHAR_COUNT || i < 0 || i >= svc_chars[c].n) return 0;
+   return svc_chars[c].mv[i].flags;
+}
+/* 넘패드 표기 (236+P). 모으기는 첫 방향 두 번 (표시 규약 = 토스트와 동일) */
+int svcsp_move_notation(int c, int i, char *out, int cap)
+{
+   static const struct { unsigned char pad; char ch; } tab[] = {
+      {0x01,'8'},{0x02,'2'},{0x04,'4'},{0x08,'6'},
+      {0x09,'9'},{0x05,'7'},{0x0A,'3'},{0x06,'1'},
+   };
+   const svc_move *m; int k, j, n = 0;
+   if (!out || cap <= 0) return 0;
+   out[0] = 0;
+   if (c < 0 || c >= SVC_CHAR_COUNT || i < 0 || i >= svc_chars[c].n) return 0;
+   m = &svc_chars[c].mv[i];
+   for (k = 0; k < m->len && n < cap - 4; k++)
+   {
+      char ch2 = 0;
+      for (j = 0; j < (int)(sizeof tab / sizeof tab[0]); j++)
+         if (tab[j].pad == m->motion[k]) { ch2 = tab[j].ch; break; }
+      if (!ch2) continue;
+      out[n++] = ch2;
+      if (k == 0 && (m->flags & 16) && n < cap - 4) out[n++] = ch2;
+   }
+   if (n < cap - 3) { out[n++] = '+'; out[n++] = (m->btn & PAD_A) ? 'P' : 'K'; }
+   out[n] = 0;
+   return n;
+}
+int svcsp_get_slot(int c, int k)
+{
+   svc_slots_ensure();
+   if (c < 0 || c >= SVC_CHAR_COUNT || k < 0 || k >= 7) return -1;
+   return svc_slot_run[c][k];
+}
+void svcsp_set_slot(int c, int k, int mv)
+{
+   svc_slots_ensure();
+   if (c < 0 || c >= SVC_CHAR_COUNT || k < 0 || k >= 7) return;
+   if (mv >= svc_chars[c].n || mv < 0) mv = -1;
+   svc_slot_run[c][k] = (signed char)mv;
+}
+void svcsp_reset_slots(void) { svc_slot_ready = 0; svc_slots_ensure(); }
+
 /* 기술표가 없는 캐릭터 → 그냥 펀치 */
 static const unsigned char mo_basic[] = {0x00};
 static const svc_move svc_basic = { "펀치", mo_basic, 1, PAD_A, 0, -1, -1 };
@@ -238,7 +316,8 @@ static const svc_move *svc_resolve(uint8_t held)
    int chr = CPUExRAM[OFF_CHAR1];
 
    if (chr < SVC_CHAR_COUNT && svc_chars[chr].mv && svc_chars[chr].n)
-      { map = svc_chars[chr].slots; tbl = svc_chars[chr].mv; ntbl = svc_chars[chr].n;
+      { svc_slots_ensure();
+        map = svc_slot_run[chr]; tbl = svc_chars[chr].mv; ntbl = svc_chars[chr].n;
         chain_tbl = tbl; }
    else return &svc_basic;               /* 기술표 없는 캐릭터 */
 

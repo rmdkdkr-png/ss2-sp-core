@@ -1780,6 +1780,7 @@ static uint16_t tint(uint16_t c, int mood){
 static int draw_line11(uint16_t *fb,int pitch_px,int x0,int x1,const char *s,const char *end,
                        int ytop,int clipTop,int clipBot,int show,uint16_t col,int bold);
 typedef struct { const char *name; unsigned char *v; unsigned char max; unsigned char kind; } ss2ovitem;
+static int ov_svc = 0;      /* 1 = SvC — SP 배치 페이지가 svcsp 표를 쓴다 */
 static ss2ovitem ov_it[8];
 static int ov_n = 0;
 static unsigned char ov_on = 0, ov_cur = 0;
@@ -1850,8 +1851,79 @@ static void ov_stylelabel(int st, char *out, int cap){
     if((int)strlen(NM[i].id) == bl && !strncmp(NM[i].id, id, bl)){ ko = NM[i].ko; break; }
   snprintf(out, cap, "%s·%s", ko, (cut && !strcmp(cut, "_bst")) ? "나찰" : "수라");
 }
+#if !defined(SS2COMM_TEST)
+#define SS2OV_SVC 1
+extern int  svcsp_char_count(void);
+extern const char *svcsp_char_name(int c);
+extern int  svcsp_cur_char(void);
+extern int  svcsp_move_count(int c);
+extern const char *svcsp_move_name(int c, int i);
+extern int  svcsp_move_flags(int c, int i);
+extern int  svcsp_move_notation(int c, int i, char *out, int cap);
+extern int  svcsp_get_slot(int c, int k);
+extern void svcsp_set_slot(int c, int k, int mv);
+extern void svcsp_reset_slots(void);
+#endif
+/* 게임 분기 — SvC 면 svcsp 표, 아니면 ss2sp 표 */
+static int sp_style_count(void){
+#ifdef SS2OV_SVC
+  if(ov_svc) return svcsp_char_count();
+#endif
+  return ss2sp_style_count(); }
+static int sp_cur(void){
+#ifdef SS2OV_SVC
+  if(ov_svc) return svcsp_cur_char();
+#endif
+  return ss2sp_cur_style(); }
+static int sp_move_count(int st){
+#ifdef SS2OV_SVC
+  if(ov_svc) return svcsp_move_count(st);
+#endif
+  return ss2sp_move_count(st); }
+static const char *sp_move_name(int st,int i){
+#ifdef SS2OV_SVC
+  if(ov_svc) return svcsp_move_name(st,i);
+#endif
+  return ss2sp_move_name(st,i); }
+static int sp_move_flags(int st,int i){
+#ifdef SS2OV_SVC
+  if(ov_svc) return svcsp_move_flags(st,i);
+#endif
+  return ss2sp_move_flags(st,i); }
+static int sp_nota(int st,int i,char*o,int c){
+#ifdef SS2OV_SVC
+  if(ov_svc) return svcsp_move_notation(st,i,o,c);
+#endif
+  return ss2sp_move_notation(st,i,o,c); }
+static int sp_get(int st,int k){
+#ifdef SS2OV_SVC
+  if(ov_svc) return svcsp_get_slot(st,k);
+#endif
+  return ss2sp_get_slot(st,k); }
+static void sp_set(int st,int k,int mv){
+#ifdef SS2OV_SVC
+  if(ov_svc){ svcsp_set_slot(st,k,mv); return; }
+#endif
+  ss2sp_set_slot(st,k,mv); }
+static void sp_resetslots(void){
+#ifdef SS2OV_SVC
+  if(ov_svc){ svcsp_reset_slots(); return; }
+#endif
+  ss2sp_reset_slots(); }
+static void sp_label(int st, char *out, int cap){
+#ifdef SS2OV_SVC
+  if(ov_svc){ snprintf(out, cap, "%s", svcsp_char_name(st)); return; }
+#endif
+  ov_stylelabel(st, out, cap); }
 static int ov_sp_rows(void){ return 3 + ss2sp_slot_count(); }  /* 캐릭터 + 슬롯들 + 초기화 + 돌아가기 */
 #endif
+void ss2comm_overlay_spmode(int svc){ ov_svc = !!svc; }
+/* 페이지 0 에 토글 항목 하나를 덧붙인다 (SvC 기술명 표시 등) */
+void ss2comm_overlay_bind_extra(const char *name, unsigned char *v){
+  if(ov_n >= 8 || !v) return;
+  ov_it[ov_n].name = name; ov_it[ov_n].v = v; ov_it[ov_n].max = 1; ov_it[ov_n].kind = 0;
+  ov_n++;
+}
 int  ss2comm_overlay_active(void){ return ov_on; }
 void ss2comm_overlay_toggle(void){
   ov_on = !ov_on;
@@ -1872,30 +1944,30 @@ int ss2comm_overlay_input(int k){
     ov_on = 0; return 1;
   }
   if(ov_page == 2){                                    /* 기술 고르기 목록 */
-    int rows = ss2sp_move_count(ov_spstyle) + 1;       /* 0 = 비움 */
+    int rows = sp_move_count(ov_spstyle) + 1;          /* 0 = 비움 */
     if(k == 0){ ov_cur = (unsigned char)((ov_cur + rows - 1) % rows); return 1; }
     if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % rows); return 1; }
     if(k == 4){                                        /* A = 선택하고 돌아간다 */
-      ss2sp_set_slot(ov_spstyle, ov_pickslot, (int)ov_cur - 1);
+      sp_set(ov_spstyle, ov_pickslot, (int)ov_cur - 1);
       ov_page = 1; ov_cur = (unsigned char)(ov_pickslot + 1);
     }
     return 1;
   }
   if(ov_page == 1){
-    int rows = ov_sp_rows(), st = ss2sp_cur_style();
+    int rows = ov_sp_rows(), st = sp_cur();
     if(st >= 0) ov_spstyle = st;
     if(k == 0){ ov_cur = (unsigned char)((ov_cur + rows - 1) % rows); return 1; }
     if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % rows); return 1; }
     if(k < 2 || k > 4) return 1;
     if(ov_cur == 0){                                   /* 캐릭터/유파 — 좌우 순환 */
-      int n = ss2sp_style_count(); if(n <= 0) return 1;
+      int n = sp_style_count(); if(n <= 0) return 1;
       ov_spstyle = (k == 2) ? (ov_spstyle + n - 1) % n : (ov_spstyle + 1) % n;
     }else if(ov_cur <= ss2sp_slot_count()){            /* 슬롯 = 목록 열기 */
       ov_pickslot = ov_cur - 1;
       ov_page = 2;
-      ov_cur = (unsigned char)(ss2sp_get_slot(ov_spstyle, ov_pickslot) + 1);
+      ov_cur = (unsigned char)(sp_get(ov_spstyle, ov_pickslot) + 1);
     }else if(ov_cur == ss2sp_slot_count() + 1){        /* 기본 배치로 되돌리기 */
-      ss2sp_reset_slots();
+      sp_resetslots();
     }else{                                             /* ← 돌아가기 */
       ov_page = 0; ov_cur = 0;
     }
@@ -1907,7 +1979,7 @@ int ss2comm_overlay_input(int k){
     if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % rows0); return 1; }
     if(ov_cur == ov_n){
       if(k >= 2 && k <= 4){
-        int st = ss2sp_cur_style(); if(st >= 0) ov_spstyle = st;
+        int st = sp_cur(); if(st >= 0) ov_spstyle = st;
         ov_page = 1; ov_cur = 0;
       }
       return 1;
@@ -1933,7 +2005,7 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
   if(!ov_on || !ov_n || !fb) return;
   rows = ov_n;
 #ifdef SS2OV_SP
-  rows = (ov_page == 2) ? ss2sp_move_count(ov_spstyle) + 1
+  rows = (ov_page == 2) ? sp_move_count(ov_spstyle) + 1
        : (ov_page == 1) ? ov_sp_rows() : ov_n + 1;
 #endif
   bw = w - 12; bh = 17 + rows*13 + 4;
@@ -1953,10 +2025,10 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
       if(i == 0) snprintf(buf, sizeof buf, "— 비움 —");
       else{
         char nt[16], ar[48];
-        ss2sp_move_notation(ov_spstyle, i - 1, nt, sizeof nt);
+        sp_nota(ov_spstyle, i - 1, nt, sizeof nt);
         ov_nota_arrows(nt, ar, sizeof ar);
-        snprintf(buf, sizeof buf, "%s %s%s", ar, ss2sp_move_name(ov_spstyle, i - 1),
-                 (ss2sp_move_flags(ov_spstyle, i - 1) & 4) ? "(공중)" : "");
+        snprintf(buf, sizeof buf, "%s %s%s", ar, sp_move_name(ov_spstyle, i - 1),
+                 (sp_move_flags(ov_spstyle, i - 1) & 4) ? "(공중)" : "");
       }
       draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
                   (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
@@ -1965,23 +2037,23 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
   }
   if(ov_page == 1){
     char t[64], buf[96];
-    int st = ss2sp_cur_style(); if(st >= 0) ov_spstyle = st;
+    int st = sp_cur(); if(st >= 0) ov_spstyle = st;
     snprintf(t, sizeof t, "SP 배치  (B 돌아가기)");
     draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+3, 0, h, 99, COL_GOLD, 0);
     for(i = 0; i < rows; i++){
       if(i == 0){
-        char sl[40]; ov_stylelabel(ov_spstyle, sl, sizeof sl);
+        char sl[40]; sp_label(ov_spstyle, sl, sizeof sl);
         snprintf(buf, sizeof buf, "캐릭터 : %s", sl);
       }else if(i <= ss2sp_slot_count()){
-        int mv = ss2sp_get_slot(ov_spstyle, i - 1);
+        int mv = sp_get(ov_spstyle, i - 1);
         if(mv < 0) snprintf(buf, sizeof buf, "%s : — 비움 —", ov_slotname(i - 1));
         else{
           char nt[16], ar[48];
-          ss2sp_move_notation(ov_spstyle, mv, nt, sizeof nt);
+          sp_nota(ov_spstyle, mv, nt, sizeof nt);
           ov_nota_arrows(nt, ar, sizeof ar);
           snprintf(buf, sizeof buf, "%s:%s %s%s", ov_slotname(i - 1), ar,
-                   ss2sp_move_name(ov_spstyle, mv),
-                   (ss2sp_move_flags(ov_spstyle, mv) & 4) ? "(공중)" : "");
+                   sp_move_name(ov_spstyle, mv),
+                   (sp_move_flags(ov_spstyle, mv) & 4) ? "(공중)" : "");
         }
       }else if(i == ss2sp_slot_count() + 1) snprintf(buf, sizeof buf, "기본 배치로 되돌리기");
       else snprintf(buf, sizeof buf, "← 빠른 설정으로");

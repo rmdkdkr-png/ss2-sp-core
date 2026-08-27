@@ -393,6 +393,7 @@ extern int     svcsp_rom_ok(void);
 extern char    svcsp_last_disp[64];
 extern int     svcsp_disp_seq;
 static bool    svcsp_toast_on = true;
+static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
 extern const char *ss2sp_last_name;
 /* ── SS2 캐릭터 해설 엔진 (ss2comm.c) ── */
 extern void        ss2comm_set_ram(void *p);
@@ -451,6 +452,7 @@ static void ss2_overlay_apply(void)
    if (ov_chat  != ov_chat_p)  { ss2comm_set_enabled(ov_chat); ov_chat_p  = ov_chat; }
    if (ov_ref   != ov_ref_p)   { ss2comm_set_ref(ov_ref);      ov_ref_p   = ov_ref; }
    if (ov_sp    != ov_sp_p)    { ss2sp_enable = ov_sp != 0;    ov_sp_p    = ov_sp; }
+   if (ov_toast != ov_toast_p) { svcsp_toast_on = ov_toast != 0; ov_toast_p = ov_toast; }
    if (ov_sides != ov_sides_p)
    {
       ss2_sides = ov_sides != 0;
@@ -515,6 +517,7 @@ static void check_variables(void)
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       svcsp_toast_on = strcmp(var.value, "disabled") ? true : false;
+   ov_toast = ov_toast_p = svcsp_toast_on ? 1 : 0;
 
    var.key   = "ngp_ss2sp_comm_draw";
    var.value = NULL;
@@ -595,7 +598,14 @@ void retro_reset(void)
    ss2comm_set_ram(&CPUExRAM[0]);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
-   ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+   ss2comm_overlay_spmode(svcsp_rom_ok());
+   if (svcsp_rom_ok())
+   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+   }
+   else
+      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
    ss2comm_reset();
    neopop_reset();
 }
@@ -652,7 +662,14 @@ bool retro_load_game(const struct retro_game_info *info)
    ss2comm_set_ram(&CPUExRAM[0]);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
-   ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+   ss2comm_overlay_spmode(svcsp_rom_ok());
+   if (svcsp_rom_ok())
+   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+   }
+   else
+      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
    ss2comm_reset();
 
    surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
