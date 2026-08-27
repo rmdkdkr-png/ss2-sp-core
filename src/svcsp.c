@@ -51,12 +51,14 @@ extern uint8_t CPUExRAM[16384];
 #define PAD_DIR_MASK (PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT)
 
 /* ── 타이밍 (실측 §2·§7: 창 2~4프레임, 5 이상은 시간 초과) ────────── */
-static int svc_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SVCSP_STEP"); v=e?atoi(e):3;} return v; }
+static int svc_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SVCSP_STEP"); v=e?atoi(e):2;} return v; }
+static int svc_hold_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SVCSP_HOLD"); v=e?atoi(e):2;} return v; }
+static int svc_tail_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SVCSP_TAIL"); v=e?atoi(e):1;} return v; }
 #define STEP_FRAMES  svc_step_frames()
-#define HOLD_FRAMES  3          /* 탭 = 약. 마지막 방향 유지한 채 버튼 3프레임 (실측기와 동일) */
+#define HOLD_FRAMES  svc_hold_frames() /* 탭 = 약. 마지막 방향 유지한 채 버튼 (기본 2 — 실측 최소) */
 #define MAX_HOLD     20         /* 트리거를 잡고 있으면 여기까지 늘어난다 = 강.
-                                   실측: 16f 홀드 = 독물기(지속 92f+, 전진 2.4배). 3f = 황물기 */
-#define TAIL_FRAMES  2
+                                   실측: 16f 홀드 = 독물기(지속 92f+, 전진 2.4배). 짧으면 황물기 */
+#define TAIL_FRAMES  svc_tail_frames()
 #define MAX_STEPS    16
 #define PENDING_FRAMES 150       /* 착지·경직 대기 상한 — MotM 평타 회복 후 여유 */
 
