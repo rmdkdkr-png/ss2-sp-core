@@ -114,6 +114,12 @@ int main(int argc,char**argv){
         printf("  [%ld] 상태 복원 %s -> %s\n",frame,arg,sunser(buf,sz)?"OK":"실패");
         free(buf); continue;
       }
+      if(k>=2 && !strcmp(cmd,"poke")){
+        unsigned off; int val;
+        if(sscanf(arg,"%x=%d",&off,&val)==2 && off<rlen){ ram[off]=(uint8_t)val;
+          printf("  [%ld] poke %04X=%d\n",frame,off,val); }
+        continue;
+      }
       if(k>=2 && !strcmp(cmd,"w")){
         static FILE *csv = NULL;
         if(!csv){ const char*cp=getenv("PROBE_CSV"); csv=fopen(cp?cp:"probe.csv","w");

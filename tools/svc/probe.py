@@ -7,8 +7,10 @@
 """
 import subprocess, sys, csv, collections
 
-CORE='/home/user/ss2-sp-core/build/mednafen_ngp_libretro.so'
-ROM ='/home/user/rom/svc_kr_v17.2.ngc'
+import os
+_H = os.path.expanduser('~')
+CORE = os.environ.get('SVC_CORE', _H + '/ss2/repo/ss2-sp-core/build/mednafen_ngp_libretro.so')
+ROM  = os.environ.get('SVC_ROM',  _H + '/ss2/rom/svc.ngc')
 DIR={'↑':'U','↗':'U R','→':'R','↘':'D R','↓':'D','↙':'D L','←':'L','↖':'U L'}
 BTN={'P':'B','K':'A','PK':'B A'}          # P=NGP A=레트로 B / K=NGP B=레트로 A
 SAMPLES=(4,10,16,24,36,48)                # 버튼 이후 관찰 시점

@@ -55,6 +55,7 @@ python3 probe.py <상태파일> [방향간격]      # 기본 간격 3프레임
 !w 태그          관찰 오프셋만 CSV 로 (가볍다)
 !save 파일       상태 저장
 !load 파일       상태 복원
+!poke 08CF=24    램에 직접 쓰기 (오프셋은 16진수)
 ```
 버튼: `U D L R A B X Y ST SE` — **NGP A(펀치) = 레트로 B**, NGP B(킥) = 레트로 A.
 
