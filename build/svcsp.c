@@ -160,6 +160,7 @@ static uint16_t  prev_trig;
 static uint16_t  prev_pad_dir;
 static const svc_move *pending;
 static int       pending_left;
+static int       pending_kind;     /* 0 일반 1 캔슬 선입력 2 파생(히트 확인) 3 창닫힘 후 재시전 */
 static int       warm;             /* 전투 게이트 연속 프레임 */
 static int       verify_left;
 static int       svc_is_rom;       /* 헤더 판별 결과 */
@@ -170,6 +171,7 @@ static int       chain_left;       /* 파생 입력 창 (매크로 끝난 뒤 �
 static uint32_t  frames;           /* 엔진 프레임 카운터 */
 static uint32_t  my_attack_at;     /* 유저가 직접 평타(A/B)를 누른 프레임 — 킬캔슬 판정 */
 static uint32_t  hit_at;           /* P2 체력이 깎인 프레임 — 히트 캔슬만 허용 (헛침 즉시주입은 leak) */
+static uint32_t  move_started;     /* 마지막 기술 시작 프레임 — 파생은 이 이후의 히트가 있어야 나간다 */
 static uint8_t   prev_pad_btn;
 static uint8_t   prev_hp2v;
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
@@ -198,7 +200,8 @@ static int svc_in_battle(void)
    if (CPUExRAM[OFF_CHAR1] >= 18) return 0;
    if (CPUExRAM[OFF_CHAR2] >= 26) return 0;
    if (CPUExRAM[OFF_STYLE] >= 3)  return 0;
-   { unsigned t = CPUExRAM[OFF_TIMER]; if (t < 1 || t > 60) return 0; }
+   { unsigned t = CPUExRAM[OFF_TIMER];              /* 255 = 스파링 타임 무한 (실전 스테이트 실측) */
+     if (t != 255 && (t < 1 || t > 60)) return 0; }
    return 1;
 }
 
@@ -256,6 +259,7 @@ static void svc_compile(const svc_move *m)
    hold_elapsed = 0;
    verify_left = 60;
    chain_mv = m; chain_left = 0;      /* 창은 매크로가 끝날 때 연다 (step_out) */
+   move_started = frames;
    svcsp_last_name = m->name;
    /* 표시 문자열: 이름(괄호 별칭은 잘라냄) + 화살표(표기 기준, 미러 안 함) + 버튼 */
    if (m != &svc_basic)
@@ -438,9 +442,25 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
    if (pending && !svc_active())
    {
       int need_ground = !(pending->flags & 4);
-      if ((!need_ground || !svc_airborne()) && svc_actable())
-         { svc_compile(pending); pending = 0; }
-      else if (--pending_left <= 0) pending = 0;
+      int fire = 0;
+      if (pending_kind == 2)
+      {  /* 파생 — 이번 기술이 히트했을 때만. 창이 끝날 때까지 기다렸다가 버린다 */
+         if (hit_at >= move_started) fire = 1;
+         else if (--pending_left <= 0) { pending = 0; pending_kind = 0; }
+      }
+      else if (pending_kind == 1 && (frames - hit_at) <= 2)
+         fire = 1;                       /* 캔슬 선입력 — 히트가 뜬 그 순간 발사 */
+      else if (pending_kind == 3)
+      {  /* 헛친 물기 — 파생 창(+2~36f)이 닫힌 뒤에 새로 시전.
+            창 안에 236 을 다시 넣으면 게임이 파생으로 흡수해 버린다 (실측) */
+         if ((frames - move_started) >= 42 && svc_actable()) fire = 1;
+         else if (--pending_left <= 0) { pending = 0; pending_kind = 0; }
+      }
+      else if ((!need_ground || !svc_airborne()) && svc_actable())
+         fire = 1;                       /* 일반 — 착지·회복 대기 */
+      else if (pending_kind != 2 && --pending_left <= 0) { pending = 0; pending_kind = 0; }
+      if (fire && pending)
+         { svc_compile(pending); pending = 0; pending_kind = 0; }
    }
 
    if (svc_active())
@@ -449,7 +469,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       if ((edge & 1u))
       {
          const svc_move *nx = svc_chain_next();
-         if (nx) { pending = nx; pending_left = 50; }
+         if (nx) { pending = nx; pending_left = 60; pending_kind = 2; }
       }
       return svc_step_out(trig & 1u);
    }
@@ -461,10 +481,16 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
    if ((edge & 1u) && svc_in_battle() && chain_left > 0)
    {
       const svc_move *nx = svc_chain_next();
-      if (nx)
+      if (nx && hit_at >= move_started)      /* 맞았다 — 파생 */
       {
          svc_compile(nx);
          if (svc_active()) return svc_step_out(trig & 1u);
+      }
+      if (nx)
+      {  /* 헛쳤다 — 창이 닫히면 새로 시전 (지금 넣으면 게임이 파생으로 흡수) */
+         const svc_move *m2 = svc_resolve(pad);
+         if (m2) { pending = m2; pending_left = 70; pending_kind = 3; }
+         return pad;
       }
    }
    if ((edge & 1u) && svc_in_battle())
@@ -479,13 +505,16 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
          /* 킬캔슬: 자기 평타 직후(24f)의 X 는 회복을 기다리지 않는다 —
             캔슬창이 히트 후 0~8f 라서 기다리면 놓친다 (실측 §19).
             히트가 아니면 게임이 그냥 먹는다 (가드·헛침 캔슬 불가 실측). */
-         int kill_cancel = (frames - my_attack_at) <= 24
-                        && (frames - hit_at) <= 14
-                        && !svc_airborne();
+         int own_atk    = (frames - my_attack_at) <= 24 && !svc_airborne();
+         int kill_cancel = own_atk && (frames - hit_at) <= 14;
          if (need_ground && svc_airborne())
-            { pending = m; pending_left = PENDING_FRAMES; }
-         else if (!svc_actable() && !kill_cancel)
-            { pending = m; pending_left = PENDING_FRAMES; }
+            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
+         else if (kill_cancel)
+            svc_compile(m);                   /* 이미 맞았다 — 즉시 캔슬 */
+         else if (own_atk && !svc_actable())
+            { pending = m; pending_left = 30; pending_kind = 1; }  /* 선입력 — 히트 뜨면 발사 */
+         else if (!svc_actable())
+            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
          else
             svc_compile(m);
       }
@@ -498,7 +527,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
 void svcsp_reset(void)
 {
    q_n = q_i = q_left = 0;
-   pending = 0; pending_left = 0;
+   pending = 0; pending_left = 0; pending_kind = 0; move_started = 0;
    prev_trig = 0; prev_pad_dir = 0;
    prev_pad_btn = 0; my_attack_at = 0; hit_at = 0; prev_hp2v = 255; frames = 100;
    warm = 0; verify_left = 0;
