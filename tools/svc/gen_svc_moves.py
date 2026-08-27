@@ -45,7 +45,8 @@ def emit(chars):
     w('#define SVCSP_MOVES_H')
     w('')
     w('typedef struct { const char *name; const unsigned char *motion; unsigned char len;')
-    w('                 unsigned char btn; unsigned char flags; } svc_move;')
+    w('                 unsigned char btn; unsigned char flags;')
+    w('                 signed char next, next_hold; } svc_move;   /* 파생(렛카) — 표 인덱스, -1 없음 */')
     w('/* flags: 1=근접 4=공중 8=미검증 16=모으기(첫 방향을 길게) */')
     w('')
     tables = {}
@@ -63,11 +64,17 @@ def emit(chars):
             w('static const unsigned char %s[] = {%s};' % (mo, ','.join('0x%02X'%b for b in seq)))
             fl = flags_of(mv, charge)
             if air: fl |= 4
-            moves.append((name, mo, len(seq), btn, fl))
+            moves.append((name, mo, len(seq), btn, fl, mv.get('next'), mv.get('next_hold')))
         if moves:
+            mnames=[m[0] for m in moves]
+            def midx(nm):
+                if not nm: return -1
+                for i3,n3 in enumerate(mnames):
+                    if nm==n3 or nm in n3 or n3 in nm: return i3
+                return -1
             w('static const svc_move mv_c%d[] = {' % cid)
-            for name, mo, ln, btn, fl in moves:
-                w('  {"%s", %s, %d, 0x%02X, %d},' % (name, mo, ln, btn, fl))
+            for name, mo, ln, btn, fl, nx, nxh in moves:
+                w('  {"%s", %s, %d, 0x%02X, %d, %d, %d},' % (name, mo, ln, btn, fl, midx(nx), midx(nxh)))
             w('};')
         tables[cid] = (ch, moves)
     w('')

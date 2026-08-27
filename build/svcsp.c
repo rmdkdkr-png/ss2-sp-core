@@ -72,7 +72,7 @@ enum { SL_N, SL_F, SL_B, SL_D, SL_DF, SL_DB, SL_AIR, SL_COUNT };
 
 /* 기술표가 없는 캐릭터 → 그냥 펀치 */
 static const unsigned char mo_basic[] = {0x00};
-static const svc_move svc_basic = { "펀치", mo_basic, 1, PAD_A, 0 };
+static const svc_move svc_basic = { "펀치", mo_basic, 1, PAD_A, 0, -1, -1 };
 
 /* ── 상태 ────────────────────────────────────────────────────────── */
 typedef struct { uint8_t pad; uint8_t frames; uint8_t sustain; } svc_step;
@@ -86,6 +86,9 @@ static int       warm;             /* 전투 게이트 연속 프레임 */
 static int       verify_left;
 static int       svc_is_rom;       /* 헤더 판별 결과 */
 static int       hold_elapsed;     /* 버튼 스텝 유지 누적 (강약 판정) */
+static const svc_move *chain_tbl;  /* 마지막 발동 기술의 소속 표 (파생 인덱스 해석용) */
+static const svc_move *chain_mv;   /* 마지막 발동 기술 */
+static int       chain_left;       /* 파생 입력 창 (매크로 끝난 뒤 프레임) — 실측 +2~36f */
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
 int  svcsp_disp_seq;       /* 새 발동마다 +1. 프론트가 엣지 검출 */
 const char *svcsp_last_name = 0;
@@ -169,9 +172,10 @@ static void svc_compile(const svc_move *m)
    q_left = q[0].frames;
    hold_elapsed = 0;
    verify_left = 60;
+   chain_mv = m; chain_left = 0;      /* 창은 매크로가 끝날 때 연다 (step_out) */
    svcsp_last_name = m->name;
    /* 표시 문자열: 이름(괄호 별칭은 잘라냄) + 화살표(표기 기준, 미러 안 함) + 버튼 */
-   if (m->motion[0])
+   if (m != &svc_basic)
    {
       static const char *AR[16] = {0};
       const char *arrows[16]; int na=0, wi=0, ci;
@@ -234,7 +238,8 @@ static const svc_move *svc_resolve(uint8_t held)
    int chr = CPUExRAM[OFF_CHAR1];
 
    if (chr < SVC_CHAR_COUNT && svc_chars[chr].mv && svc_chars[chr].n)
-      { map = svc_chars[chr].slots; tbl = svc_chars[chr].mv; ntbl = svc_chars[chr].n; }
+      { map = svc_chars[chr].slots; tbl = svc_chars[chr].mv; ntbl = svc_chars[chr].n;
+        chain_tbl = tbl; }
    else return &svc_basic;               /* 기술표 없는 캐릭터 */
 
    if (svc_airborne())
@@ -277,15 +282,34 @@ static uint8_t svc_step_out(int held)
    if (--q_left <= 0)
    {
       if (++q_i < q_n) q_left = q[q_i].frames;
-      else { q_n = q_i = 0; q_left = 0; }
+      else
+      {
+         q_n = q_i = 0; q_left = 0;
+         /* 파생이 있는 기술이면 재입력 창을 연다 (실측: 첫 기술 시작 +2~36f 수용) */
+         if (chain_mv && chain_tbl &&
+             ((svcsp_last_strong ? chain_mv->next_hold : chain_mv->next) >= 0))
+            chain_left = 34;
+      }
    }
    return out;                    /* 매크로 중 사용자 입력은 무시 */
+}
+
+/* 지금 파생 창에서 X 를 누르면 나갈 기술 (없으면 0) */
+static const svc_move *svc_chain_next(void)
+{
+   int idx;
+   if (!chain_mv || !chain_tbl) return 0;
+   idx = svcsp_last_strong ? chain_mv->next_hold : chain_mv->next;
+   if (idx < 0 && svcsp_last_strong) idx = chain_mv->next;   /* 홀드 전용이 없으면 약 파생 */
+   if (idx < 0) return 0;
+   return &chain_tbl[idx];
 }
 
 uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
 {
    uint16_t edge = (uint16_t)(trig & ~prev_trig);
    prev_trig = trig;
+   if (chain_left > 0) chain_left--;
 
    if (svc_in_battle()) { if (warm < 1000) warm++; }
    else warm = 0;
@@ -321,12 +345,30 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       else if (--pending_left <= 0) pending = 0;
    }
 
-   if (svc_active()) return svc_step_out(trig & 1u);
+   if (svc_active())
+   {
+      /* 렛카: 매크로 진행 중 X 재입력 → 파생을 보류에 걸어 둔다 (창 안에서 자동 발동) */
+      if ((edge & 1u))
+      {
+         const svc_move *nx = svc_chain_next();
+         if (nx) { pending = nx; pending_left = 50; }
+      }
+      return svc_step_out(trig & 1u);
+   }
 
    if ((edge & 1u) && !svc_in_battle() && svc_dbg())
       fprintf(stderr, "[svcsp] gate-fail chr=%d chr2=%d style=%d timer=%d y=%d\n",
               CPUExRAM[OFF_CHAR1], CPUExRAM[OFF_CHAR2], CPUExRAM[OFF_STYLE],
               CPUExRAM[OFF_TIMER], CPUExRAM[OFF_Y1]);
+   if ((edge & 1u) && svc_in_battle() && chain_left > 0)
+   {
+      const svc_move *nx = svc_chain_next();
+      if (nx)
+      {
+         svc_compile(nx);
+         if (svc_active()) return svc_step_out(trig & 1u);
+      }
+   }
    if ((edge & 1u) && svc_in_battle())
    {
       const svc_move *m = svc_resolve(pad);
@@ -354,5 +396,6 @@ void svcsp_reset(void)
    prev_trig = 0; prev_pad_dir = 0;
    warm = 0; verify_left = 0;
    hold_elapsed = 0; svcsp_last_strong = 0;
+   chain_mv = 0; chain_tbl = 0; chain_left = 0;
    svcsp_last_ok = -1; svcsp_last_name = 0;
 }
