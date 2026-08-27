@@ -1,20 +1,21 @@
 diff --git a/Makefile.common b/Makefile.common
-index b61e812..2804f9c 100644
+index b61e812..05ec58b 100644
 --- a/Makefile.common
 +++ b/Makefile.common
-@@ -82,7 +82,9 @@ SOURCES_CXX += \
+@@ -82,7 +82,10 @@ SOURCES_CXX += \
  
  SOURCES_C   += \
  	$(MEDNAFEN_DIR)/state.c \
 -	$(CORE_DIR)/libretro.c
 +	$(CORE_DIR)/libretro.c \
 +	$(CORE_DIR)/ss2sp.c \
++	$(CORE_DIR)/svcsp.c \
 +	$(CORE_DIR)/ss2comm.c
  
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..961ec32 100644
+index ef01e22..b0697e9 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -31,7 +32,7 @@ index ef01e22..961ec32 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,37 @@ static void check_color_depth(void)
+@@ -377,6 +379,83 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -41,15 +42,22 @@ index ef01e22..961ec32 100644
 +extern uint8_t ss2sp_frame(uint8_t pad, uint16_t trig);
 +extern void    ss2sp_reset(void);
 +extern void    ss2sp_set_layout(int sp);
++/* ── SvC MotM 원버튼 엔진 (svcsp.c) — 롬 헤더로 자동 판별, SvC 때만 이쪽이 받는다 ── */
++extern uint8_t svcsp_frame(uint8_t pad, uint16_t trig);
++extern void    svcsp_reset(void);
++extern void    svcsp_set_rom(const void *rom, unsigned len);
++extern int     svcsp_rom_ok(void);
 +extern const char *ss2sp_last_name;
 +/* ── SS2 캐릭터 해설 엔진 (ss2comm.c) ── */
 +extern void        ss2comm_set_ram(void *p);
 +extern void        ss2comm_set_rom(const void *rom, unsigned len);
++extern void        ss2comm_rom_fix(void *rom, unsigned len);
 +extern void        ss2comm_notify(const char *text);
 +#include "ss2comm.h"   /* SS2COMM_MSG_NOCARD */
 +extern int         ss2sp_card_block;
 +extern void        ss2comm_set_enabled(int on);
 +extern void        ss2comm_set_speaker(int idx);
++extern void        ss2comm_set_duo(int on);
 +extern int         ss2comm_next_speaker(int step);
 +extern const char *ss2comm_speaker_hello(int idx);
 +extern void        ss2comm_reset(void);
@@ -57,19 +65,58 @@ index ef01e22..961ec32 100644
 +extern void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h);
 +extern void        ss2comm_draw_enable(int mode);
 +extern int         ss2comm_band_h(void);
-+extern int         ss2comm_ref_h(void);
 +extern int         ss2comm_band_top(void);
 +extern int         ss2comm_drawing(void);
-+#define SS2COMM_BAND_MAX 64
++#define SS2COMM_BAND_MAX 32   /* = 엔진 SS2_BAND_H (30으로 어긋나 있던 것 정정) */
 +extern int         ss2sp_last_ok;
 +
 +/* SS2 원버튼 엔진 on/off (코어 옵션 ngp_ss2sp) */
 +static bool ss2sp_enable = true;
 +
++/* ── SS2 기둥 아트 + 빠른 설정 오버레이 — 앱판과 같은 층 ─────────────
++   기둥: 좌우 64px 에 카드 대형 일러(주소표, 유저 롬에서 굽는다)·전황 연출.
++   오버레이: 아래+옵션 콤보로 여닫고, 열려 있는 동안 게임·소리 완전 정지.
++   SP 배치(기술 목록 선택·타이거니)는 엔진(ss2comm/ss2sp)이 다 들고 있다. */
++#define SS2_SIDE_W 64
++#define SS2_WIDE_W (SS2_SIDE_W*2 + FB_WIDTH)
++static bool     ss2_sides = true;                 /* 코어 옵션 ngp_ss2sp_sides */
++static uint16_t ss2_wide[SS2_WIDE_W * (FB_HEIGHT + SS2COMM_BAND_MAX)];
++static unsigned ss2_last_w = FB_WIDTH, ss2_last_h = FB_HEIGHT;
++/* 오버레이가 직접 만지는 값 — 코어 옵션이 바뀌면 여기로도 동기한다 */
++static unsigned char ov_sp = 1, ov_chat = 1, ov_spk = 0, ov_ref = 1, ov_sides = 1;
++static unsigned char ov_sp_p = 1, ov_chat_p = 1, ov_spk_p = 0, ov_ref_p = 1, ov_sides_p = 1;
++
++static void ss2_set_geometry(void)
++{
++   struct retro_game_geometry geom;
++   int band = ss2comm_band_h();
++   geom.base_width   = ss2_sides ? SS2_WIDE_W : FB_WIDTH;
++   geom.base_height  = FB_HEIGHT + band;
++   geom.max_width    = SS2_WIDE_W;
++   geom.max_height   = FB_HEIGHT + SS2COMM_BAND_MAX;
++   geom.aspect_ratio = (float)geom.base_width / (float)geom.base_height;
++   if (environ_cb)
++      environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geom);
++}
++
++static void ss2_overlay_apply(void)
++{
++   if (ov_spk   != ov_spk_p)   { ss2comm_set_speaker(ov_spk);  ov_spk_p   = ov_spk; }
++   if (ov_chat  != ov_chat_p)  { ss2comm_set_enabled(ov_chat); ov_chat_p  = ov_chat; }
++   if (ov_ref   != ov_ref_p)   { ss2comm_set_ref(ov_ref);      ov_ref_p   = ov_ref; }
++   if (ov_sp    != ov_sp_p)    { ss2sp_enable = ov_sp != 0;    ov_sp_p    = ov_sp; }
++   if (ov_sides != ov_sides_p)
++   {
++      ss2_sides = ov_sides != 0;
++      ss2_set_geometry();
++      ov_sides_p = ov_sides;
++   }
++}
++
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +422,54 @@ static void check_variables(void)
+@@ -392,6 +471,73 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -83,7 +130,10 @@ index ef01e22..961ec32 100644
 +   var.key   = "ngp_ss2sp_comm";
 +   var.value = NULL;
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++   {
 +      ss2comm_set_enabled(strcmp(var.value, "disabled") != 0);
++      ov_chat = ov_chat_p = (strcmp(var.value, "disabled") != 0) ? 1 : 0;
++   }
 +
 +   var.key   = "ngp_ss2sp_comm_spk";
 +   var.value = NULL;
@@ -99,38 +149,62 @@ index ef01e22..961ec32 100644
 +      for (k = 0; k < (int)(sizeof(spk_key)/sizeof(spk_key[0])); k++)
 +         if (!strcmp(var.value, spk_key[k])) { sp = k; break; }
 +      ss2comm_set_speaker(sp);
++      ov_spk = ov_spk_p = (unsigned char)sp;
 +   }
++
++   var.key   = "ngp_ss2sp_comm_duo";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      ss2comm_set_duo(!strcmp(var.value, "enabled"));
 +
 +   var.key   = "ngp_ss2sp_comm_draw";
 +   var.value = NULL;
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 +   {
-+      int prev = (ss2comm_band_h() + ss2comm_ref_h()) | (ss2comm_band_top() << 8);
-+      int mode = 1;                                  /* 기본: 화면 밖 아래 띠 */
++      int prev = ss2comm_band_h() | (ss2comm_band_top() << 8);
++      int mode = 4;                                  /* 기본: 화면 밖 **위** 띠 (아래는 어색하다는 제보) */
 +      if      (!strcmp(var.value, "disabled"))     mode = 0;
 +      else if (!strcmp(var.value, "above"))        mode = 4;
 +      else if (!strcmp(var.value, "inside_top"))   mode = 2;
 +      else if (!strcmp(var.value, "inside_bottom"))mode = 3;
 +      ss2comm_draw_enable(mode);
-+      if (((ss2comm_band_h() + ss2comm_ref_h()) | (ss2comm_band_top() << 8)) != prev)
++      if ((ss2comm_band_h() | (ss2comm_band_top() << 8)) != prev)
 +         update_video = true;                        /* 화면 세로가 바뀌면 지오메트리 재통보 */
 +   }
 +
++   var.key   = "ngp_ss2sp_sides";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++   {
++      bool on = strcmp(var.value, "disabled") != 0;
++      if (on != ss2_sides)
++      {
++         ss2_sides = on;
++         ss2_set_geometry();
++      }
++   }
++
++   /* 오버레이 그림자값을 방금 적용한 옵션과 맞춘다 */
++   ov_sp    = ov_sp_p    = ss2sp_enable ? 1 : 0;
++   ov_sides = ov_sides_p = ss2_sides ? 1 : 0;
  }
  
  void retro_init(void)
-@@ -436,6 +504,10 @@ void retro_init(void)
+@@ -436,6 +582,13 @@ void retro_init(void)
  
  void retro_reset(void)
  {
 +   ss2sp_reset();
++   svcsp_reset();
 +   ss2comm_set_ram(&CPUExRAM[0]);
-+   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
++   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
++   svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
++   ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
 +   ss2comm_reset();
     neopop_reset();
  }
  
-@@ -448,6 +520,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +601,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -138,7 +212,7 @@ index ef01e22..961ec32 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +531,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +612,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -152,22 +226,64 @@ index ef01e22..961ec32 100644
  
        { 0 },
     };
-@@ -479,6 +558,11 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +640,13 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
 +   /* 해설 엔진: 램·롬을 물리고 상태를 비운다 (retro_reset() 에도 같은 줄이 있다) */
 +   ss2comm_set_ram(&CPUExRAM[0]);
 +   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
++   svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
++   ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
 +   ss2comm_reset();
 +
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +640,38 @@ static void update_input(void)
+@@ -556,6 +724,81 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
++
++   /* ── 빠른 설정 오버레이 — 아래+옵션 콤보로 여닫는다 (앱판과 동일).
++      열려 있으면 방향·A·B·옵션은 오버레이 몫이고 게임엔 아무것도 안 간다. */
++   {
++      static int     ss2_combo_latch = 0;
++      static int16_t ss2_ov_prev = 0;
++      int toggled = 0;
++      int down = (ret >> RETRO_DEVICE_ID_JOYPAD_DOWN) & 1;
++      int opt  = (ret >> RETRO_DEVICE_ID_JOYPAD_START) & 1;
++      if (down && opt)
++      {
++         if (!ss2_combo_latch)
++         {
++            ss2_combo_latch = 1;
++            ss2comm_overlay_toggle();
++            toggled = 1;
++         }
++      }
++      else if (!down && !opt)
++         ss2_combo_latch = 0;
++      if (ss2comm_overlay_active())
++      {
++         if (!toggled)
++         {
++            int16_t edge = ret & ~ss2_ov_prev;
++            if (edge & (1 << RETRO_DEVICE_ID_JOYPAD_UP))    ss2comm_overlay_input(0);
++            if (edge & (1 << RETRO_DEVICE_ID_JOYPAD_DOWN))  ss2comm_overlay_input(1);
++            if (edge & (1 << RETRO_DEVICE_ID_JOYPAD_LEFT))  ss2comm_overlay_input(2);
++            if (edge & (1 << RETRO_DEVICE_ID_JOYPAD_RIGHT)) ss2comm_overlay_input(3);
++            if (edge & (1 << RETRO_DEVICE_ID_JOYPAD_B))     ss2comm_overlay_input(4); /* NGP A = 선택 */
++            if (edge & (1 << RETRO_DEVICE_ID_JOYPAD_A))     ss2comm_overlay_input(5); /* NGP B = 뒤로 */
++            if (edge & (1 << RETRO_DEVICE_ID_JOYPAD_START)) ss2comm_overlay_input(5);
++         }
++         ss2_ov_prev = ret;
++         ss2_overlay_apply();
++         input_buf = 0;
++         return;
++      }
++      ss2_ov_prev = ret;
++   }
 +
 +   if (ss2sp_enable)
 +   {
@@ -193,7 +309,10 @@ index ef01e22..961ec32 100644
 +         }
 +         comm_prev = now;
 +      }
-+      input_buf = ss2sp_frame(input_buf, trig);
++      if (svcsp_rom_ok())
++         input_buf = svcsp_frame(input_buf, trig);   /* SvC — 자기 엔진이 받는다 */
++      else
++         input_buf = ss2sp_frame(input_buf, trig);
 +      if (ss2sp_card_block)      /* 카드가 없어 걸러진 순간 — 왜 안 나갔는지 알려 준다 */
 +      {
 +         ss2sp_card_block = 0;
@@ -203,34 +322,80 @@ index ef01e22..961ec32 100644
  }
  
  void retro_run(void)
-@@ -603,6 +707,25 @@ void retro_run(void)
-    width  = spec.DisplayRect.w;
-    height = spec.DisplayRect.h;
+@@ -598,12 +841,68 @@ void retro_run(void)
+       update_video = false;
+    }
  
+-   Emulate(&spec, sound_buf);
 +   {
-+      const char *cline = ss2comm_frame();
-+      int band = ss2comm_band_h();
-+      uint16_t *fbuf = (uint16_t *)surf->pixels;
-+      if (cline && !ss2comm_drawing())   /* 코어가 직접 그릴 때는 알림을 겹쳐 띄우지 않는다 */
++   int ss2_paused = ss2comm_overlay_active();
+ 
+-   width  = spec.DisplayRect.w;
+-   height = spec.DisplayRect.h;
++   if (!ss2_paused)
++   {
++      Emulate(&spec, sound_buf);
+ 
+-   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++      width  = spec.DisplayRect.w;
++      height = spec.DisplayRect.h;
++
 +      {
-+         struct retro_message msg;
-+         msg.msg    = cline;
-+         msg.frames = 150;                 /* 약 2.5초 */
-+         environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
++         const char *cline = ss2comm_frame();
++         int band = ss2comm_band_h();
++         uint16_t *fbuf = (uint16_t *)surf->pixels;
++         if (cline && !ss2comm_drawing())   /* 코어가 직접 그릴 때는 알림을 겹쳐 띄우지 않는다 */
++         {
++            struct retro_message msg;
++            msg.msg    = cline;
++            msg.frames = 150;                 /* 약 2.5초 */
++            environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
++         }
++         /* 띠를 화면 위에 붙이는 모드에서는 게임 그림을 띠 높이만큼 아래로 민다.
++            (같은 버퍼 안에서 옮긴다 — surf->pixels 는 16bpp 기준 두 배로 잡혀 있다) */
++         if (band && ss2comm_band_top())
++            memmove(fbuf + band * FB_WIDTH, fbuf, (size_t)height * FB_WIDTH * sizeof(uint16_t));
++         ss2comm_draw(fbuf, FB_WIDTH, (int)width, (int)height);
++         height += band;
 +      }
-+      /* 띠를 화면 위에 붙이는 모드에서는 게임 그림을 띠 높이만큼 아래로 민다.
-+         (같은 버퍼 안에서 옮긴다 — surf->pixels 는 16bpp 기준 두 배로 잡혀 있다) */
-+      if (band && ss2comm_band_top())
-+         memmove(fbuf + band * FB_WIDTH, fbuf, (size_t)height * FB_WIDTH * sizeof(uint16_t));
-+      ss2comm_draw(fbuf, FB_WIDTH, (int)width, (int)height);
-+      /* 위 해설 띠 + 아래 심판 칸. 둘을 나눠 두면 서로 밀어내지 않는다. */
-+      height += band + ss2comm_ref_h();
++      ss2_last_w = width;
++      ss2_last_h = height;
++   }
++   else
++   {
++      /* 빠른 설정이 열려 있다 — 앱판처럼 완전 일시정지: 에뮬·소리를 돌리지 않고
++         마지막 화면 위에 설정창만 그린다 */
++      width  = ss2_last_w;
++      height = ss2_last_h;
++      spec.SoundBufSize = 0;
 +   }
 +
-    video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++   if (ss2_sides)
++   {
++      /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
++         게임 그림을 가운데로 옮겨 넓은 캔버스(288px)로 내보낸다 */
++      const uint16_t *fbuf = (const uint16_t *)surf->pixels;
++      unsigned y;
++      for (y = 0; y < height; y++)
++         memcpy(ss2_wide + y * SS2_WIDE_W + SS2_SIDE_W, fbuf + y * FB_WIDTH,
++                width * sizeof(uint16_t));
++      ss2comm_side(ss2_wide, SS2_WIDE_W, SS2_SIDE_W, (int)height, 0);
++      ss2comm_side(ss2_wide + SS2_SIDE_W + width, SS2_WIDE_W, SS2_SIDE_W, (int)height, 1);
++      if (ss2_paused)
++         ss2comm_overlay_draw(ss2_wide + SS2_SIDE_W, SS2_WIDE_W, (int)width, (int)height);
++      video_cb(ss2_wide, SS2_SIDE_W * 2 + width, height, SS2_WIDE_W * 2);
++   }
++   else
++   {
++      if (ss2_paused)
++         ss2comm_overlay_draw((uint16_t *)surf->pixels, FB_WIDTH, (int)width, (int)height);
++      video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++   }
++   }
  
     for (total = 0; total < spec.SoundBufSize; )
-@@ -629,11 +752,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+       total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
+@@ -629,11 +928,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -240,29 +405,27 @@ index ef01e22..961ec32 100644
 -   info->geometry.max_height   = MEDNAFEN_CORE_GEOMETRY_MAX_H;
 -   info->geometry.aspect_ratio = MEDNAFEN_CORE_GEOMETRY_ASPECT_RATIO;
 +   {
-+      int band = ss2comm_band_h() + ss2comm_ref_h();  /* 위 해설 띠 + 아래 심판 칸 */
-+      info->geometry.base_width   = MEDNAFEN_CORE_GEOMETRY_BASE_W;
++      int band = ss2comm_band_h();                   /* 해설 확장 띠(20px) 사용 시에만 > 0 */
++      info->geometry.base_width   = ss2_sides ? SS2_WIDE_W : MEDNAFEN_CORE_GEOMETRY_BASE_W;
 +      info->geometry.base_height  = MEDNAFEN_CORE_GEOMETRY_BASE_H + band;
-+      info->geometry.max_width    = MEDNAFEN_CORE_GEOMETRY_MAX_W;
++      info->geometry.max_width    = SS2_WIDE_W;
 +      info->geometry.max_height   = MEDNAFEN_CORE_GEOMETRY_MAX_H + SS2COMM_BAND_MAX;
-+      info->geometry.aspect_ratio = (float)MEDNAFEN_CORE_GEOMETRY_BASE_W /
++      info->geometry.aspect_ratio = (float)info->geometry.base_width /
 +                                    (float)(MEDNAFEN_CORE_GEOMETRY_BASE_H + band);
 +   }
  
     check_color_depth();
  }
-@@ -762,6 +889,7 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1065,8 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
-+   ss2sp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
-+   /* 해설도 같이 비운다. 안 하면 라운드 수·연승·흐름이 **이전 판 것으로 쌓인다** —
-+      같은 세이브를 세 번 불러 각각 이기면 구호가 「둘째 판 → 셋째 판 → 안 나옴」이 됐다. */
-+   ss2comm_reset();
++   ss2sp_reset();
++   svcsp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +910,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1087,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  
@@ -292,7 +455,7 @@ index ef01e22..961ec32 100644
  {
     if(type == RETRO_MEMORY_SYSTEM_RAM)
 diff --git a/libretro_core_options.h b/libretro_core_options.h
-index a0dc3ec..a1d66b8 100644
+index a0dc3ec..780df46 100644
 --- a/libretro_core_options.h
 +++ b/libretro_core_options.h
 @@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
@@ -304,7 +467,7 @@ index a0dc3ec..a1d66b8 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -52,6 +52,92 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -52,6 +52,106 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
        },
        "english",
     },
@@ -364,18 +527,46 @@ index a0dc3ec..a1d66b8 100644
 +      "haohmaru",
 +   },
 +   {
-+      "ngp_ss2sp_comm_draw",
-+      "SS2 Commentary Display",
++      "ngp_ss2sp_comm_duo",
++      "SS2 Commentary Partner",
 +      NULL,
-+      "Outside the screen (default): the core adds a 30px band above or below the game image and draws the line there with its own Korean pixel font (Galmuri 11px) plus the speaker's portrait - the game image is never covered, but the picture gets taller. Inside the screen: draws a dialogue box over the game image instead, so the console screen size and aspect stay exactly as they were. Frontend notification only: no drawing, uses RetroArch OSD (Korean may not render, depends on the frontend font).",
++      "In big moments a second character answers the commentator in one short line - KO, super move, comeback, danger, and the end-of-match verdict. Turn it off if one voice is enough.",
 +      NULL,
 +      "video",
 +      {
-+         { "enabled",       "Outside the screen, below" },
++         { "enabled",  "Enabled" },
++         { "disabled", "Disabled" },
++         { NULL, NULL},
++      },
++      "enabled",
++   },
++   {
++      "ngp_ss2sp_comm_draw",
++      "SS2 Commentary Display",
++      NULL,
++      "Outside the screen (default): the core adds a 32px band above or below the game image and draws the line there with its own Korean pixel font (Galmuri 11px) plus the speaker's portrait - the game image is never covered, but the picture gets taller. Inside the screen: draws a dialogue box over the game image instead, so the console screen size and aspect stay exactly as they were. Frontend notification only: no drawing, uses RetroArch OSD (Korean may not render, depends on the frontend font).",
++      NULL,
++      "video",
++      {
 +         { "above",         "Outside the screen, above" },
-+         { "inside_bottom", "Inside the screen, bottom" },
++         { "enabled",       "Outside the screen, below" },
 +         { "inside_top",    "Inside the screen, top" },
++         { "inside_bottom", "Inside the screen, bottom" },
 +         { "disabled",      "Frontend notification only" },
++         { NULL, NULL},
++      },
++      "above",
++   },
++   {
++      "ngp_ss2sp_sides",
++      "SS2 Side Art Pillars",
++      NULL,
++      "Adds 64px pillars on both sides of the game image (288px wide output). Each pillar shows the fighter's large card illustration, rebuilt at runtime from your own ROM - the core ships only tile address tables, no artwork. The pillars react to the match: shake on hit, white flash on heavy damage, red tint when near death, grayscale on KO. Includes the Quick Settings overlay (hold Down + Option) with one-button special move assignment.",
++      NULL,
++      "video",
++      {
++         { "enabled",  "Enabled" },
++         { "disabled", "Disabled" },
 +         { NULL, NULL},
 +      },
 +      "enabled",
@@ -383,7 +574,7 @@ index a0dc3ec..a1d66b8 100644
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
  };
  
-@@ -72,6 +133,17 @@ struct retro_core_option_definition option_defs_us[] = {
+@@ -72,6 +172,17 @@ struct retro_core_option_definition option_defs_us[] = {
        },
        "english",
     },

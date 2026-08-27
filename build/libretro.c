@@ -385,6 +385,11 @@ static void check_color_depth(void)
 extern uint8_t ss2sp_frame(uint8_t pad, uint16_t trig);
 extern void    ss2sp_reset(void);
 extern void    ss2sp_set_layout(int sp);
+/* ── SvC MotM 원버튼 엔진 (svcsp.c) — 롬 헤더로 자동 판별, SvC 때만 이쪽이 받는다 ── */
+extern uint8_t svcsp_frame(uint8_t pad, uint16_t trig);
+extern void    svcsp_reset(void);
+extern void    svcsp_set_rom(const void *rom, unsigned len);
+extern int     svcsp_rom_ok(void);
 extern const char *ss2sp_last_name;
 /* ── SS2 캐릭터 해설 엔진 (ss2comm.c) ── */
 extern void        ss2comm_set_ram(void *p);
@@ -578,8 +583,10 @@ void retro_init(void)
 void retro_reset(void)
 {
    ss2sp_reset();
+   svcsp_reset();
    ss2comm_set_ram(&CPUExRAM[0]);
-   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
+   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
+   svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
    ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
    ss2comm_reset();
    neopop_reset();
@@ -636,6 +643,7 @@ bool retro_load_game(const struct retro_game_info *info)
    /* 해설 엔진: 램·롬을 물리고 상태를 비운다 (retro_reset() 에도 같은 줄이 있다) */
    ss2comm_set_ram(&CPUExRAM[0]);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
+   svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
    ss2comm_reset();
 
@@ -781,7 +789,10 @@ static void update_input(void)
          }
          comm_prev = now;
       }
-      input_buf = ss2sp_frame(input_buf, trig);
+      if (svcsp_rom_ok())
+         input_buf = svcsp_frame(input_buf, trig);   /* SvC — 자기 엔진이 받는다 */
+      else
+         input_buf = ss2sp_frame(input_buf, trig);
       if (ss2sp_card_block)      /* 카드가 없어 걸러진 순간 — 왜 안 나갔는지 알려 준다 */
       {
          ss2sp_card_block = 0;
@@ -1054,7 +1065,8 @@ bool retro_serialize(void *data, size_t size)
 
 bool retro_unserialize(const void *data, size_t size)
 {
-   ss2sp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
+   ss2sp_reset();
+   svcsp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
    StateMem st;
 
    st.data           = (uint8_t*)data;
