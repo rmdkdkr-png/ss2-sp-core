@@ -1,0 +1,16 @@
+# 실험 부산물 — 롬 파생물 포함, 절대 커밋 금지
+*.st
+*.ram
+*.ppm
+*.png
+*.csv
+*.bak
+t.txt
+t?.txt
+probe_script.txt
+svcrun
+twoq*.py
+sptest?.py
+gate.py
+xcheck.py
+poke_patch.py
