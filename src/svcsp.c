@@ -440,9 +440,15 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       if (off) { prev_trig = 0; return pad; }
    }
    if (!svc_engine_now())
-   {  /* 기본 레이아웃: Y=강펀치(C) X=강킥(D) L·R=A+B. 메뉴 밖에서도 동작 —
-         Y·X는 그냥 해당 버튼 꾹 누름과 같아서 부작용이 없다. */
-      static int hold_p, hold_k;
+   {  /* 기본 레이아웃: A·B=약 고정, Y=강펀치(C) X=강킥(D), L·R=A+B.
+         약 고정 = 물리 버튼을 6f(실측 약 상한)에서 강제 해제 — 꾹 눌러도 강이 안 된다.
+         메뉴에서는 그냥 짧은 A 누름과 같아 부작용 없음. */
+      static int hold_p, hold_k, wk_p, wk_k;
+      wk_p = (ret & (1u << 0)) ? wk_p + 1 : 0;            /* 물리 B버튼 = NGP A */
+      wk_k = (ret & (1u << 8)) ? wk_k + 1 : 0;            /* 물리 A버튼 = NGP B */
+      pad &= (uint8_t)~0x30;
+      if (wk_p >= 1 && wk_p <= 6) pad |= 0x10;            /* 약펀치 — 6f 까지만 */
+      if (wk_k >= 1 && wk_k <= 6) pad |= 0x20;            /* 약킥   — 6f 까지만 */
       if (ret & (1u << 1)) hold_p = SVC_HOLD_STRONG; else if (hold_p) hold_p--;
       if (ret & (1u << 9)) hold_k = SVC_HOLD_STRONG; else if (hold_k) hold_k--;
       if (hold_p) pad |= 0x10;                            /* NGP A 지속 = 강펀치 */
