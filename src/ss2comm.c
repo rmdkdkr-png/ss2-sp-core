@@ -1959,9 +1959,12 @@ int ss2comm_overlay_input(int k){
     if(k == 0){ ov_cur = (unsigned char)((ov_cur + rows - 1) % rows); return 1; }
     if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % rows); return 1; }
     if(k < 2 || k > 4) return 1;
-    if(ov_cur == 0){                                   /* 캐릭터/유파 — 좌우 순환 */
+    if(ov_cur == 0){                                   /* 캐릭터/유파 — 좌우 순환 (값 변경) */
       int n = sp_style_count(); if(n <= 0) return 1;
-      ov_spstyle = (k == 2) ? (ov_spstyle + n - 1) % n : (ov_spstyle + 1) % n;
+      if(k == 2 || k == 3)
+        ov_spstyle = (k == 2) ? (ov_spstyle + n - 1) % n : (ov_spstyle + 1) % n;
+    }else if(k != 4){                                  /* 진입/실행은 A 전용 — 방향키 오조작 방지 */
+      return 1;
     }else if(ov_cur <= ss2sp_slot_count()){            /* 슬롯 = 목록 열기 */
       ov_pickslot = ov_cur - 1;
       ov_page = 2;
@@ -1978,7 +1981,7 @@ int ss2comm_overlay_input(int k){
     if(k == 0){ ov_cur = (unsigned char)((ov_cur + rows0 - 1) % rows0); return 1; }
     if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % rows0); return 1; }
     if(ov_cur == ov_n){
-      if(k >= 2 && k <= 4){
+      if(k == 4){                                      /* 진입은 A 전용 */
         int st = sp_cur(); if(st >= 0) ov_spstyle = st;
         ov_page = 1; ov_cur = 0;
       }
