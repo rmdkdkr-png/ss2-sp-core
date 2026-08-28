@@ -54,8 +54,10 @@ def emit(chars):
         cid = ch['id']
         moves = []
         for k, mv in enumerate(ch.get('table', [])):
-            if mv.get('kind') == 'command_normal':
-                continue        # 특수기 — 방향+버튼 한 번이라 원버튼 배치 대상이 아니다
+            _air_cn = mv.get('air') or str(mv.get('command','')).lower().startswith(('air','j'))
+            if mv.get('kind') == 'command_normal' and not _air_cn:
+                continue        # 지상 특수기 — 방향+버튼 한 번이라 원버튼 배치 대상이 아니다
+                                # (공중 전용 특수기는 남긴다: 공중 X 한 방의 가치)
             try: seq, air, charge = parse_cmd(mv['command'])
             except Exception: continue
             if not seq: continue

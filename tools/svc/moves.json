@@ -158,7 +158,8 @@
     "DF": "R.E.D. 킥",
     "B": "114식 황물기 (Aragami)",
     "F": "최종결전오의 무식",
-    "DB": "212식 금월양 (Kototsuki You)"
+    "DB": "212식 금월양 (Kototsuki You)",
+    "AIR": "외식 나락 떨구기 (Naraku Otoshi)"
    },
    "cancel_dud": true
   },
@@ -812,7 +813,8 @@
     "DF": "311식 츠마구시",
     "B": "127식 아오이하나",
     "F": "금 1211식 야오토메 (팔치녀)",
-    "DB": "212식 코토츠키 인"
+    "DB": "212식 코토츠키 인",
+    "AIR": "외식 유리오리 (백합꺾기)"
    },
    "cancel_dud": false
   },
@@ -955,7 +957,8 @@
     "DF": "카무이 림세",
     "B": "시치카푸 에투",
     "F": "카무이 림세",
-    "DB": "매에 매달리기 (타카니 츠카마루)"
+    "DB": "매에 매달리기 (타카니 츠카마루)",
+    "AIR": "카무이 훔 케습"
    },
    "cancel_dud": false
   },
@@ -1153,7 +1156,8 @@
     "F": "기공장(Kikosho)",
     "D": "천승각(Tenshokyaku)",
     "DF": "선원추(Sen'enshu)",
-    "DB": "스피닝 버드 킥(Spinning Bird Kick)"
+    "DB": "스피닝 버드 킥(Spinning Bird Kick)",
+    "AIR": "응조각(Yousou Kyaku)"
    },
    "cancel_dud": false
   },
@@ -1291,7 +1295,8 @@
     "B": "스크류 파일 드라이버(Screw Piledriver)",
     "D": "더블 라리아트(Double Lariat)",
     "DF": "에어리얼 러시안 슬램(Aerial Russian Slam)",
-    "DB": "퀵 더블 라리아트(Quick Double Lariat)"
+    "DB": "퀵 더블 라리아트(Quick Double Lariat)",
+    "AIR": "플라잉 바디 프레스(Flying Body Press)"
    },
    "cancel_dud": false
   },

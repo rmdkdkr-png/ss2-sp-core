@@ -7,6 +7,7 @@ typedef struct { const char *name; const unsigned char *motion; unsigned char le
                  signed char next, next_hold; } svc_move;   /* 파생(렛카) — 표 인덱스, -1 없음 */
 /* flags: 1=근접 4=공중 8=미검증 16=모으기(첫 방향을 길게) */
 
+static const unsigned char mo_c0_2[] = {0x02};
 static const unsigned char mo_c0_3[] = {0x02,0x0A,0x08};
 static const unsigned char mo_c0_4[] = {0x02,0x0A,0x08};
 static const unsigned char mo_c0_5[] = {0x08,0x0A,0x02,0x06,0x04};
@@ -22,13 +23,14 @@ static const unsigned char mo_c0_14[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c0_15[] = {0x00};
 static const unsigned char mo_c0_16[] = {0x00};
 static const svc_move mv_c0[] = {
-  {"114식 황물기 (Aragami)", mo_c0_3, 3, 0x10, 0, 1, 3},
-  {"128식 구상 (Kono Kizu)", mo_c0_4, 3, 0x10, 0, 12, -1},
+  {"외식 나락 떨구기 (Naraku Otoshi)", mo_c0_2, 1, 0x10, 4, -1, -1},
+  {"114식 황물기 (Aragami)", mo_c0_3, 3, 0x10, 0, 2, 4},
+  {"128식 구상 (Kono Kizu)", mo_c0_4, 3, 0x10, 0, 13, -1},
   {"127식 팔청 (Yano Sabi)", mo_c0_5, 5, 0x10, 0, -1, -1},
   {"401식 죄읊기 (Tsumi Yomi)", mo_c0_6, 5, 0x10, 0, -1, -1},
   {"100식 귀신태우기 (Oniyaki)", mo_c0_7, 3, 0x10, 0, -1, -1},
   {"R.E.D. 킥", mo_c0_8, 3, 0x20, 0, -1, -1},
-  {"75식 개", mo_c0_9, 3, 0x20, 0, 13, -1},
+  {"75식 개", mo_c0_9, 3, 0x20, 0, 14, -1},
   {"212식 금월양 (Kototsuki You)", mo_c0_10, 5, 0x20, 0, -1, -1},
   {"910식 누에잡기 (Nue Tsumi)", mo_c0_11, 3, 0x10, 0, -1, -1},
   {"이면 108식 대사치 (Orochinagi)", mo_c0_12, 7, 0x10, 0, -1, -1},
@@ -73,6 +75,7 @@ static const svc_move mv_c2[] = {
   {"용호난무", mo_c2_7, 7, 0x10, 0, -1, -1},
   {"천지패황권", mo_c2_8, 6, 0x10, 0, -1, -1},
 };
+static const unsigned char mo_c3_2[] = {0x02};
 static const unsigned char mo_c3_3[] = {0x02,0x0A,0x08};
 static const unsigned char mo_c3_4[] = {0x02,0x06,0x04};
 static const unsigned char mo_c3_5[] = {0x02,0x06,0x04};
@@ -83,6 +86,7 @@ static const unsigned char mo_c3_9[] = {0x02,0x06,0x04,0x06,0x02,0x0A,0x08};
 static const unsigned char mo_c3_10[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c3_11[] = {0x02,0x06,0x04,0x02,0x06,0x04};
 static const svc_move mv_c3[] = {
+  {"대륜풍차떨구기", mo_c3_2, 1, 0x10, 4, -1, -1},
   {"화접선", mo_c3_3, 3, 0x10, 0, -1, -1},
   {"용염무", mo_c3_4, 3, 0x10, 0, -1, -1},
   {"사치요 도리 (小夜千鳥)", mo_c3_5, 3, 0x20, 0, -1, -1},
@@ -115,6 +119,7 @@ static const svc_move mv_c4[] = {
   {"그래비티 스톰", mo_c4_9, 6, 0x10, 0, -1, -1},
   {"그레이트풀 데드", mo_c4_10, 6, 0x20, 0, -1, -1},
 };
+static const unsigned char mo_c5_1[] = {0x02};
 static const unsigned char mo_c5_2[] = {0x02,0x06,0x04};
 static const unsigned char mo_c5_3[] = {0x08,0x02,0x0A};
 static const unsigned char mo_c5_4[] = {0x02,0x06,0x04};
@@ -125,6 +130,7 @@ static const unsigned char mo_c5_8[] = {0x08,0x0A,0x02,0x06,0x04,0x08,0x0A,0x02,
 static const unsigned char mo_c5_9[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c5_10[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const svc_move mv_c5[] = {
+  {"피닉스 밤", mo_c5_1, 1, 0x20, 4, -1, -1},
   {"사이코 볼", mo_c5_2, 3, 0x10, 0, -1, -1},
   {"사이코 소드", mo_c5_3, 3, 0x10, 0, -1, -1},
   {"피닉스 애로우", mo_c5_4, 3, 0x20, 4, -1, -1},
@@ -135,6 +141,7 @@ static const svc_move mv_c5[] = {
   {"피닉스 팽 애로우", mo_c5_9, 6, 0x20, 4, -1, -1},
   {"원조! 불꽃의 검 (Flame Sword)", mo_c5_10, 6, 0x10, 0, -1, -1},
 };
+static const unsigned char mo_c6_2[] = {0x04};
 static const unsigned char mo_c6_3[] = {0x02,0x0A,0x08};
 static const unsigned char mo_c6_4[] = {0x08,0x02,0x0A};
 static const unsigned char mo_c6_5[] = {0x02,0x06,0x04};
@@ -145,6 +152,7 @@ static const unsigned char mo_c6_9[] = {0x02,0x0A,0x08,0x0A,0x02,0x06,0x04};
 static const unsigned char mo_c6_10[] = {0x02,0x06,0x04,0x06,0x02,0x0A,0x08};
 static const unsigned char mo_c6_11[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const svc_move mv_c6[] = {
+  {"외식 유리오리 (백합꺾기)", mo_c6_2, 1, 0x20, 4, -1, -1},
   {"108식 야미바라이 (어둠쫓기)", mo_c6_3, 3, 0x10, 0, -1, -1},
   {"100식 오니야키", mo_c6_4, 3, 0x10, 0, -1, -1},
   {"127식 아오이하나", mo_c6_5, 3, 0x10, 0, -1, -1},
@@ -167,6 +175,7 @@ static const svc_move mv_c7[] = {
   {"비오의 천파봉신참", mo_c7_3, 6, 0x10, 0, -1, -1},
   {"비오의 천파단공열참", mo_c7_4, 6, 0x20, 0, -1, -1},
 };
+static const unsigned char mo_c8_0[] = {0x02};
 static const unsigned char mo_c8_1[] = {0x04,0x06,0x02};
 static const unsigned char mo_c8_2[] = {0x02,0x0A,0x08};
 static const unsigned char mo_c8_3[] = {0x04,0x02,0x06};
@@ -175,6 +184,7 @@ static const unsigned char mo_c8_5[] = {0x02,0x06,0x04};
 static const unsigned char mo_c8_6[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c8_7[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const svc_move mv_c8[] = {
+  {"카무이 훔 케습", mo_c8_0, 1, 0x20, 4, -1, -1},
   {"안누 무츠베", mo_c8_1, 3, 0x10, 0, -1, -1},
   {"레라 무츠베", mo_c8_2, 3, 0x10, 0, -1, -1},
   {"카무이 림세", mo_c8_3, 3, 0x10, 0, -1, -1},
@@ -199,6 +209,7 @@ static const svc_move mv_c9[] = {
   {"진공용권선풍각(Shinku Tatsumaki Senpukyaku)", mo_c9_7, 6, 0x20, 0, -1, -1},
   {"진 승룡권(Shin Shoryuken)", mo_c9_8, 6, 0x20, 0, -1, -1},
 };
+static const unsigned char mo_c10_2[] = {0x02};
 static const unsigned char mo_c10_3[] = {0x04,0x06,0x02,0x0A,0x08};
 static const unsigned char mo_c10_4[] = {0x02,0x01};
 static const unsigned char mo_c10_5[] = {0x04,0x08};
@@ -208,6 +219,7 @@ static const unsigned char mo_c10_8[] = {0x04,0x08,0x04,0x08};
 static const unsigned char mo_c10_9[] = {0x06,0x0A,0x06,0x09};
 static const unsigned char mo_c10_10[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const svc_move mv_c10[] = {
+  {"응조각(Yousou Kyaku)", mo_c10_2, 1, 0x20, 4, -1, -1},
   {"기공권(Kikoken)", mo_c10_3, 5, 0x10, 0, -1, -1},
   {"천승각(Tenshokyaku)", mo_c10_4, 2, 0x20, 16, -1, -1},
   {"스피닝 버드 킥(Spinning Bird Kick)", mo_c10_5, 2, 0x20, 16, -1, -1},
@@ -217,6 +229,9 @@ static const svc_move mv_c10[] = {
   {"패산천승각(Hazan Tenshokyaku)", mo_c10_9, 4, 0x20, 16, -1, -1},
   {"칠성섬공각(Shichisei Senkukyaku)", mo_c10_10, 6, 0x20, 4, -1, -1},
 };
+static const unsigned char mo_c11_2[] = {0x02};
+static const unsigned char mo_c11_3[] = {0x02};
+static const unsigned char mo_c11_4[] = {0x01};
 static const unsigned char mo_c11_5[] = {0x02,0x06,0x04};
 static const unsigned char mo_c11_6[] = {0x02,0x06,0x04};
 static const unsigned char mo_c11_7[] = {0x08,0x02,0x0A};
@@ -227,6 +242,9 @@ static const unsigned char mo_c11_11[] = {0x08,0x0A,0x02,0x06,0x04,0x08};
 static const unsigned char mo_c11_12[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c11_13[] = {0x02,0x06,0x04,0x02,0x06,0x04};
 static const svc_move mv_c11[] = {
+  {"플라잉 바디 프레스(Flying Body Press)", mo_c11_2, 1, 0x10, 4, -1, -1},
+  {"더블 니 드롭(Double Knee Drop)", mo_c11_3, 1, 0x20, 4, -1, -1},
+  {"공중 헤드벗(Midair Headbutt)", mo_c11_4, 1, 0x10, 4, -1, -1},
   {"더블 라리아트(Double Lariat)", mo_c11_5, 3, 0x10, 0, -1, -1},
   {"퀵 더블 라리아트(Quick Double Lariat)", mo_c11_6, 3, 0x20, 0, -1, -1},
   {"배니싱 플랫(Banishing Flat)", mo_c11_7, 3, 0x10, 0, -1, -1},
@@ -287,6 +305,7 @@ static const svc_move mv_c14[] = {
   {"하루이치방(Haru Ichiban)", mo_c14_7, 6, 0x20, 0, -1, -1},
   {"슌고쿠사츠(Shun Goku Satsu)", mo_c14_8, 4, 0x10, 24, -1, -1},
 };
+static const unsigned char mo_c15_0[] = {0x02};
 static const unsigned char mo_c15_1[] = {0x02,0x0A,0x08};
 static const unsigned char mo_c15_2[] = {0x08,0x02,0x0A};
 static const unsigned char mo_c15_3[] = {0x08,0x0A,0x02,0x06,0x04};
@@ -295,6 +314,7 @@ static const unsigned char mo_c15_5[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c15_6[] = {0x08,0x0A,0x02,0x06,0x04};
 static const unsigned char mo_c15_7[] = {0x02,0x06,0x04,0x02,0x06,0x04};
 static const svc_move mv_c15[] = {
+  {"셸 킥(Shell Kick)", mo_c15_0, 1, 0x20, 4, -1, -1},
   {"소울 피스트(Soul Fist)", mo_c15_1, 3, 0x10, 0, -1, -1},
   {"섀도 블레이드(Shadow Blade)", mo_c15_2, 3, 0x10, 0, -1, -1},
   {"벡터 드레인(Vector Drain)", mo_c15_3, 5, 0x10, 1, -1, -1},
@@ -336,22 +356,22 @@ static const svc_move mv_c17[] = {
 typedef struct { const svc_move *mv; unsigned char n; const char *name; unsigned char cancel_dud; signed char slots[7]; } svc_chartab;
 #define SVC_CHAR_COUNT 18
 static const svc_chartab svc_chars[SVC_CHAR_COUNT] = {
-  { mv_c0, 14, "쿄", 1, {0,10,0,4,5,7,-1} },
+  { mv_c0, 15, "쿄", 1, {1,11,1,5,6,8,0} },
   { mv_c1, 8, "테리", 0, {0,6,3,1,4,2,-1} },
   { mv_c2, 8, "료", 0, {0,6,4,2,3,5,1} },
-  { mv_c3, 9, "마이", 0, {0,3,2,1,4,3,5} },
+  { mv_c3, 10, "마이", 0, {1,4,3,2,5,4,6} },
   { mv_c4, 10, "레오나", 0, {0,8,5,2,3,1,4} },
-  { mv_c5, 9, "아테나", 0, {0,6,5,1,3,4,2} },
-  { mv_c6, 9, "이오리", 0, {0,6,2,1,4,3,-1} },
+  { mv_c5, 10, "아테나", 0, {1,7,6,2,4,5,0} },
+  { mv_c6, 10, "이오리", 0, {1,7,3,2,5,4,0} },
   { mv_c7, 5, "하오마루", 0, {0,3,0,1,-1,4,-1} },
-  { mv_c8, 7, "나코루루", 0, {3,2,3,1,2,4,-1} },
+  { mv_c8, 8, "나코루루", 0, {4,3,4,2,3,5,0} },
   { mv_c9, 7, "류", 0, {0,4,5,2,3,1,-1} },
-  { mv_c10, 8, "춘리", 0, {0,4,-1,1,3,2,7} },
-  { mv_c11, 9, "장기에프", 0, {2,6,3,0,7,1,-1} },
+  { mv_c10, 9, "춘리", 0, {1,5,-1,2,4,3,0} },
+  { mv_c11, 12, "장기에프", 0, {5,9,6,3,10,4,0} },
   { mv_c12, 7, "켄", 0, {1,4,0,2,5,3,-1} },
   { mv_c13, 7, "단", 0, {0,3,2,1,4,5,-1} },
   { mv_c14, 8, "사쿠라", 0, {0,4,2,1,5,3,-1} },
-  { mv_c15, 7, "모리간", 0, {0,3,2,1,4,5,-1} },
+  { mv_c15, 8, "모리간", 0, {1,4,3,2,5,6,0} },
   { mv_c16, 7, "펠리시아", 0, {0,4,3,2,1,5,-1} },
   { mv_c17, 5, "가일", 0, {0,2,-1,1,3,4,-1} },
 };
