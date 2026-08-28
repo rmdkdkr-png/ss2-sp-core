@@ -50,7 +50,7 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
          { "japanese",  NULL },
          { NULL, NULL},
       },
-      "english",
+      "japanese",
    },
    {
       "ngp_ss2sp",
@@ -184,7 +184,7 @@ struct retro_core_option_definition option_defs_us[] = {
          { "japanese",  NULL },
          { NULL, NULL},
       },
-      "english",
+      "japanese",
    },
    {
       "ngp_ss2sp",

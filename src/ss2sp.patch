@@ -532,7 +532,7 @@ index ef01e22..0b6f2e1 100644
  {
     if(type == RETRO_MEMORY_SYSTEM_RAM)
 diff --git a/libretro_core_options.h b/libretro_core_options.h
-index a0dc3ec..b91407b 100644
+index a0dc3ec..8e5ae79 100644
 --- a/libretro_core_options.h
 +++ b/libretro_core_options.h
 @@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
@@ -544,10 +544,13 @@ index a0dc3ec..b91407b 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -52,6 +52,120 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -50,7 +50,121 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+          { "japanese",  NULL },
+          { NULL, NULL},
        },
-       "english",
-    },
+-      "english",
++      "japanese",
++   },
 +   {
 +      "ngp_ss2sp",
 +      "SS2 One-button Specials",
@@ -661,14 +664,16 @@ index a0dc3ec..b91407b 100644
 +         { NULL, NULL},
 +      },
 +      "enabled",
-+   },
+    },
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
  };
- 
-@@ -72,6 +186,17 @@ struct retro_core_option_definition option_defs_us[] = {
+@@ -70,7 +184,18 @@ struct retro_core_option_definition option_defs_us[] = {
+          { "japanese",  NULL },
+          { NULL, NULL},
        },
-       "english",
-    },
+-      "english",
++      "japanese",
++   },
 +   {
 +      "ngp_ss2sp",
 +      "SS2 One-button Specials",
@@ -679,7 +684,6 @@ index a0dc3ec..b91407b 100644
 +         { NULL, NULL},
 +      },
 +      "enabled",
-+   },
+    },
     { NULL, NULL, NULL, { NULL, NULL }, NULL },
  };
- 

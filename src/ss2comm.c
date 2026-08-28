@@ -1969,10 +1969,10 @@ int ss2comm_overlay_input(int k){
     if(k == 0){ ov_cur = (unsigned char)((ov_cur + rows - 1) % rows); return 1; }
     if(k == 1){ ov_cur = (unsigned char)((ov_cur + 1) % rows); return 1; }
     if(k < 2 || k > 4) return 1;
-    if(ov_cur == 0){                                   /* 캐릭터/유파 — 좌우 순환 (값 변경) */
+    if(ov_cur == 0){                                   /* 캐릭터/유파 — 좌우 순환, A=다음 */
       int n = sp_style_count(); if(n <= 0) return 1;
-      if(k == 2 || k == 3)
-        ov_spstyle = (k == 2) ? (ov_spstyle + n - 1) % n : (ov_spstyle + 1) % n;
+      if(k == 2)             ov_spstyle = (ov_spstyle + n - 1) % n;
+      if(k == 3 || k == 4)   ov_spstyle = (ov_spstyle + 1) % n;
     }else if(k != 4){                                  /* 진입/실행은 A 전용 — 방향키 오조작 방지 */
       return 1;
     }else if(ov_cur <= ss2sp_slot_count()){            /* 슬롯 = 목록 열기 */
@@ -2005,6 +2005,10 @@ int ss2comm_overlay_input(int k){
 #endif
   it = &ov_it[ov_cur];
   if(!it->v) return 1;
+  if(it->max == 1){                     /* 켬끔 — A 전용. 십자 오조작으로 안 뒤집힌다(제보) */
+    if(k == 4) *it->v ^= 1;
+    return 1;
+  }
   if(k == 2)            *it->v = (unsigned char)((*it->v + it->max) % (it->max + 1));
   if(k == 3 || k == 4)  *it->v = (unsigned char)((*it->v + 1) % (it->max + 1));
   return 1;
