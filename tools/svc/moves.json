@@ -158,8 +158,7 @@
     "DF": "R.E.D. 킥",
     "B": "114식 황물기 (Aragami)",
     "F": "최종결전오의 무식",
-    "DB": "212식 금월양 (Kototsuki You)",
-    "AIR": "외식 나락 떨구기 (Naraku Otoshi)"
+    "DB": "212식 금월양 (Kototsuki You)"
    },
    "cancel_dud": true
   },
@@ -352,8 +351,7 @@
     "DF": "비연질풍각",
     "B": "잔렬권",
     "F": "용호난무",
-    "DB": "패왕상후권",
-    "AIR": "호황권"
+    "DB": "패왕상후권"
    },
    "cancel_dud": false
   },
@@ -696,8 +694,7 @@
     "DF": "사이코 리플렉터",
     "B": "슈퍼 사이킥 스로우",
     "F": "샤이닝 크리스탈 비트",
-    "DB": "사이킥 텔레포트",
-    "AIR": "사이코 소드"
+    "DB": "사이킥 텔레포트"
    },
    "cancel_dud": false
   },
@@ -815,8 +812,7 @@
     "DF": "311식 츠마구시",
     "B": "127식 아오이하나",
     "F": "금 1211식 야오토메 (팔치녀)",
-    "DB": "212식 코토츠키 인",
-    "AIR": "외식 유리오리 (백합꺾기)"
+    "DB": "212식 코토츠키 인"
    },
    "cancel_dud": false
   },
@@ -959,8 +955,7 @@
     "DF": "카무이 림세",
     "B": "시치카푸 에투",
     "F": "카무이 림세",
-    "DB": "매에 매달리기 (타카니 츠카마루)",
-    "AIR": "카무이 훔 케습"
+    "DB": "매에 매달리기 (타카니 츠카마루)"
    },
    "cancel_dud": false
   },
@@ -1049,11 +1044,10 @@
    "slot_suggestion": {
     "N": "파동권(Hadouken)",
     "F": "진공파동권(Shinku Hadouken)",
-    "B": "쇄골 부수기(Sakotsu Wari)",
+    "B": "진공용권선풍각(Shinku Tatsumaki Senpukyaku)",
     "D": "승룡권(Shoryuken)",
     "DF": "용권선풍각(Tatsumaki Senpukyaku)",
-    "DB": "작열 파동권(Shakunetsu Hadouken)",
-    "AIR": "용권선풍각(Tatsumaki Senpukyaku)"
+    "DB": "작열 파동권(Shakunetsu Hadouken)"
    },
    "cancel_dud": false
   },
@@ -1158,9 +1152,8 @@
     "N": "기공권(Kikoken)",
     "F": "기공장(Kikosho)",
     "D": "천승각(Tenshokyaku)",
-    "DF": "학각락(Kaku Kyaku Raku)",
-    "DB": "스피닝 버드 킥(Spinning Bird Kick)",
-    "AIR": "응조각(Yousou Kyaku)"
+    "DF": "선원추(Sen'enshu)",
+    "DB": "스피닝 버드 킥(Spinning Bird Kick)"
    },
    "cancel_dud": false
   },
@@ -1298,8 +1291,7 @@
     "B": "스크류 파일 드라이버(Screw Piledriver)",
     "D": "더블 라리아트(Double Lariat)",
     "DF": "에어리얼 러시안 슬램(Aerial Russian Slam)",
-    "DB": "퀵 더블 라리아트(Quick Double Lariat)",
-    "AIR": "플라잉 바디 프레스(Flying Body Press)"
+    "DB": "퀵 더블 라리아트(Quick Double Lariat)"
    },
    "cancel_dud": false
   },
@@ -1390,8 +1382,7 @@
     "B": "전방전신(Zenpou Tenshin)",
     "D": "승룡권(Shoryuken)",
     "DF": "신룡권(Shinryuken)",
-    "DB": "용권선풍각(Tatsumaki Senpukyaku)",
-    "AIR": "용권선풍각(Tatsumaki Senpukyaku)"
+    "DB": "용권선풍각(Tatsumaki Senpukyaku)"
    },
    "cancel_dud": false
   },
@@ -1465,8 +1456,7 @@
     "B": "단공각(Dankukyaku)",
     "D": "코류켄(Kouryuken)",
     "DF": "코류렉카(Kouryu Rekka)",
-    "DB": "필승무뢰권(Hisshou Burai Ken)",
-    "AIR": "단공각(Dankukyaku)"
+    "DB": "필승무뢰권(Hisshou Burai Ken)"
    },
    "cancel_dud": false
   },
@@ -1556,8 +1546,7 @@
     "B": "춘풍각(Shunpukyaku)",
     "D": "쇼오켄(Shououken)",
     "DF": "미다레자쿠라(Midare Zakura)",
-    "DB": "사쿠라 오토시(Sakura Otoshi)",
-    "AIR": "춘풍각(Shunpukyaku)"
+    "DB": "사쿠라 오토시(Sakura Otoshi)"
    },
    "cancel_dud": false
   },
@@ -1642,8 +1631,7 @@
     "B": "벡터 드레인(Vector Drain)",
     "D": "섀도 블레이드(Shadow Blade)",
     "DF": "피니싱 샤워(Finishing Shower)",
-    "DB": "발키리 턴(Valkyrie Turn)",
-    "AIR": "소울 피스트(Soul Fist)"
+    "DB": "발키리 턴(Valkyrie Turn)"
    },
    "cancel_dud": false
   },
@@ -1798,7 +1786,6 @@
    "slot_suggestion": {
     "N": "소닉 붐(Sonic Boom)",
     "F": "소닉 허리케인(Sonic Hurricane)",
-    "B": "스피닝 백 너클(Spinning Back Knuckle)",
     "D": "서머솔트 킥(Somersault Kick)",
     "DF": "서머솔트 스트라이크(Somersault Strike)",
     "DB": "크로스파이어 블리츠(Crossfire Blitz)"

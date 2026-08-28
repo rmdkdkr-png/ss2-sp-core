@@ -54,6 +54,8 @@ def emit(chars):
         cid = ch['id']
         moves = []
         for k, mv in enumerate(ch.get('table', [])):
+            if mv.get('kind') == 'command_normal':
+                continue        # 특수기 — 방향+버튼 한 번이라 원버튼 배치 대상이 아니다
             try: seq, air, charge = parse_cmd(mv['command'])
             except Exception: continue
             if not seq: continue
