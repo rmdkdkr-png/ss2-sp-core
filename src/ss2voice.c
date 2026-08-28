@@ -36,14 +36,55 @@ static unsigned fnv1a(const char *s){
   return h;
 }
 
+/* ── 단일 팩 파일 (.pak) — 폰에서 압축 해제 없이 파일 하나로 설치 ──
+   'NGPV1\0' + u32 개수 + [u32 해시,u32 오프셋,u32 크기] 해시 오름차순 + 블롭 */
+static FILE     *pak_f;
+static unsigned *pak_h, *pak_off, *pak_sz;
+static int       pak_n;
+
+static unsigned rd_u32(FILE *f){
+  unsigned char b[4];
+  if(fread(b, 1, 4, f) != 4) return 0;
+  return (unsigned)b[0] | ((unsigned)b[1] << 8) | ((unsigned)b[2] << 16) | ((unsigned)b[3] << 24);
+}
+static int pak_open(const char *path){
+  char magic[6]; int i;
+  FILE *f = fopen(path, "rb");
+  if(!f) return 0;
+  if(fread(magic, 1, 6, f) != 6 || memcmp(magic, "NGPV1", 6)){ fclose(f); return 0; }
+  pak_n = (int)rd_u32(f);
+  if(pak_n <= 0 || pak_n > 200000){ fclose(f); pak_n = 0; return 0; }
+  pak_h   = (unsigned *)malloc((size_t)pak_n * 4);
+  pak_off = (unsigned *)malloc((size_t)pak_n * 4);
+  pak_sz  = (unsigned *)malloc((size_t)pak_n * 4);
+  if(!pak_h || !pak_off || !pak_sz){ fclose(f); pak_n = 0; return 0; }
+  for(i = 0; i < pak_n; i++){ pak_h[i] = rd_u32(f); pak_off[i] = rd_u32(f); pak_sz[i] = rd_u32(f); }
+  pak_f = f;                                     /* 열어 둔다 — 클립은 그때그때 읽는다 */
+  return 1;
+}
+static int pak_find(unsigned h){
+  int lo = 0, hi = pak_n - 1;
+  while(lo <= hi){
+    int mid = (lo + hi) / 2;
+    if(pak_h[mid] == h) return mid;
+    if(pak_h[mid] < h) lo = mid + 1; else hi = mid - 1;
+  }
+  return -1;
+}
+
 void ss2voice_init(const char *dir){
   char path[600]; FILE *f; char line[600];
   const char *env = getenv("SS2VOICE_DIR");
   if(env && *env) dir = env;                     /* 하네스 우선 */
   vc_ready = 0; vc_n = 0; cur_pcm = 0;
+  if(pak_f){ fclose(pak_f); pak_f = 0; pak_n = 0; }
   if(!dir || !*dir) return;
   snprintf(vc_dir, sizeof vc_dir, "%s", dir);
-  snprintf(path, sizeof path, "%s/manifest.tsv", dir);
+  snprintf(path, sizeof path, "%s.pak", dir);    /* 1순위: <이름>.pak 단일 파일 */
+  if(pak_open(path)){ vc_ready = 1; return; }
+  snprintf(path, sizeof path, "%s/ngpvoice.pak", dir);
+  if(pak_open(path)){ vc_ready = 1; return; }
+  snprintf(path, sizeof path, "%s/manifest.tsv", dir);   /* 2순위: 폴더 팩 */
   f = fopen(path, "rb");
   if(!f) return;                                 /* 팩 없음 = 비활성 */
   while(vc_n < VC_MAXCLIP && fgets(line, sizeof line, f)){
@@ -67,6 +108,21 @@ static short *clip_get(unsigned h, int *len){
   int chan = 0, rate = 0; short *out = 0; int n;
   for(i = 0; i < VC_CACHE; i++)
     if(cache[i].pcm && cache[i].h == h){ cache[i].used = ++cache_tick; *len = cache[i].len; return cache[i].pcm; }
+  if(pak_f){                                     /* 단일 팩 — 오프셋 읽기 + 메모리 디코드 */
+    unsigned char *buf; int k = pak_find(h);
+    if(k < 0) return 0;
+    buf = (unsigned char *)malloc(pak_sz[k]);
+    if(!buf) return 0;
+    if(fseek(pak_f, (long)pak_off[k], SEEK_SET) ||
+       fread(buf, 1, pak_sz[k], pak_f) != pak_sz[k]){ free(buf); return 0; }
+    if(pak_sz[k] > 4 && !memcmp(buf, "OggS", 4))
+      n = stb_vorbis_decode_memory(buf, (int)pak_sz[k], &chan, &rate, &out);
+    else {                                       /* 원시 s16 mono 44.1k */
+      out = (short *)buf; n = (int)(pak_sz[k] / 2); chan = 1; rate = VC_RATE; buf = 0;
+    }
+    free(buf);
+    goto got;
+  }
   for(i = 0; i < vc_n; i++) if(vc_hash[i] == h) break;
   if(i >= vc_n) return 0;
   snprintf(path, sizeof path, "%s/%s", vc_dir, vc_file[i]);
@@ -83,6 +139,7 @@ static short *clip_get(unsigned h, int *len){
     }else
       n = stb_vorbis_decode_filename(path, &chan, &rate, &out);
   }
+got:
   if(n <= 0 || !out) return 0;
   if(chan > 1){                                   /* 모노로 접는다 */
     int k; for(k = 0; k < n; k++) out[k] = out[k * chan];
