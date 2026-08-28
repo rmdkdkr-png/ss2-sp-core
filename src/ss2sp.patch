@@ -15,7 +15,7 @@ index b61e812..05ec58b 100644
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..1fcb65f 100644
+index ef01e22..d24d0aa 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -201,7 +201,7 @@ index ef01e22..1fcb65f 100644
  }
  
  void retro_init(void)
-@@ -436,6 +593,20 @@ void retro_init(void)
+@@ -436,6 +593,26 @@ void retro_init(void)
  
  void retro_reset(void)
  {
@@ -218,11 +218,17 @@ index ef01e22..1fcb65f 100644
 +   }
 +   else
 +      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
++   if (svcsp_rom_ok())
++   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
++      static char ver_toast[48];
++      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
++      ss2comm_toast(ver_toast, 180);
++   }
 +   ss2comm_reset();
     neopop_reset();
  }
  
-@@ -448,6 +619,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +625,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -230,7 +236,7 @@ index ef01e22..1fcb65f 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +630,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +636,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -244,7 +250,7 @@ index ef01e22..1fcb65f 100644
  
        { 0 },
     };
-@@ -479,6 +658,20 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +664,26 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -260,12 +266,18 @@ index ef01e22..1fcb65f 100644
 +   }
 +   else
 +      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
++   if (svcsp_rom_ok())
++   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
++      static char ver_toast[48];
++      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
++      ss2comm_toast(ver_toast, 180);
++   }
 +   ss2comm_reset();
 +
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +749,92 @@ static void update_input(void)
+@@ -556,6 +761,92 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -358,20 +370,21 @@ index ef01e22..1fcb65f 100644
  }
  
  void retro_run(void)
-@@ -598,12 +877,68 @@ void retro_run(void)
+@@ -598,12 +889,68 @@ void retro_run(void)
        update_video = false;
     }
  
 -   Emulate(&spec, sound_buf);
 +   {
 +   int ss2_paused = ss2comm_overlay_active();
-+
+ 
+-   width  = spec.DisplayRect.w;
+-   height = spec.DisplayRect.h;
 +   if (!ss2_paused)
 +   {
 +      Emulate(&spec, sound_buf);
  
--   width  = spec.DisplayRect.w;
--   height = spec.DisplayRect.h;
+-   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
 +      width  = spec.DisplayRect.w;
 +      height = spec.DisplayRect.h;
 +
@@ -404,8 +417,7 @@ index ef01e22..1fcb65f 100644
 +      height = ss2_last_h;
 +      spec.SoundBufSize = 0;
 +   }
- 
--   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++
 +   if (ss2_sides)
 +   {
 +      /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
@@ -431,7 +443,7 @@ index ef01e22..1fcb65f 100644
  
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-@@ -629,11 +964,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+@@ -629,11 +976,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -452,7 +464,7 @@ index ef01e22..1fcb65f 100644
  
     check_color_depth();
  }
-@@ -762,6 +1101,8 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1113,8 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
@@ -461,7 +473,7 @@ index ef01e22..1fcb65f 100644
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1123,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1135,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  

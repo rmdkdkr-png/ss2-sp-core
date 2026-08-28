@@ -606,6 +606,12 @@ void retro_reset(void)
    }
    else
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+   if (svcsp_rom_ok())
+   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
+      static char ver_toast[48];
+      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
+      ss2comm_toast(ver_toast, 180);
+   }
    ss2comm_reset();
    neopop_reset();
 }
@@ -670,6 +676,12 @@ bool retro_load_game(const struct retro_game_info *info)
    }
    else
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+   if (svcsp_rom_ok())
+   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
+      static char ver_toast[48];
+      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
+      ss2comm_toast(ver_toast, 180);
+   }
    ss2comm_reset();
 
    surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
