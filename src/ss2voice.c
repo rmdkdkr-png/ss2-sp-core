@@ -15,7 +15,7 @@
 #define STB_VORBIS_NO_PUSHDATA_API
 #include "stb_vorbis.c"
 
-#define VC_MAXCLIP 16384
+#define VC_MAXCLIP 32768
 #define VC_CACHE   6
 #define VC_RATE    44100
 
