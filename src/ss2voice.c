@@ -103,6 +103,7 @@ void ss2voice_init(const char *dir){
 
 int ss2voice_on(void){ return vc_ready; }
 
+static int has_clip(unsigned h);           /* 아래 정의 — 전방 선언 */
 int ss2voice_has_text(const char *text){   /* 엔진의 대사 선택용 — 이 문장, 말할 수 있나 */
   if(!vc_ready || !text || !*text) return 0;
   return has_clip(fnv1a(text));
