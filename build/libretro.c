@@ -386,7 +386,9 @@ extern uint8_t ss2sp_frame(uint8_t pad, uint16_t trig);
 extern void    ss2sp_reset(void);
 extern void    ss2sp_set_layout(int sp);
 /* ── SvC MotM 원버튼 엔진 (svcsp.c) — 롬 헤더로 자동 판별, SvC 때만 이쪽이 받는다 ── */
-extern uint8_t svcsp_frame(uint8_t pad, uint16_t trig);
+extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
+extern void    svcsp_set_engine(int on);
+extern int     svcsp_engine_on(void);
 extern void    svcsp_reset(void);
 extern void    svcsp_set_rom(const void *rom, unsigned len);
 extern int     svcsp_rom_ok(void);
@@ -451,7 +453,12 @@ static void ss2_overlay_apply(void)
    if (ov_spk   != ov_spk_p)   { ss2comm_set_speaker(ov_spk);  ov_spk_p   = ov_spk; }
    if (ov_chat  != ov_chat_p)  { ss2comm_set_enabled(ov_chat); ov_chat_p  = ov_chat; }
    if (ov_ref   != ov_ref_p)   { ss2comm_set_ref(ov_ref);      ov_ref_p   = ov_ref; }
-   if (ov_sp    != ov_sp_p)    { ss2sp_enable = ov_sp != 0;    ov_sp_p    = ov_sp; }
+   if (ov_sp    != ov_sp_p)
+   {
+      if (svcsp_rom_ok()) svcsp_set_engine(ov_sp != 0);   /* SvC: 원버튼 엔진만 토글 */
+      else                ss2sp_enable = ov_sp != 0;
+      ov_sp_p = ov_sp;
+   }
    if (ov_toast != ov_toast_p) { svcsp_toast_on = ov_toast != 0; ov_toast_p = ov_toast; }
    if (ov_sides != ov_sides_p)
    {
@@ -547,7 +554,8 @@ static void check_variables(void)
    }
 
    /* 오버레이 그림자값을 방금 적용한 옵션과 맞춘다 */
-   ov_sp    = ov_sp_p    = ss2sp_enable ? 1 : 0;
+   ov_sp    = ov_sp_p    = svcsp_rom_ok() ? (svcsp_engine_on() ? 1 : 0)
+                                          : (ss2sp_enable ? 1 : 0);
    ov_sides = ov_sides_p = ss2_sides ? 1 : 0;
 }
 
@@ -603,6 +611,7 @@ void retro_reset(void)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
@@ -673,6 +682,7 @@ bool retro_load_game(const struct retro_game_info *info)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
@@ -808,12 +818,15 @@ static void update_input(void)
          A+B 버튼(Y·L)은 패드 바이트에 A·B 를 한꺼번에 세워 준다 —
          뒤를 잡고 누르면 엔진이 비오의로 받는다. */
       uint16_t trig = 0;
-      if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_X)) ||
-          (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R)))
-         trig |= 1u;
-      if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_Y)) ||
-          (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L)))
-         input_buf |= (uint8_t)((1 << 4) | (1 << 5));   /* A + B 동시 */
+      if (!svcsp_rom_ok())
+      {  /* SS2 전용 선처리 — SvC 는 svcsp_frame 이 레트로패드 원본을 직접 해석한다 */
+         if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_X)) ||
+             (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R)))
+            trig |= 1u;
+         if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_Y)) ||
+             (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L)))
+            input_buf |= (uint8_t)((1 << 4) | (1 << 5));   /* A + B 동시 */
+      }
       /* v0.7: L2 = 해설자 교대. 설정을 열지 않고 판 중에 다음 사람에게 넘긴다.
          누른 순간에만 한 번 — 누르고 있는 동안 계속 넘어가면 안 된다. */
       {
@@ -828,7 +841,7 @@ static void update_input(void)
       }
       if (svcsp_rom_ok())
       {
-         input_buf = svcsp_frame(input_buf, trig);   /* SvC — 자기 엔진이 받는다 */
+         input_buf = svcsp_frame(input_buf, (uint16_t)ret);   /* SvC — 원본 비트를 직접 */
          {                                           /* 기술명 토스트 */
             static int disp_seen;
             if (svcsp_disp_seq != disp_seen)

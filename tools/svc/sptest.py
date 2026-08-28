@@ -8,7 +8,7 @@ SS2 =os.path.expanduser('~/ss2/rom/ss2.ngc')
 
 def run(script,csvn,rom=ROM):
     open('t.txt','w').write('\n'.join(script)+'\n')
-    env=dict(os.environ); env['PROBE_CSV']=csvn
+    env=dict(os.environ); env['PROBE_CSV']=csvn; env['SVCSP_FORCE']='1'
     subprocess.run(['./svcrun',CORE,rom,'t.txt'],capture_output=True,env=env)
 def ppm(tag):
     d=open('svc_%s.ppm'%tag,'rb').read()

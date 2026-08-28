@@ -15,7 +15,7 @@ for line in open('chars.txt'):
 
 def run(script,csvn):
     open('t.txt','w').write('\n'.join(script)+'\n')
-    env=dict(os.environ); env['PROBE_CSV']=csvn
+    env=dict(os.environ); env['PROBE_CSV']=csvn; env['SVCSP_FORCE']='1'
     subprocess.run(['./svcrun',CORE,ROM,'t.txt'],capture_output=True,env=env)
 
 SAM=(4,10,16,24,36,48,60)

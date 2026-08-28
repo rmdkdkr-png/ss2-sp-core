@@ -55,6 +55,19 @@ extern uint8_t CPUExRAM[16384];
 static int svc_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SVCSP_STEP"); v=e?atoi(e):2;} return v; }
 static int svc_hold_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SVCSP_HOLD"); v=e?atoi(e):2;} return v; }
 static int svc_tail_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SVCSP_TAIL"); v=e?atoi(e):1;} return v; }
+
+/* ── 버튼 레이아웃 (기본): 약은 원래 B·A, 강은 전용 버튼으로.
+   실측 §30: 홀드 6f 이하 = 약, 8f 이상 = 강 — 12f 주입으로 여유.
+   원버튼 모션 엔진은 기본 꺼짐: 순정 ABLE(アバレ) 모드가 그 역할을 대신한다(§29). */
+#define SVC_HOLD_STRONG 12
+static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴에서만 켠다 */
+static int svc_engine_now(void)
+{
+   if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
+   return svc_engine;
+}
+void svcsp_set_engine(int on) { svc_engine = !!on; }
+int  svcsp_engine_on(void)    { return svc_engine_now(); }
 #define STEP_FRAMES  svc_step_frames()
 #define HOLD_FRAMES  svc_hold_frames() /* 탭 = 약. 마지막 방향 유지한 채 버튼 (기본 2 — 실측 최소) */
 #define MAX_HOLD     20         /* 트리거를 잡고 있으면 여기까지 늘어난다 = 강.
@@ -418,9 +431,29 @@ static const svc_move *svc_chain_next(void)
    return &chain_tbl[idx];
 }
 
-uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
+uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본 비트 */
 {
-   uint16_t edge = (uint16_t)(trig & ~prev_trig);
+   uint16_t trig, edge;
+   {  /* 순정 측정용 스위치 — 실기 배포에는 영향 없음(환경변수) */
+      static int off = -1;
+      if (off < 0) { const char *e = getenv("SVCSP_OFF"); off = (e && *e == '1'); }
+      if (off) { prev_trig = 0; return pad; }
+   }
+   if (!svc_engine_now())
+   {  /* 기본 레이아웃: Y=강펀치(C) X=강킥(D) L·R=A+B. 메뉴 밖에서도 동작 —
+         Y·X는 그냥 해당 버튼 꾹 누름과 같아서 부작용이 없다. */
+      static int hold_p, hold_k;
+      if (ret & (1u << 1)) hold_p = SVC_HOLD_STRONG; else if (hold_p) hold_p--;
+      if (ret & (1u << 9)) hold_k = SVC_HOLD_STRONG; else if (hold_k) hold_k--;
+      if (hold_p) pad |= 0x10;                            /* NGP A 지속 = 강펀치 */
+      if (hold_k) pad |= 0x20;                            /* NGP B 지속 = 강킥 */
+      if (ret & ((1u << 10) | (1u << 11))) pad |= 0x30;   /* L·R = A+B(백플립) */
+      prev_trig = 0;
+      return pad;
+   }
+   trig = (ret & ((1u << 9) | (1u << 11))) ? 1u : 0u;     /* 엔진 켬: X·R = 트리거 */
+   if (ret & ((1u << 1) | (1u << 10))) pad |= 0x30;       /*          Y·L = A+B  */
+   edge = (uint16_t)(trig & ~prev_trig);
    prev_trig = trig;
    frames++;
    if (chain_left > 0) chain_left--;
