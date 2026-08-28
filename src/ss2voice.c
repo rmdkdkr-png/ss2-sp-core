@@ -103,7 +103,11 @@ static short *clip_get(unsigned h, int *len){
 void ss2voice_say(const char *text, int prio){
   unsigned h; short *pcm; int len = 0;
   if(!vc_ready || !text || !*text) return;
-  if(cur_pcm && cur_prio > prio && cur_pos < cur_len) return;   /* 심판이 말하는 중 */
+  if(cur_pcm && cur_pos < cur_len){
+    /* 제보 「대사가 많이 씹힌다」 — 말은 끝까지 한다. 재생 중에 온 해설은
+       음성만 양보하고 자막으로 나간다. 쿠로코 구호(prio 1)만 끼어든다. */
+    if(prio == 0) return;
+  }
   h = fnv1a(text);
   pcm = clip_get(h, &len);
   if(!pcm) return;                                /* 팩에 없는 대사 = 자막만 */
