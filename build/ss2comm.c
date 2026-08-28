@@ -57,8 +57,12 @@ void ss2comm_set_ram(void *p) { (void)p; }
    이 약한 무동작이 그대로 남아 링크 걱정이 없다. */
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((weak)) void ss2voice_say(const char *t, int p){ (void)t; (void)p; }
+__attribute__((weak)) int  ss2voice_on(void){ return 0; }
+__attribute__((weak)) int  ss2voice_has_text(const char *t){ (void)t; return 0; }
 #else
 void ss2voice_say(const char *t, int p);
+int  ss2voice_on(void);
+int  ss2voice_has_text(const char *t);
 #endif
 
 #include "ss2comm_lines.h"
@@ -559,6 +563,26 @@ static void fill_name(char *out, size_t cap, const char *fmt, const char *who){
   strncat(out, ph, cap - strlen(out) - 1);
 }
 
+static void fmt_one(const char *fmt, const char *who, int n1, int n2, char *out, size_t cap){
+  if(strstr(fmt,"%s")) fill_name(out, cap, fmt, who);
+  else if(strstr(fmt,"%d")){
+    const char *p = strstr(fmt,"%d");
+    if(strstr(p+2,"%d")) snprintf(out, cap, fmt, n1, n2);
+    else                 snprintf(out, cap, fmt, n1);
+  }
+  else snprintf(out, cap, "%s", fmt);
+}
+/* 음성 팩 시대의 대체 이벤트 — 기술명 계열은 변형 전부가 기술명 채움이라 팩에 없을
+   수 있다. 그 순간을 침묵으로 두지 말고 같은 뜻의 일반 대사로 갈아탄다(제보:
+   「엔진 자체를 더빙에 맞춰라」). 팩이 없으면 이 경로는 아예 안 탄다. */
+static int ev_voicefb(int ev){
+  switch(ev){
+    case EV_MOVEHIT: case EV_MOVEHITL:   return EV_HIT;
+    case EV_MOVEDOWN: case EV_MOVEDOWNA: return EV_DOWN;
+    case EV_MOVEKO:                      return EV_KO;
+    default: return -1;
+  }
+}
 static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   const char *cand[EVMAXV]; int n=0, i, key;
   const char *fmt;
@@ -567,31 +591,43 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   if(cd[key] > cm_f) return 0;
   for(i=0;i<EVMAXV;i++) if(LINES[cm_spk][ev][i]) cand[n++]=LINES[cm_spk][ev][i];
   if(!n) return 0;
+  /* %s 채움용 상대 이름 — 음성 우대 검사에도 필요해서 미리 정한다.
+     (이름 인자가 없는 호출(emit)의 %s 는 상대 이름. 표 밖 개체는 「상대」/「간다라」) */
+  if(!who) who = (st_oppChar>=0 && st_oppChar<15 && ROST2SPK[st_oppChar]!=cm_spk)
+             ? CHARNAME[st_oppChar]
+             : (st_oppGand ? "간다라" : "상대");
   if(vsel >= 0) fmt = cand[vsel < n ? vsel : n-1];
   else {
-    /* 이름 박힌 줄 우대 — 상대를 부르는 변형이 섞여 있으면 10번 중 8번은 그중에서
-       고른다 (제보 「여전히 이름을 잘 안 부른다」로 6→8). 전부 %s인
-       표(기술명 계열)는 nn==n 이라 그대로 균등 추첨으로 떨어진다. */
-    const char *nm[EVMAXV]; int nn=0;
-    for(i=0;i<n;i++) if(strstr(cand[i],"%s")) nm[nn++]=cand[i];
-    if(nn && nn<n && (rnd()%10u)<8) fmt = nm[rnd()%(unsigned)nn];
-    else                            fmt = cand[rnd()%(unsigned)n];
+    /* ① 팩이 있으면 「말할 수 있는」 후보 안에서만 고른다. 후보 전부가 무음인
+       기술명 계열은 자매 이벤트로 통째 교체(한 번만). ② 그 안에서 기존 규칙 —
+       이름 박힌 줄 8/10 우대 — 를 그대로 적용한다. */
+    const char *vd[EVMAXV]; int nvd = 0;
+    if(ss2voice_on()){
+      char tb[160]; int pass;
+      for(pass = 0; pass < 2; pass++){
+        nvd = 0;
+        for(i = 0; i < n; i++){
+          fmt_one(cand[i], who, n1, n2, tb, sizeof tb);
+          if(ss2voice_has_text(tb)) vd[nvd++] = cand[i];
+        }
+        if(nvd || pass) break;
+        { int fb = ev_voicefb(ev);
+          if(fb < 0) break;
+          ev = fb; key = EVCD[ev].key;
+          n = 0;
+          for(i = 0; i < EVMAXV; i++) if(LINES[cm_spk][ev][i]) cand[n++] = LINES[cm_spk][ev][i];
+          if(!n) return 0;
+        }
+      }
+    }
+    { const char *const *cs = nvd ? vd : cand; int cn = nvd ? nvd : n;
+      const char *nm[EVMAXV]; int nn=0;
+      for(i=0;i<cn;i++) if(strstr(cs[i],"%s")) nm[nn++]=cs[i];
+      if(nn && nn<cn && (rnd()%10u)<8) fmt = nm[rnd()%(unsigned)nn];
+      else                             fmt = cs[rnd()%(unsigned)cn];
+    }
   }
-  if(strstr(fmt,"%s")){
-    /* 이름 인자가 없는 호출(emit)의 %s 는 **상대 이름**이다 — 전투 반응이 상대를
-       부르게 하려고 열었다 (제보: 「상대를 인지하고 뱉는 느낌이 없다. 모든 말에 엮어라」).
-       표 밖 개체(간다라류)면 「상대」라 부른다. 조사는 fill_name 이 받침 보고 고친다. */
-    if(!who) who = (st_oppChar>=0 && st_oppChar<15 && ROST2SPK[st_oppChar]!=cm_spk)
-               ? CHARNAME[st_oppChar]
-               : (st_oppGand ? "간다라" : "상대");   /* 거울이면 「상대」, 간다라는 간다라라고 부른다(제보) */
-    fill_name(outbuf,sizeof(outbuf),fmt,who);
-  }
-  else if(strstr(fmt,"%d")){
-    const char *p = strstr(fmt,"%d");
-    if(strstr(p+2,"%d"))               snprintf(outbuf,sizeof(outbuf),fmt,n1,n2);
-    else                               snprintf(outbuf,sizeof(outbuf),fmt,n1);
-  }
-  else                                 snprintf(outbuf,sizeof(outbuf),"%s",fmt);
+  fmt_one(fmt, who, n1, n2, outbuf, sizeof(outbuf));
   if(said_recently(outbuf)) return 0;      /* 최근에 한 말은 다시 안 한다 */
   { int slot;
     if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;

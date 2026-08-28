@@ -103,6 +103,11 @@ void ss2voice_init(const char *dir){
 
 int ss2voice_on(void){ return vc_ready; }
 
+int ss2voice_has_text(const char *text){   /* 엔진의 대사 선택용 — 이 문장, 말할 수 있나 */
+  if(!vc_ready || !text || !*text) return 0;
+  return has_clip(fnv1a(text));
+}
+
 static short *clip_get(unsigned h, int *len){
   int i, worst = 0; char path[900];
   int chan = 0, rate = 0; short *out = 0; int n;
@@ -177,37 +182,19 @@ static void vc_start(unsigned h, int prio){
   cur_pcm = pcm; cur_len = len; cur_pos = 0; cur_prio = prio;
 }
 void ss2voice_say(const char *text, int prio){
-  unsigned h; int i, playing;
+  unsigned h;
   if(!vc_ready || !text || !*text) return;
   h = fnv1a(text);
   if(!has_clip(h)) return;                       /* 팩에 없는 대사 = 자막만 */
-  playing = (cur_pcm && cur_pos < cur_len);
-  if(!playing && !vq_n){ vc_start(h, prio); return; }
-  if(prio == 1){
-    if(playing && cur_prio == 0 && !vq_n){ vc_start(h, 1); return; }  /* 구호가 해설을 끊는다 */
-    if(vq_n < VQ_N){ vq[vq_n].h = h; vq[vq_n].prio = 1; vq_n++; }     /* 구호는 줄 선다 */
-    return;
-  }
-  /* 해설: 구호가 돌거나 대기 중이면 뒤에 선다(최신 한 줄만 유지), 아니면 끊는다 */
-  if((playing && cur_prio == 1) || vq_n){
-    for(i = 0; i < vq_n; i++)
-      if(vq[i].prio == 0){ vq[i].h = h; return; }                     /* 대기 해설 교체 */
-    if(vq_n < VQ_N){ vq[vq_n].h = h; vq[vq_n].prio = 0; vq_n++; }
-    return;
-  }
-  vc_start(h, 0);                                                     /* 해설이 해설을 끊는다 */
+  /* 적시 시작 — 자막이 갈리는 그 순간 음성도 갈린다. 줄 세우지 않는다.
+     (제보 확정: 「끊겨도 적시에 시작해야 한다」 — 대기열은 타이밍을 미뤄서 폐기) */
+  (void)prio;
+  vc_start(h, prio);
 }
 
 void ss2voice_mix(int16_t *buf, int frames){
   int i;
-  if(!vc_ready) return;
-  if((!cur_pcm || cur_pos >= cur_len) && vq_n){   /* 다음 대기자 등판 */
-    unsigned h = vq[0].h; int pr = vq[0].prio;
-    for(i = 1; i < vq_n; i++) vq[i-1] = vq[i];
-    vq_n--;
-    vc_start(h, pr);
-  }
-  if(!cur_pcm || cur_pos >= cur_len) return;
+  if(!vc_ready || !cur_pcm || cur_pos >= cur_len) return;
   for(i = 0; i < frames; i++){
     int l = buf[i * 2], r = buf[i * 2 + 1], v = 0;
     if(cur_pos < cur_len) v = cur_pcm[cur_pos++];
