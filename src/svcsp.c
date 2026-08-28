@@ -35,8 +35,9 @@ extern uint8_t CPUExRAM[16384];
 #define OFF_HP1     0x08B3   /* P1 체력 (피격 이벤트 때 0x08AF 와 동시 갱신) */
 #define OFF_HP2     0x08CF   /* P2 체력 (표시 사본 — 읽기엔 충분) */
 #define OFF_TIMER   0x08EE   /* 라운드 타이머 (10진). 메뉴=0, GO 연출=60 */
-#define OFF_X1      0x092E   /* P1 화면 X */
-#define OFF_X2      0x0934   /* P2 화면 X — 방향은 X1<X2 로만 판정 (실측 §3) */
+#define OFF_X1      0x092E   /* P1 X — ★16비트 (하위 0x092E, 상위 0x092F). 하위만 비교하면
+                                256px 경계에서 좌우 판정이 뒤집힌다 — 누에 오발의 진범 (실측 §27) */
+#define OFF_X2      0x0934   /* P2 X — 16비트 (0x0934/0x0935) */
 #define OFF_Y1      0x0930   /* P1 Y. 지상=128, 점프 정점=86 */
 #define OFF_BANK    0x09AD   /* P1 애니 뱅크. 대기·평타=255, 필살기는 기술별 값(0 포함!) */
 #define OFF_ANIM    0x0C7E   /* P1 애니 카운터. 대기·걷기·앉기=127, 동작 중=카운트업 */
@@ -235,6 +236,11 @@ static int svc_actable(void)
 
 static int svc_airborne(void) { return CPUExRAM[OFF_Y1] != 128; }
 
+static unsigned svc_x16(unsigned off)
+{ return (unsigned)CPUExRAM[off] | ((unsigned)CPUExRAM[off + 1] << 8); }
+static int svc_facing_left(void)   /* P1 이 오른쪽에 있으면 왼쪽을 본다 */
+{ return svc_x16(OFF_X1) > svc_x16(OFF_X2); }
+
 static uint8_t svc_mirror(uint8_t pad)
 {
    uint8_t lr = pad & (PAD_LEFT | PAD_RIGHT);
@@ -250,7 +256,7 @@ static uint8_t svc_mirror(uint8_t pad)
 static int svc_compile_cancel;   /* 이번 컴파일이 노멀 캔슬 경로인가 — 표시용 */
 static void svc_compile(const svc_move *m)
 {
-   int i, mirror = (CPUExRAM[OFF_X1] > CPUExRAM[OFF_X2]);   /* P1 이 오른쪽 → 왼쪽 봄 */
+   int i, mirror = svc_facing_left();
    uint8_t last = 0;
    q_n = q_i = 0;
 
@@ -354,7 +360,7 @@ static const svc_move *svc_resolve(uint8_t held)
       return (mi >= 0 && mi < ntbl && (tbl[mi].flags & 4)) ? &tbl[mi] : &svc_basic;
    }
    {
-      int facing_left = (CPUExRAM[OFF_X1] > CPUExRAM[OFF_X2]);
+      int facing_left = svc_facing_left();
       int d = !!(held & PAD_DOWN);
       int l = !!(held & PAD_LEFT), r = !!(held & PAD_RIGHT);
       int fwd = facing_left ? l : r, back = facing_left ? r : l;
