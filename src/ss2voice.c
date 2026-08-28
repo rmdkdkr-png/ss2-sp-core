@@ -157,21 +157,57 @@ got:
   return out;
 }
 
-void ss2voice_say(const char *text, int prio){
-  unsigned h; short *pcm; int len = 0;
-  if(!vc_ready || !text || !*text) return;
-  if(cur_pcm && cur_pos < cur_len && cur_prio > prio) return;
-  /* 풀 커버리지 팩(v2.0)부터는 자막처럼 새 대사가 끊고 들어온다 (제보 반영).
-     쿠로코 구호가 말하는 중일 때만 해설이 양보한다. */
-  h = fnv1a(text);
-  pcm = clip_get(h, &len);
-  if(!pcm) return;                                /* 팩에 없는 대사 = 자막만 */
+/* 대기열 — 구호 연쇄(자아→N회전→승부!)와 KO 순간(그만!→이름 호명→해설)이
+   서로 끊어먹지 않게 한다 (제보: 「인트로 구호 다 씹힌다」「이름 안 부른다」).
+   규칙: 구호는 구호를 절대 안 끊고 줄을 선다. 해설은 해설을 끊고(자막과 동기),
+   구호 재생 중엔 뒤에 줄 선다(해설 대기는 최신 한 줄만). */
+#define VQ_N 4
+static struct { unsigned h; int prio; } vq[VQ_N];
+static int vq_n;
+
+static int has_clip(unsigned h){
+  int i;
+  if(pak_f) return pak_find(h) >= 0;
+  for(i = 0; i < vc_n; i++) if(vc_hash[i] == h) return 1;
+  return 0;
+}
+static void vc_start(unsigned h, int prio){
+  int len = 0; short *pcm = clip_get(h, &len);
+  if(!pcm){ cur_pcm = 0; return; }
   cur_pcm = pcm; cur_len = len; cur_pos = 0; cur_prio = prio;
+}
+void ss2voice_say(const char *text, int prio){
+  unsigned h; int i, playing;
+  if(!vc_ready || !text || !*text) return;
+  h = fnv1a(text);
+  if(!has_clip(h)) return;                       /* 팩에 없는 대사 = 자막만 */
+  playing = (cur_pcm && cur_pos < cur_len);
+  if(!playing && !vq_n){ vc_start(h, prio); return; }
+  if(prio == 1){
+    if(playing && cur_prio == 0 && !vq_n){ vc_start(h, 1); return; }  /* 구호가 해설을 끊는다 */
+    if(vq_n < VQ_N){ vq[vq_n].h = h; vq[vq_n].prio = 1; vq_n++; }     /* 구호는 줄 선다 */
+    return;
+  }
+  /* 해설: 구호가 돌거나 대기 중이면 뒤에 선다(최신 한 줄만 유지), 아니면 끊는다 */
+  if((playing && cur_prio == 1) || vq_n){
+    for(i = 0; i < vq_n; i++)
+      if(vq[i].prio == 0){ vq[i].h = h; return; }                     /* 대기 해설 교체 */
+    if(vq_n < VQ_N){ vq[vq_n].h = h; vq[vq_n].prio = 0; vq_n++; }
+    return;
+  }
+  vc_start(h, 0);                                                     /* 해설이 해설을 끊는다 */
 }
 
 void ss2voice_mix(int16_t *buf, int frames){
   int i;
-  if(!vc_ready || !cur_pcm || cur_pos >= cur_len) return;
+  if(!vc_ready) return;
+  if((!cur_pcm || cur_pos >= cur_len) && vq_n){   /* 다음 대기자 등판 */
+    unsigned h = vq[0].h; int pr = vq[0].prio;
+    for(i = 1; i < vq_n; i++) vq[i-1] = vq[i];
+    vq_n--;
+    vc_start(h, pr);
+  }
+  if(!cur_pcm || cur_pos >= cur_len) return;
   for(i = 0; i < frames; i++){
     int l = buf[i * 2], r = buf[i * 2 + 1], v = 0;
     if(cur_pos < cur_len) v = cur_pcm[cur_pos++];

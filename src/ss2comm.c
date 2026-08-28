@@ -996,9 +996,9 @@ const char *ss2comm_frame(void){
          읽힐 때만** 낸다 — 거울값(낡은 BLK)이면 이름 없는 한마디로 대신한다. */
       int me = blk_char(rd(OFF_BLK1)), op = blk_char(rd(OFF_BLK2));
       if(me>=0 && op>=0 && me!=op){
-        char who[64];
-        snprintf(who,sizeof(who),"%s 대 %s",CHARNAME[me],CHARNAME[op]);
-        if(!emits(EV_START, who)) emit(EV_VSQ);
+        /* 「A 대 B」 페어를 %s 에 넣으면 음성 사전생성이 조합 폭발이라, 대진 콜은
+           심판 인트로(「A 대 B!」)에 맡기고 해설은 상대 이름만 부른다 — 기존 채움꼴 */
+        if(!emits(EV_START, CHARNAME[op])) emit(EV_VSQ);
       }else emit(EV_VSQ);   /* 상대 미상 — 이름 채움("한판" 따위) 금지(제보: 「한판라…」) */
     }
     else if((scr==0||scr==2) && p_mode==MD_BATTLE && cm_f > hush_until) emit(EV_STORYCHAT);
