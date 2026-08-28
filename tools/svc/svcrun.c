@@ -22,6 +22,12 @@ static void vcb(const void*d,unsigned w,unsigned h,size_t p){
 }
 static void acb(short a,short b){(void)a;(void)b;}
 static size_t abcb(const short*d,size_t f){(void)d;return f;}
+static FILE *aud_f;
+static size_t abcb2(const short*d,size_t f){
+  if(!aud_f) aud_f=fopen(getenv("AUDIO_RAW"),"wb");
+  if(aud_f) fwrite(d,4,f,aud_f);
+  return f;
+}
 static void poll(void){}
 static short inp(unsigned port,unsigned dev,unsigned idx,unsigned id){
   (void)port;(void)dev;(void)idx;
@@ -83,7 +89,7 @@ int main(int argc,char**argv){
   size_t(*getsz)(unsigned) = (size_t(*)(unsigned))dlsym(h,"retro_get_memory_size");
 
   retro_set_environment(envcb); retro_set_video_refresh(vcb);
-  retro_set_audio_sample(acb); retro_set_audio_sample_batch(abcb);
+  retro_set_audio_sample(acb); retro_set_audio_sample_batch(getenv("AUDIO_RAW")?abcb2:abcb);
   retro_set_input_poll(poll); sis(inp); retro_init();
 
   FILE*rf=fopen(argv[2],"rb"); fseek(rf,0,SEEK_END); long n=ftell(rf); fseek(rf,0,SEEK_SET);

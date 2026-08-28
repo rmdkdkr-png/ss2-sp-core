@@ -1,8 +1,8 @@
 diff --git a/Makefile.common b/Makefile.common
-index b61e812..05ec58b 100644
+index b61e812..1889f51 100644
 --- a/Makefile.common
 +++ b/Makefile.common
-@@ -82,7 +82,10 @@ SOURCES_CXX += \
+@@ -82,7 +82,11 @@ SOURCES_CXX += \
  
  SOURCES_C   += \
  	$(MEDNAFEN_DIR)/state.c \
@@ -10,12 +10,13 @@ index b61e812..05ec58b 100644
 +	$(CORE_DIR)/libretro.c \
 +	$(CORE_DIR)/ss2sp.c \
 +	$(CORE_DIR)/svcsp.c \
-+	$(CORE_DIR)/ss2comm.c
++	$(CORE_DIR)/ss2comm.c \
++	$(CORE_DIR)/ss2voice.c
  
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..2236529 100644
+index ef01e22..0b6f2e1 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -32,7 +33,7 @@ index ef01e22..2236529 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,95 @@ static void check_color_depth(void)
+@@ -377,6 +379,97 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -44,6 +45,8 @@ index ef01e22..2236529 100644
 +extern void    ss2sp_set_layout(int sp);
 +/* ── SvC MotM 원버튼 엔진 (svcsp.c) — 롬 헤더로 자동 판별, SvC 때만 이쪽이 받는다 ── */
 +extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
++extern void    ss2voice_init(const char *dir);
++extern void    ss2voice_mix(int16_t *buf, int frames);
 +extern void    svcsp_set_engine(int on);
 +extern int     svcsp_engine_on(void);
 +extern void    svcsp_reset(void);
@@ -128,7 +131,7 @@ index ef01e22..2236529 100644
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +483,80 @@ static void check_variables(void)
+@@ -392,6 +485,80 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -209,7 +212,7 @@ index ef01e22..2236529 100644
  }
  
  void retro_init(void)
-@@ -436,6 +601,27 @@ void retro_init(void)
+@@ -436,6 +603,27 @@ void retro_init(void)
  
  void retro_reset(void)
  {
@@ -237,7 +240,7 @@ index ef01e22..2236529 100644
     neopop_reset();
  }
  
-@@ -448,6 +634,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +636,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -245,7 +248,7 @@ index ef01e22..2236529 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +645,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +647,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -259,7 +262,7 @@ index ef01e22..2236529 100644
  
        { 0 },
     };
-@@ -479,6 +673,27 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +675,38 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -283,11 +286,22 @@ index ef01e22..2236529 100644
 +      ss2comm_toast(ver_toast, 180);
 +   }
 +   ss2comm_reset();
++   {  /* 음성 팩 — <시스템 폴더>/ngpvoice (없으면 조용히 비활성) */
++      const char *sd = NULL;
++      static char vdir[560];
++      if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sd) && sd && *sd)
++      {
++         snprintf(vdir, sizeof vdir, "%s/ngpvoice", sd);
++         ss2voice_init(vdir);
++      }
++      else
++         ss2voice_init(NULL);   /* SS2VOICE_DIR 환경변수는 init 안에서 우선 적용 */
++   }
 +
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +771,95 @@ static void update_input(void)
+@@ -556,6 +784,95 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -383,7 +397,7 @@ index ef01e22..2236529 100644
  }
  
  void retro_run(void)
-@@ -598,12 +902,68 @@ void retro_run(void)
+@@ -598,13 +915,70 @@ void retro_run(void)
        update_video = false;
     }
  
@@ -400,7 +414,7 @@ index ef01e22..2236529 100644
 -   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
 +      width  = spec.DisplayRect.w;
 +      height = spec.DisplayRect.h;
-+
+ 
 +      {
 +         const char *cline = ss2comm_frame();
 +         int band = ss2comm_band_h();
@@ -453,10 +467,12 @@ index ef01e22..2236529 100644
 +      video_cb(surf->pixels, width, height, FB_WIDTH * 2);
 +   }
 +   }
- 
++
++   ss2voice_mix(sound_buf, spec.SoundBufSize);   /* 해설 음성 — 게임 소리 위에 */
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-@@ -629,11 +989,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+ 
+@@ -629,11 +1003,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -477,7 +493,7 @@ index ef01e22..2236529 100644
  
     check_color_depth();
  }
-@@ -762,6 +1126,8 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1140,8 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
@@ -486,7 +502,7 @@ index ef01e22..2236529 100644
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1148,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1162,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  

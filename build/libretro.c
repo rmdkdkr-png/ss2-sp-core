@@ -387,6 +387,8 @@ extern void    ss2sp_reset(void);
 extern void    ss2sp_set_layout(int sp);
 /* ── SvC MotM 원버튼 엔진 (svcsp.c) — 롬 헤더로 자동 판별, SvC 때만 이쪽이 받는다 ── */
 extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
+extern void    ss2voice_init(const char *dir);
+extern void    ss2voice_mix(int16_t *buf, int frames);
 extern void    svcsp_set_engine(int on);
 extern int     svcsp_engine_on(void);
 extern void    svcsp_reset(void);
@@ -693,6 +695,17 @@ bool retro_load_game(const struct retro_game_info *info)
       ss2comm_toast(ver_toast, 180);
    }
    ss2comm_reset();
+   {  /* 음성 팩 — <시스템 폴더>/ngpvoice (없으면 조용히 비활성) */
+      const char *sd = NULL;
+      static char vdir[560];
+      if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sd) && sd && *sd)
+      {
+         snprintf(vdir, sizeof vdir, "%s/ngpvoice", sd);
+         ss2voice_init(vdir);
+      }
+      else
+         ss2voice_init(NULL);   /* SS2VOICE_DIR 환경변수는 init 안에서 우선 적용 */
+   }
 
    surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
 
@@ -965,6 +978,7 @@ void retro_run(void)
    }
    }
 
+   ss2voice_mix(sound_buf, spec.SoundBufSize);   /* 해설 음성 — 게임 소리 위에 */
    for (total = 0; total < spec.SoundBufSize; )
       total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
 

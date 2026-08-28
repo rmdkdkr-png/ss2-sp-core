@@ -53,6 +53,14 @@ void ss2comm_set_ram(void *p) { (void)p; }
 
 
 
+/* 음성 팩(ss2voice.c) — 코어에서만 강한 구현이 링크된다. 하네스(audit/test_flow 등)는
+   이 약한 무동작이 그대로 남아 링크 걱정이 없다. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) void ss2voice_say(const char *t, int p){ (void)t; (void)p; }
+#else
+void ss2voice_say(const char *t, int p);
+#endif
+
 #include "ss2comm_lines.h"
 #include "ss2comm_icon.h"
 #include "ss2comm_art.h"
@@ -469,6 +477,7 @@ static void ref_say3(const char *text, int force, int flash, int ttl){
   if(!cm_on || !ref_enabled || !text || !*text) return;
   if(!force && said_recently(text)) return;
   snprintf(ref_text, sizeof ref_text, "%s", text);
+  ss2voice_say(text, 1);                         /* 심판은 해설을 끊는다 */
   ref_shown = 0;
   ref_at  = cm_f;
   ref_has = 1;
@@ -1386,6 +1395,7 @@ out:
     snprintf(curline,sizeof(curline),"%s",chosen.text);
     cur_ev = chosen.ev; cur_spk = chosen.spk; cur_f = cm_f; last_line_f = cm_f;
     mark_said(curline);
+    ss2voice_say(curline, 0);                    /* 온에어 = 음성도 이 순간 */
     /* 공방 중에는 넓게 벌린다. 말할 기회가 드물어야 아무 말이나 안 하게 된다.
        결과 계열(승패 화면·한마디 더·전적)은 한 박자 더. */
     q_next = cm_f + ((cur_ev==EV_WINSCR||cur_ev==EV_LOSESCR||cur_ev==EV_WINTALK||
