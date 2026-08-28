@@ -182,6 +182,7 @@ static int       compile_no_retry; /* 파생 등 재시도 금지 컴파일 표�
 static uint8_t   bank_at_compile;  /* 컴파일 시점 뱅크 — 재시도 성공 판정은 뱅크 변화로
                                       (씹힌 평타도 카운터는 리셋해서 카운터만으론 속는다) */
 static uint8_t   prev_pad_btn;
+static int       attack_was_kick;  /* 마지막 자기 노멀이 킥(B)이었나 — 쿄 dud 는 킥 캔슬만 */
 static uint8_t   prev_hp2v;
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
 int  svcsp_disp_seq;       /* 새 발동마다 +1. 프론트가 엣지 검출 */
@@ -421,7 +422,8 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
    if (!svc_active())
    {
       uint8_t btn = (uint8_t)(pad & (PAD_A | PAD_B));
-      if (btn & (uint8_t)~prev_pad_btn) my_attack_at = frames;
+      uint8_t nw  = (uint8_t)(btn & (uint8_t)~prev_pad_btn);
+      if (nw) { my_attack_at = frames; attack_was_kick = !!(nw & PAD_B); }
       prev_pad_btn = btn;
    }
    /* 히트 감지 — P2 체력 감소 순간 (킬캔슬은 히트에서만 연다. 가드·헛침 캔슬 불가 실측) */
@@ -543,7 +545,8 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
             류·켄 등은 지정기가 공격기라 손맛 그대로 콤보 — 캔슬을 살린다.
             쿄는 지정기가 누에잡기(비공격 카운터, dud) — 창을 회피해 깨끗하게 낸다. */
          int chr2 = CPUExRAM[OFF_CHAR1];
-         int dud  = (chr2 < SVC_CHAR_COUNT) ? svc_chars[chr2].cancel_dud : 0;
+         int dud  = ((chr2 < SVC_CHAR_COUNT) ? svc_chars[chr2].cancel_dud : 0)
+                    && attack_was_kick;   /* 쿄 실측: 킥 캔슬=누에(꽝), 펀치 캔슬=물기(콤보) */
          int own_atk = (frames - my_attack_at) <= (dud ? 40 : 24) && !svc_airborne();
          int kill_cancel = own_atk && !dud && (frames - hit_at) <= 14;
          if (need_ground && svc_airborne())
@@ -572,6 +575,7 @@ void svcsp_reset(void)
    retry_mv = 0; retry_cnt = 0; retry_at = 0; macro_end_at = 0; compile_no_retry = 0;
    prev_trig = 0; prev_pad_dir = 0;
    prev_pad_btn = 0; my_attack_at = 0; hit_at = 0; prev_hp2v = 255; frames = 100;
+   attack_was_kick = 0;
    warm = 0; verify_left = 0;
    hold_elapsed = 0; svcsp_last_strong = 0;
    chain_mv = 0; chain_tbl = 0; chain_left = 0;

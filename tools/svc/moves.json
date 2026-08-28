@@ -37,20 +37,8 @@
      "kind": "special",
      "status": "확정",
      "damage": 1,
-     "notes": "약P. 실측 bank22, damage1. 파생 시동기",
+     "notes": "약P. 실측 bank22, damage1. 파생 시동기 | 홀드=강판: 115식 독물기 (Dokugami)",
      "next": "128식 구상 (Kono Kizu)",
-     "next_hold": "401식 죄읊기 (Tsumi Yomi)"
-    },
-    {
-     "name": "115식 독물기 (Dokugami)",
-     "command": "236",
-     "button": "P",
-     "hold": true,
-     "kind": "special",
-     "status": "확정",
-     "damage": 1,
-     "notes": "강P(홀드=강 공통규칙). 236 그룹 지문 공유",
-     "next": "401식 죄읊기 (Tsumi Yomi)",
      "next_hold": "401식 죄읊기 (Tsumi Yomi)"
     },
     {
@@ -655,16 +643,7 @@
      "button": "K",
      "kind": "special",
      "status": "확정",
-     "notes": "약K. 장풍 반사 | 실측: 뱅크[32]"
-    },
-    {
-     "name": "뉴(ν) 사이코 리플렉터",
-     "command": "63214",
-     "button": "K",
-     "kind": "special",
-     "hold": true,
-     "status": "확정",
-     "notes": "강K(홀드) 버전 | 실측: 뱅크[32]"
+     "notes": "약K. 장풍 반사 | 실측: 뱅크[32] | 홀드=강판: 뉴(ν) 사이코 리플렉터"
     },
     {
      "name": "사이킥 텔레포트",

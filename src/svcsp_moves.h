@@ -12,38 +12,36 @@ static const unsigned char mo_c0_1[] = {0x0A};
 static const unsigned char mo_c0_2[] = {0x02};
 static const unsigned char mo_c0_3[] = {0x02,0x0A,0x08};
 static const unsigned char mo_c0_4[] = {0x02,0x0A,0x08};
-static const unsigned char mo_c0_5[] = {0x02,0x0A,0x08};
+static const unsigned char mo_c0_5[] = {0x08,0x0A,0x02,0x06,0x04};
 static const unsigned char mo_c0_6[] = {0x08,0x0A,0x02,0x06,0x04};
-static const unsigned char mo_c0_7[] = {0x08,0x0A,0x02,0x06,0x04};
-static const unsigned char mo_c0_8[] = {0x08,0x02,0x0A};
-static const unsigned char mo_c0_9[] = {0x04,0x02,0x06};
-static const unsigned char mo_c0_10[] = {0x02,0x0A,0x08};
-static const unsigned char mo_c0_11[] = {0x08,0x0A,0x02,0x06,0x04};
-static const unsigned char mo_c0_12[] = {0x02,0x06,0x04};
-static const unsigned char mo_c0_13[] = {0x02,0x06,0x04,0x06,0x02,0x0A,0x08};
+static const unsigned char mo_c0_7[] = {0x08,0x02,0x0A};
+static const unsigned char mo_c0_8[] = {0x04,0x02,0x06};
+static const unsigned char mo_c0_9[] = {0x02,0x0A,0x08};
+static const unsigned char mo_c0_10[] = {0x08,0x0A,0x02,0x06,0x04};
+static const unsigned char mo_c0_11[] = {0x02,0x06,0x04};
+static const unsigned char mo_c0_12[] = {0x02,0x06,0x04,0x06,0x02,0x0A,0x08};
+static const unsigned char mo_c0_13[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c0_14[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
-static const unsigned char mo_c0_15[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
+static const unsigned char mo_c0_15[] = {0x00};
 static const unsigned char mo_c0_16[] = {0x00};
-static const unsigned char mo_c0_17[] = {0x00};
 static const svc_move mv_c0[] = {
   {"외식 굉부양 (Goufu You)", mo_c0_0, 1, 0x20, 0, -1, -1},
   {"88식", mo_c0_1, 1, 0x20, 0, -1, -1},
   {"외식 나락 떨구기 (Naraku Otoshi)", mo_c0_2, 1, 0x10, 4, -1, -1},
-  {"114식 황물기 (Aragami)", mo_c0_3, 3, 0x10, 0, 5, 7},
-  {"115식 독물기 (Dokugami)", mo_c0_4, 3, 0x10, 0, 7, 7},
-  {"128식 구상 (Kono Kizu)", mo_c0_5, 3, 0x10, 0, 16, -1},
-  {"127식 팔청 (Yano Sabi)", mo_c0_6, 5, 0x10, 0, -1, -1},
-  {"401식 죄읊기 (Tsumi Yomi)", mo_c0_7, 5, 0x10, 0, -1, -1},
-  {"100식 귀신태우기 (Oniyaki)", mo_c0_8, 3, 0x10, 0, -1, -1},
-  {"R.E.D. 킥", mo_c0_9, 3, 0x20, 0, -1, -1},
-  {"75식 개", mo_c0_10, 3, 0x20, 0, 17, -1},
-  {"212식 금월양 (Kototsuki You)", mo_c0_11, 5, 0x20, 0, -1, -1},
-  {"910식 누에잡기 (Nue Tsumi)", mo_c0_12, 3, 0x10, 0, -1, -1},
-  {"이면 108식 대사치 (Orochinagi)", mo_c0_13, 7, 0x10, 0, -1, -1},
-  {"최종결전오의 무식", mo_c0_14, 6, 0x10, 0, -1, -1},
-  {"182식", mo_c0_15, 6, 0x20, 0, -1, -1},
-  {"구상 추가타", mo_c0_16, 1, 0x10, 0, -1, -1},
-  {"개 추가타", mo_c0_17, 1, 0x20, 0, -1, -1},
+  {"114식 황물기 (Aragami)", mo_c0_3, 3, 0x10, 0, 4, 6},
+  {"128식 구상 (Kono Kizu)", mo_c0_4, 3, 0x10, 0, 15, -1},
+  {"127식 팔청 (Yano Sabi)", mo_c0_5, 5, 0x10, 0, -1, -1},
+  {"401식 죄읊기 (Tsumi Yomi)", mo_c0_6, 5, 0x10, 0, -1, -1},
+  {"100식 귀신태우기 (Oniyaki)", mo_c0_7, 3, 0x10, 0, -1, -1},
+  {"R.E.D. 킥", mo_c0_8, 3, 0x20, 0, -1, -1},
+  {"75식 개", mo_c0_9, 3, 0x20, 0, 16, -1},
+  {"212식 금월양 (Kototsuki You)", mo_c0_10, 5, 0x20, 0, -1, -1},
+  {"910식 누에잡기 (Nue Tsumi)", mo_c0_11, 3, 0x10, 0, -1, -1},
+  {"이면 108식 대사치 (Orochinagi)", mo_c0_12, 7, 0x10, 0, -1, -1},
+  {"최종결전오의 무식", mo_c0_13, 6, 0x10, 0, -1, -1},
+  {"182식", mo_c0_14, 6, 0x20, 0, -1, -1},
+  {"구상 추가타", mo_c0_15, 1, 0x10, 0, -1, -1},
+  {"개 추가타", mo_c0_16, 1, 0x20, 0, -1, -1},
 };
 static const unsigned char mo_c1_0[] = {0x0A};
 static const unsigned char mo_c1_1[] = {0x08};
@@ -143,12 +141,11 @@ static const unsigned char mo_c5_2[] = {0x02,0x06,0x04};
 static const unsigned char mo_c5_3[] = {0x08,0x02,0x0A};
 static const unsigned char mo_c5_4[] = {0x02,0x06,0x04};
 static const unsigned char mo_c5_5[] = {0x08,0x0A,0x02,0x06,0x04};
-static const unsigned char mo_c5_6[] = {0x08,0x0A,0x02,0x06,0x04};
-static const unsigned char mo_c5_7[] = {0x02,0x0A,0x08};
-static const unsigned char mo_c5_8[] = {0x04,0x06,0x02,0x0A,0x08};
-static const unsigned char mo_c5_9[] = {0x08,0x0A,0x02,0x06,0x04,0x08,0x0A,0x02,0x06,0x04};
+static const unsigned char mo_c5_6[] = {0x02,0x0A,0x08};
+static const unsigned char mo_c5_7[] = {0x04,0x06,0x02,0x0A,0x08};
+static const unsigned char mo_c5_8[] = {0x08,0x0A,0x02,0x06,0x04,0x08,0x0A,0x02,0x06,0x04};
+static const unsigned char mo_c5_9[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c5_10[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
-static const unsigned char mo_c5_11[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const svc_move mv_c5[] = {
   {"연환퇴", mo_c5_0, 1, 0x20, 0, -1, -1},
   {"피닉스 밤", mo_c5_1, 1, 0x20, 4, -1, -1},
@@ -156,12 +153,11 @@ static const svc_move mv_c5[] = {
   {"사이코 소드", mo_c5_3, 3, 0x10, 0, -1, -1},
   {"피닉스 애로우", mo_c5_4, 3, 0x20, 4, -1, -1},
   {"사이코 리플렉터", mo_c5_5, 5, 0x20, 0, -1, -1},
-  {"뉴(ν) 사이코 리플렉터", mo_c5_6, 5, 0x20, 0, -1, -1},
-  {"사이킥 텔레포트", mo_c5_7, 3, 0x20, 0, -1, -1},
-  {"슈퍼 사이킥 스로우", mo_c5_8, 5, 0x10, 1, -1, -1},
-  {"샤이닝 크리스탈 비트", mo_c5_9, 10, 0x10, 0, -1, -1},
-  {"피닉스 팽 애로우", mo_c5_10, 6, 0x20, 4, -1, -1},
-  {"원조! 불꽃의 검 (Flame Sword)", mo_c5_11, 6, 0x10, 0, -1, -1},
+  {"사이킥 텔레포트", mo_c5_6, 3, 0x20, 0, -1, -1},
+  {"슈퍼 사이킥 스로우", mo_c5_7, 5, 0x10, 1, -1, -1},
+  {"샤이닝 크리스탈 비트", mo_c5_8, 10, 0x10, 0, -1, -1},
+  {"피닉스 팽 애로우", mo_c5_9, 6, 0x20, 4, -1, -1},
+  {"원조! 불꽃의 검 (Flame Sword)", mo_c5_10, 6, 0x10, 0, -1, -1},
 };
 static const unsigned char mo_c6_0[] = {0x08};
 static const unsigned char mo_c6_1[] = {0x08};
@@ -406,12 +402,12 @@ static const svc_move mv_c17[] = {
 typedef struct { const svc_move *mv; unsigned char n; const char *name; unsigned char cancel_dud; signed char slots[7]; } svc_chartab;
 #define SVC_CHAR_COUNT 18
 static const svc_chartab svc_chars[SVC_CHAR_COUNT] = {
-  { mv_c0, 18, "쿄", 1, {3,14,3,8,9,11,2} },
+  { mv_c0, 17, "쿄", 1, {3,13,3,7,8,10,2} },
   { mv_c1, 10, "테리", 0, {2,8,5,3,6,4,-1} },
   { mv_c2, 9, "료", 0, {1,7,5,3,4,6,1} },
   { mv_c3, 12, "마이", 0, {3,6,5,4,7,6,8} },
   { mv_c4, 11, "레오나", 0, {1,9,6,3,4,2,5} },
-  { mv_c5, 12, "아테나", 0, {2,9,8,3,5,7,3} },
+  { mv_c5, 11, "아테나", 0, {2,8,7,3,5,6,3} },
   { mv_c6, 12, "이오리", 0, {3,9,5,4,7,6,2} },
   { mv_c7, 5, "하오마루", 0, {0,3,0,1,-1,4,-1} },
   { mv_c8, 8, "나코루루", 0, {4,3,4,2,3,5,0} },
