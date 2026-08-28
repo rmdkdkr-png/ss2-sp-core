@@ -87,3 +87,8 @@ qc.py              총 재생시간·클리핑·누락 리포트 + 랜덤 시청
   삐 E2E·ElevenLabs 실클립 5개 간다라전 검증 통과. 회귀 SS2 20·sptest 12·chartest 18·버튼 9.
   유저 플랜 Creator(131k) 확인 — 전량 생성 여력 OK. 팩 위치: <시스템폴더>/ngpvoice/.
   폰 배포는 보류(유저 지시) — 캐스팅·전량 생성 후 일괄.
+- 2026-08-28 P2 완료: 전량 팩 v1 — 4,581클립(정적+간다라/상대 채움+심판 구호), 107.7MB,
+  Flash v2.5, 크레딧 21.6k 사용(잔여 109k). 배역: Harry(하오마루)·Jessica(나코루루)·Brian(한조)·
+  Liam(갈포드)·Laura(리무루루)·Callum(겐주로)·River(우쿄)·Sarah(샬롯)·Roger(쥬베이)·Will(카즈키)·
+  Chris(소게츠)·Charlie(아수라)·Alice(시키)·Bill(모로즈미)·Lily(유가)·George(심판·내레이터).
+  클립 상한 16384로 상향. libsndfile OGG 인코드는 스레드 직렬화 필수(세그폴트 실측).
