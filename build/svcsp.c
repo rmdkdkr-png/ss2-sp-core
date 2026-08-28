@@ -485,6 +485,8 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
       int fire = 0;
       if (pending_kind == 2)
          fire = 1;                       /* 파생 — 헛쳐도 창 안이면 나가는 것이 원작 동작 (유저 확인) */
+      else if (pending_kind == 1 && (frames - hit_at) <= 2)
+         fire = 2;                       /* 캔슬 선입력 — 히트가 뜬 그 순간 발사 */
       else if (pending_kind == 4)
       {  /* 평타 후 — 캔슬 창(공격 시작 +40f)이 지나고 행동 가능해지면 */
          if ((frames - my_attack_at) >= 40 && svc_actable()) fire = 1;
@@ -537,14 +539,21 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t trig)
          /* 킬캔슬: 자기 평타 직후(24f)의 X 는 회복을 기다리지 않는다 —
             캔슬창이 히트 후 0~8f 라서 기다리면 놓친다 (실측 §19).
             히트가 아니면 게임이 그냥 먹는다 (가드·헛침 캔슬 불가 실측). */
-         /* 노멀 캔슬 창은 함정이다: 창 안의 어떤 방향+버튼도 게임이 지정기(쿄: 누에잡기,
-            비공격 카운터)로 바꿔 낸다 (실측 §24). 그래서 자기 평타 직후의 X 는
-            창이 완전히 지나간 뒤(공격 시작 +40f)에 깨끗한 필살기로 낸다. */
-         int own_atk = (frames - my_attack_at) <= 40 && !svc_airborne();
+         /* 노멀 캔슬: 창 안의 모션+버튼은 게임이 캐릭터별 지정기로 낸다 (실측 §24·§25).
+            류·켄 등은 지정기가 공격기라 손맛 그대로 콤보 — 캔슬을 살린다.
+            쿄는 지정기가 누에잡기(비공격 카운터, dud) — 창을 회피해 깨끗하게 낸다. */
+         int chr2 = CPUExRAM[OFF_CHAR1];
+         int dud  = (chr2 < SVC_CHAR_COUNT) ? svc_chars[chr2].cancel_dud : 0;
+         int own_atk = (frames - my_attack_at) <= (dud ? 40 : 24) && !svc_airborne();
+         int kill_cancel = own_atk && !dud && (frames - hit_at) <= 14;
          if (need_ground && svc_airborne())
             { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
-         else if (own_atk)
+         else if (kill_cancel)
+            { svc_compile_cancel = 1; svc_compile(m); svc_compile_cancel = 0; }
+         else if (own_atk && dud)
             { pending = m; pending_left = PENDING_FRAMES; pending_kind = 4; }
+         else if (own_atk)
+            { pending = m; pending_left = 30; pending_kind = 1; }   /* 선입력 — 히트 순간 발사 */
          else if (!svc_actable())
             { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
          else

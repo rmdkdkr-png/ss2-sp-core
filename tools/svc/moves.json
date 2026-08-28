@@ -172,7 +172,8 @@
     "F": "최종결전오의 무식",
     "DB": "212식 금월양 (Kototsuki You)",
     "AIR": "외식 나락 떨구기 (Naraku Otoshi)"
-   }
+   },
+   "cancel_dud": true
   },
   {
    "id": 1,
@@ -271,7 +272,8 @@
     "B": "번 너클",
     "F": "파워 가이저",
     "DB": "크랙 슛"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 2,
@@ -364,7 +366,8 @@
     "F": "용호난무",
     "DB": "패왕상후권",
     "AIR": "호황권"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 3,
@@ -484,7 +487,8 @@
     "F": "필살인봉",
     "DB": "필살인봉",
     "AIR": "무사사비의 춤 (공중)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 4,
@@ -594,7 +598,8 @@
     "F": "그래비티 스톰",
     "DB": "그라운드 세이버",
     "AIR": "X 칼리버"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 5,
@@ -714,7 +719,8 @@
     "F": "샤이닝 크리스탈 비트",
     "DB": "사이킥 텔레포트",
     "AIR": "사이코 소드"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 6,
@@ -832,7 +838,8 @@
     "F": "금 1211식 야오토메 (팔치녀)",
     "DB": "212식 코토츠키 인",
     "AIR": "외식 유리오리 (백합꺾기)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 7,
@@ -889,7 +896,8 @@
     "B": "오의 선풍열참",
     "F": "비오의 천파봉신참",
     "DB": "비오의 천파단공열참"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 8,
@@ -974,7 +982,8 @@
     "F": "카무이 림세",
     "DB": "매에 매달리기 (타카니 츠카마루)",
     "AIR": "카무이 훔 케습"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 9,
@@ -1066,7 +1075,8 @@
     "DF": "용권선풍각(Tatsumaki Senpukyaku)",
     "DB": "작열 파동권(Shakunetsu Hadouken)",
     "AIR": "용권선풍각(Tatsumaki Senpukyaku)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 10,
@@ -1172,7 +1182,8 @@
     "DF": "학각락(Kaku Kyaku Raku)",
     "DB": "스피닝 버드 킥(Spinning Bird Kick)",
     "AIR": "응조각(Yousou Kyaku)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 11,
@@ -1310,7 +1321,8 @@
     "DF": "에어리얼 러시안 슬램(Aerial Russian Slam)",
     "DB": "퀵 더블 라리아트(Quick Double Lariat)",
     "AIR": "플라잉 바디 프레스(Flying Body Press)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 12,
@@ -1401,7 +1413,8 @@
     "DF": "신룡권(Shinryuken)",
     "DB": "용권선풍각(Tatsumaki Senpukyaku)",
     "AIR": "용권선풍각(Tatsumaki Senpukyaku)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 13,
@@ -1475,7 +1488,8 @@
     "DF": "코류렉카(Kouryu Rekka)",
     "DB": "필승무뢰권(Hisshou Burai Ken)",
     "AIR": "단공각(Dankukyaku)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 14,
@@ -1565,7 +1579,8 @@
     "DF": "미다레자쿠라(Midare Zakura)",
     "DB": "사쿠라 오토시(Sakura Otoshi)",
     "AIR": "춘풍각(Shunpukyaku)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 15,
@@ -1650,7 +1665,8 @@
     "DF": "피니싱 샤워(Finishing Shower)",
     "DB": "발키리 턴(Valkyrie Turn)",
     "AIR": "소울 피스트(Soul Fist)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 16,
@@ -1734,7 +1750,8 @@
     "D": "델타 킥(Delta Kick)",
     "DF": "캣 스파이크(Cat Spike)",
     "DB": "플리즈 헬프 미(Please Help Me)"
-   }
+   },
+   "cancel_dud": false
   },
   {
    "id": 17,
@@ -1806,7 +1823,8 @@
     "D": "서머솔트 킥(Somersault Kick)",
     "DF": "서머솔트 스트라이크(Somersault Strike)",
     "DB": "크로스파이어 블리츠(Crossfire Blitz)"
-   }
+   },
+   "cancel_dud": false
   }
  ]
 }

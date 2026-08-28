@@ -79,12 +79,12 @@ def emit(chars):
         tables[cid] = (ch, moves)
     w('')
     w('/* 캐릭터별: 기술표 + 슬롯 7자리 (N F B D DF DB AIR — 값은 기술 인덱스, -1 없음) */')
-    w('typedef struct { const svc_move *mv; unsigned char n; const char *name; signed char slots[7]; } svc_chartab;')
+    w('typedef struct { const svc_move *mv; unsigned char n; const char *name; unsigned char cancel_dud; signed char slots[7]; } svc_chartab;')
     w('#define SVC_CHAR_COUNT 18')
     w('static const svc_chartab svc_chars[SVC_CHAR_COUNT] = {')
     for cid in range(18):
         if cid not in tables or not tables[cid][1]:
-            w('  { 0, 0, "", {-1,-1,-1,-1,-1,-1,-1} },   /* %d: 기술표 없음 */' % cid)
+            w('  { 0, 0, "", 0, {-1,-1,-1,-1,-1,-1,-1} },   /* %d: 기술표 없음 */' % cid)
             continue
         ch, moves = tables[cid]
         names = [m[0] for m in moves]
@@ -101,7 +101,7 @@ def emit(chars):
         if slots[6] < 0:
             for i2, m2 in enumerate(moves):
                 if m2[4] & 4: slots[6] = i2; break
-        w('  { mv_c%d, %d, "%s", {%s} },' % (cid, len(moves), ch.get('name','?'), ','.join(map(str,slots))))
+        w('  { mv_c%d, %d, "%s", %d, {%s} },' % (cid, len(moves), ch.get('name','?'), 1 if ch.get('cancel_dud') else 0, ','.join(map(str,slots))))
     w('};')
     w('')
     w('#endif')
