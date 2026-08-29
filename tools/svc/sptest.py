@@ -29,8 +29,8 @@ CASES=[
  ('앞X',     ['2 R','1 R R1'],    lambda b,a,hp: min(a)<=12),
  ('공중X',   ['2 U','14 -','1 R1'], lambda b,a,hp: 4 in b),
  ('경직X',   ['3 B','4 -','1 R1'], lambda b,a,hp: 22 in b),
- ('걷기40X', ['40 R','1 R1'],     lambda b,a,hp: 22 in b),
- ('걷기100X',['100 R','1 R1'],    lambda b,a,hp: 22 in b),
+ ('걷기40X', ['40 R','1 R1'],     lambda b,a,hp: 21 in b or 22 in b),  # 방향 래치: 걷던 방향이 4f 이어짐
+ ('걷기100X',['100 R','1 R1'],    lambda b,a,hp: 21 in b or 22 in b),
  ('밀착뒤X', ['170 R','2 L','1 L R1'], lambda b,a,hp: hp>0 or min(a)<=12),  # 밀착 팔청 → 피해 기대
 ]
 sc=['1 -']

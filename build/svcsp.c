@@ -254,6 +254,8 @@ static int       compile_no_retry; /* 파생 등 재시도 금지 컴파일 표�
 static uint8_t   bank_at_compile;  /* 컴파일 시점 뱅크 — 재시도 성공 판정은 뱅크 변화로
                                       (씹힌 평타도 카운터는 리셋해서 카운터만으론 속는다) */
 static uint8_t   prev_pad_btn;
+static uint8_t   dir_latch;        /* 마지막으로 잡았던 방향 */
+static uint32_t  dir_latch_at;     /* 그 프레임 */
 static int       attack_was_kick;  /* 마지막 자기 노멀이 킥(B)이었나 — 쿄 dud 는 킥 캔슬만 */
 static uint8_t   prev_hp2v;
 /* ── 모던 자동 콤보 상태 (러시/어시스트/기술키 판별) ── */
@@ -572,6 +574,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
    prev_trig = trig;
    frames++;
    if (chain_left > 0) chain_left--;
+   if (pad & PAD_DIR_MASK) { dir_latch = (uint8_t)(pad & PAD_DIR_MASK); dir_latch_at = frames; }
    /* ── 모던 자동 콤보: 「기본기는 콤보, 기술키는 SP」 ──────────────
       · 러시: 기본기 연타(24f 창). 3타째는 P/K 를 교대로 갈아 끼우고,
         히트가 확인된 4타째를 마무리(대표 초필)로 바꾼다. 초필이 게이지
@@ -736,7 +739,13 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       }
    }
    if ((edge & 1u) && svc_in_battle())
-      svc_fire_sp(pad);   /* 즉시 발동 — 미루면 방향-모션 인접이 깨져 판정이 달라진다(실측) */
+   {  /* 터치는 방향과 기술키가 1~2프레임 어긋나기 쉽다 — 엣지에 방향이 비면
+         직전 4프레임의 방향을 이어받는다 (「기술키 누르면 좌우를 못 알아듣는다」 제보). */
+      uint8_t held = pad;
+      if (!(held & PAD_DIR_MASK) && frames - dir_latch_at <= 4)
+         held |= dir_latch;
+      svc_fire_sp(held);  /* 즉시 발동 — 미루면 방향-모션 인접이 깨져 판정이 달라진다(실측) */
+   }
 
    if (svc_active()) return svc_step_out(trig & 1u);   /* 트리거 프레임에도 첫 스텝이 나간다 */
    return pad;
@@ -770,6 +779,7 @@ void svcsp_reset(void)
    hold_elapsed = 0; svcsp_last_strong = 0;
    chain_mv = 0; chain_tbl = 0; chain_left = 0;
    svcsp_last_ok = -1; svcsp_last_name = 0;
+   dir_latch = 0; dir_latch_at = 0;
    prev_ret = 0; bas_last_at = 0; rush_n = 0; rush_prev_btn = 0; rush_hit0 = 0;
    rush_fb = 0; rush_conv = 0; rush_conv_src = 0;
 }
