@@ -89,7 +89,7 @@ enum { CK_ROUND, CK_ROUNDCTX, CK_KO, CK_MV, CK_HIT, CK_TK, CK_DN, CK_DN2, CK_OSP
        CK_SURV, CK_SURV2, CK_STG, CK_QUOTE, CK_ENDING, CK_RES, CK_RES2, CK_REC,
        CK_VSQ, CK_STORY, CK_SCR0, CK_SCR2, CK_SCR4, CK_SCR6, CK_SELCHAT, CK_MIDLE,
        CK_FB, CK_IDLE, CK_LONG, CK_MUSE, CK_LORE, CK_REL,
-       CK_FLOW, CK_ARC, CK_N };
+       CK_FLOW, CK_ARC, CK_PCH, CK_PJD, CK_N };
 
 /* {쿨다운 키, 쿨다운(프레임 · 60fps 기준)} — 브라우저판의 ms 값을 프레임으로 옮긴 것 */
 static const struct { unsigned char key; unsigned short cool; } EVCD[EV_N] = {
@@ -160,6 +160,9 @@ static const struct { unsigned char key; unsigned short cool; } EVCD[EV_N] = {
   [EV_ARCSWEAT   ] = { CK_ARC, 420 },
   [EV_ARCCHOKE   ] = { CK_ARC, 420 },
   [EV_ARCSLIP    ] = { CK_ARC, 420 },
+  /* v3 플레이어 축 — 응원은 드물게(15초), 평가는 이따금(10초) */
+  [EV_PCHEER     ] = { CK_PCH, 900 },
+  [EV_PJUDGE     ] = { CK_PJD, 600 },
 };
 
 /* ── 상태 ── */
@@ -350,6 +353,7 @@ static int ev_keep(int ev){
        갈렸지만 **KO·총평과는 여전히 다툰다** — 되돌려 보니 검사 셋이 다시 깨졌다.
        이쪽은 놓쳐도 다음 판에 또 올 말이고, KO 반응은 그 순간뿐이다. */
     case EV_ROUND: case EV_ROUNDLEAD: case EV_ROUNDBEHIND: case EV_MATCHPOINT:
+    case EV_PCHEER: case EV_PJUDGE:
       return 0;                 /* 두어도 되는 말 */
     default:
       return 1;                 /* 지금 아니면 의미 없는 말 */
@@ -542,6 +546,24 @@ static int kr_batchim(const char *s){
 static const char *const JOSA[][2] = {
   {"로","으로"},{"가","이"},{"를","을"},{"는","은"},{"와","과"},{"야","아"},{0,0}
 };
+/* %m = 내 캐릭터 이름 (v3 플레이어 축). %m 을 %s 로 바꾼 사본을 만들어
+   fill_name(조사 보정)을 재사용한다. 내 캐릭터를 모르면 「그대」로 부른다. */
+static void fill_name(char *out, size_t cap, const char *fmt, const char *who);
+static const char *my_name(void){
+  return (st_myChar >= 0 && st_myChar < 15) ? CHARNAME[st_myChar] : "그대";
+}
+static int fill_me(char *out, size_t cap, const char *fmt){
+  char tmp[176]; const char *ph = strstr(fmt, "%m");
+  size_t pre;
+  if(!ph){ snprintf(out, cap, "%s", fmt); return 1; }
+  pre = (size_t)(ph - fmt);
+  if(pre >= sizeof tmp - 3) return 0;
+  memcpy(tmp, fmt, pre); tmp[pre] = '%'; tmp[pre + 1] = 's';
+  snprintf(tmp + pre + 2, sizeof tmp - pre - 2, "%s", ph + 2);
+  fill_name(out, cap, tmp, my_name());
+  return 1;
+}
+
 /* fmt 안의 %s 를 who 로 바꾸되, 바로 뒤 조사를 받침에 맞춰 고쳐 쓴다 */
 static void fill_name(char *out, size_t cap, const char *fmt, const char *who){
   const char *ph = strstr(fmt, "%s");
@@ -573,6 +595,8 @@ static void fill_name(char *out, size_t cap, const char *fmt, const char *who){
 }
 
 static void fmt_one(const char *fmt, const char *who, int n1, int n2, char *out, size_t cap){
+  char mb[176];
+  if(strstr(fmt, "%m")){ if(fill_me(mb, sizeof mb, fmt)) fmt = mb; }
   if(strstr(fmt,"%s")) fill_name(out, cap, fmt, who);
   else if(strstr(fmt,"%d")){
     const char *p = strstr(fmt,"%d");
@@ -584,6 +608,21 @@ static void fmt_one(const char *fmt, const char *who, int n1, int n2, char *out,
 /* 음성 팩 시대의 대체 이벤트 — 기술명 계열은 변형 전부가 기술명 채움이라 팩에 없을
    수 있다. 그 순간을 침묵으로 두지 말고 같은 뜻의 일반 대사로 갈아탄다(제보:
    「엔진 자체를 더빙에 맞춰라」). 팩이 없으면 이 경로는 아예 안 탄다. */
+/* v3 이름 3톤 — 이벤트 성격이 이름 조각의 톤을 고른다.
+   0 평서 / 1 외침(승부처) / 2 낮게(경계·위기). 톤 클립 키는 "\x01N<spk>/<T>\x01이름",
+   없으면 무톤 키(현행 팩) → 통짜 → 자막 순으로 물러난다. */
+static int ev_tone(int ev){
+  switch(ev){
+    case EV_KO: case EV_KOED: case EV_DKO: case EV_MOVEKO:
+    case EV_REVERSAL: case EV_PERFECT: case EV_COMEBACK: case EV_QUICK:
+    case EV_MOVEHITL: case EV_MOVEDOWNA:
+      return 1;
+    case EV_LOW1: case EV_LOW2: case EV_DOUBLELOW: case EV_OPPSP:
+    case EV_TAKEN: case EV_DOWNED:
+      return 2;
+    default: return 0;
+  }
+}
 static int ev_voicefb(int ev){
   switch(ev){
     case EV_MOVEHIT: case EV_MOVEHITL:   return EV_HIT;
@@ -615,6 +654,15 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   key = EVCD[ev].key;
   if(cd[key] > cm_f) return 0;
   for(i=0;i<EVMAXV;i++) if(LINES[cm_spk][ev][i]) cand[n++]=LINES[cm_spk][ev][i];
+  if(!n && (ev == EV_PCHEER || ev == EV_PJUDGE)){
+    /* v3 골격 임시 대사 — 표(gen_lines)에 정식 편입 전까지의 공용분. 시대극 문어체. */
+    static const char *const PCH[3] = {
+      "%m! 물러서지 마라!", "%m, 아직이다 — 검을 다시 세워라!", "버텨라 %m! 승부는 지금부터다!" };
+    static const char *const PJD[3] = {
+      "%m의 검이 제대로 섰군!", "좋다 %m, 그 기세로다!", "방금 그 한 수… %m, 훌륭하다!" };
+    const char *const *tb = (ev == EV_PCHEER) ? PCH : PJD;
+    for(i = 0; i < 3; i++) cand[n++] = tb[i];
+  }
   if(!n) return 0;
   /* %s 채움용 상대 이름 — 음성 우대 검사에도 필요해서 미리 정한다.
      (이름 인자가 없는 호출(emit)의 %s 는 상대 이름. 표 밖 개체는 「상대」/「간다라」) */
@@ -640,7 +688,9 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
            (제보: 「어색해도 이어붙여라」) 조각도 없으면 자매 이벤트로. */
         if(ev_voicefb(ev) >= 0 && who && *who){
           const char *sp2[EVMAXV]; int ns2 = 0;
-          snprintf(spl_kn, sizeof spl_kn, "\x01N%d\x01%s", cm_spk, who);
+          snprintf(spl_kn, sizeof spl_kn, "\x01N%d/%d\x01%s", cm_spk, ev_tone(ev), who);
+          if(!ss2voice_has_text(spl_kn))               /* 톤 클립이 없으면 무톤(현행 팩) */
+            snprintf(spl_kn, sizeof spl_kn, "\x01N%d\x01%s", cm_spk, who);
           if(ss2voice_has_text(spl_kn)){
             for(i = 0; i < n; i++){
               const char *ph = strstr(cand[i], "%s");
@@ -1343,7 +1393,7 @@ const char *ss2comm_frame(void){
         int sup; const char *nm = pend_take(&sup);
         if(!nm && (ACT_HEAVY(a1) || ACT_HEAVY(p_a1))) nm = "강베기";
         if(nm){ emit_ex(d>=12?EV_MOVEHIT:EV_MOVEHITL, -1, 0,0, nm); st_hitAt=cm_f; }
-        else if(d>=12){ emit(EV_HIT); st_hitAt=cm_f; }
+        else if(d>=12){ if(!((rnd()%10u)<2 && emit(EV_PJUDGE))) emit(EV_HIT); st_hitAt=cm_f; }   /* 2/10 은 평가(내 캐릭 호명) */
       }
     }
     if(hit1){
@@ -1453,7 +1503,9 @@ out:
       /* 빈 자리 차례: 썰 → 썰 → 관계 → 혼잣말 순으로 돈다.
          관계가 「매치 시작 한 번」에서 빠져나와 빈 자리에도 들어간다. */
       said = 0;
-      if((turn % 4) == 2){
+      /* 내가 뒤지는 판의 응원은 잡담 순번에 밀리지 않는다 — 쿨다운(15초)이 도배를 막는다 */
+      if(!said && mode==MD_BATTLE && hp1 + 12 < hp2) said = emit(EV_PCHEER);
+      if(!said && (turn % 4) == 2){
         const char *r3 = 0;
         if(a1c >= 0)      r3 = RELOPP[cm_spk][a1c];
         if(!r3 && a2c>=0) r3 = RELME [cm_spk][a2c];
@@ -1462,7 +1514,10 @@ out:
       if(!said && (turn % 4) != 3) said = (say_anec(a1c) || say_anec(a2c));
       if(said) turn++;
       else if(quiet > need)
-        { turn++; emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M)); }
+        { turn++;
+          /* 내가 뒤지는 소강엔 응원이 먼저 — 잡담보다 판을 본다 (v3 플레이어 축) */
+          if(!(mode==MD_BATTLE && hp1 + 12 < hp2 && emit(EV_PCHEER)))
+            emit(mode==MD_BATTLE ? EV_MUSE_B : (mode==MD_QUOTE ? EV_MUSE_Q : EV_MUSE_M)); }
       else if((turn % 4) == 3) turn++;
     }
   }

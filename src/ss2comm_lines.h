@@ -21,6 +21,9 @@ enum {
   EV_STREAK, EV_RECORD, EV_WINSCR, EV_LOSESCR, EV_REL, EV_LORE,
   EV_FLOWSAME, EV_FLOWTRADE, EV_FLOWONE, EV_FLOWCHASE, EV_FLOWSP, EV_ARCSWEEP,
   EV_ARCSWEPT, EV_ARCCOMEBACK, EV_ARCSWEAT, EV_ARCCHOKE, EV_ARCSLIP,
+  /* v3 플레이어 축 — 응원·평가. 대사는 아직 코드 내장 임시분(emit_ex 폴백).
+     ※ B단계 재생성 때 gen_lines 체인(index.html SPEAKERS)에 정식 편입할 것. */
+  EV_PCHEER, EV_PJUDGE,
   EV_N
 };
 
