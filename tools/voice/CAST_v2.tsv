@@ -1,0 +1,20 @@
+# 더빙 1차(voicepack v2.0, 29821클립) 캐스팅 대장 — 2026-08-29 박제
+# spk	화자	ElevenLabs voice_id	비고
+0	하오마루	Fb9RdXidcUpegVbug0tb	호쾌 낭인
+1	나코루루	ph0Ods045PMGRJPLdlPA	앳된 무녀 (제보: 글읽는 느낌 강함)
+2	한조	nZJeMdagwxXl3u9DjyD8	중후 두령
+3	갈포드	m3gJBS8OofDJfycyA2Ip	미국인 닌자 (제보: 안 어울림 — 재캐스팅 대상)
+4	리무루루	2QvF6aaHylD9eOZwL8CP	명랑 여동생 (제보: 제일 낫다)
+5	겐주로	PzjM0GEvHsoRx99kBNqg	거만 악역
+6	우쿄	FQ3MuLxZh0jHcZmA5vW1	Dohyeon 기반
+7	샬롯	53RG1dl5ztoPBQVCkiP5	Jane 기반 (제보: 인토네이션 없음)
+8	쥬베이	mMMpmkJZ7sfhEhC8pImH	호탕 노검호
+9	카즈키	BBAyvmlzGy3kA2aXfy3K	열혈 소년
+10	소게츠	3MTvEr8xCMCC2mL9ujrI	June 기반
+11	아수라	6FzAqiyzy5gucstqnA6p	이형
+12	시키	Sfb3Gl0wcseB3wahvA42	요염 무심
+13	모로즈미	s07IwTCOrCDCaETjUVjx	Hyunbin 기반
+14	유가	M2pNcAYbPeiNxpVLfQL2	중성 마왕 (제보: 무미건조)
+15	심판(쿠로코)	hI3nhWWVuTFZYdr41d6v	절규 링아나운서 (호평)
+# 생성 설정: eleven_v3, pcm_22050→2배 업샘플, 트림, 피크 0.85, OGG VORBIS
+# 팩: ~/ss2/archive/ngpvoice_v2.0_29821.pak (753,106,824B) / 릴리스 voicepack-v2.0
