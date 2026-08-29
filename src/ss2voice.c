@@ -29,6 +29,7 @@ static struct { unsigned h; short *pcm; int len; unsigned used; } cache[VC_CACHE
 static unsigned cache_tick;
 
 static short *cur_pcm; static int cur_len, cur_pos, cur_prio;
+static short *own_pcm;   /* 이어붙인 결합 버퍼 — 캐시 밖, 우리가 free */
 
 static unsigned fnv1a(const char *s){
   unsigned h = 2166136261u;
@@ -181,8 +182,36 @@ static int has_clip(unsigned h){
 static void vc_start(unsigned h, int prio){
   int len = 0; short *pcm = clip_get(h, &len);
   if(!pcm){ cur_pcm = 0; return; }
+  if(own_pcm){ free(own_pcm); own_pcm = 0; }       /* 물러나는 결합 버퍼 정리 */
   cur_pcm = pcm; cur_len = len; cur_pos = 0; cur_prio = prio;
 }
+/* 이어붙이기 — 기술명처럼 조합이 폭발하는 대사는 [이름][꼬리] 조각을 즉석에서
+   한 버퍼로 이어 재생한다 (제보: 「어색해도 그 방식으로」). 조각은 합성키
+   (제어문자 접두, 실대사 해시와 충돌 불가)로 팩에 들어 있다. 틈 40ms. */
+void ss2voice_say_parts(const char *k1, const char *k2, const char *k3, int prio){
+  const char *ks[3]; short *pc[3]; int ln[3], nk = 0, i, tot = 0, gap = 1764, off = 0;
+  short *buf;
+  if(!vc_ready) return;
+  if(k1 && *k1) ks[nk++] = k1;
+  if(k2 && *k2) ks[nk++] = k2;
+  if(k3 && *k3) ks[nk++] = k3;
+  if(!nk) return;
+  for(i = 0; i < nk; i++){
+    pc[i] = clip_get(fnv1a(ks[i]), &ln[i]);
+    if(!pc[i]) return;                             /* 조각 하나라도 없으면 자막만 */
+    tot += ln[i];
+  }
+  buf = (short *)malloc((size_t)(tot + gap * (nk - 1)) * 2);
+  if(!buf) return;
+  for(i = 0; i < nk; i++){
+    memcpy(buf + off, pc[i], (size_t)ln[i] * 2); off += ln[i];
+    if(i < nk - 1){ memset(buf + off, 0, (size_t)gap * 2); off += gap; }
+  }
+  if(own_pcm) free(own_pcm);
+  own_pcm = buf;
+  cur_pcm = buf; cur_len = off; cur_pos = 0; cur_prio = prio;
+}
+
 void ss2voice_say(const char *text, int prio){
   unsigned h;
   if(!vc_ready || !text || !*text) return;

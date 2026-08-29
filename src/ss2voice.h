@@ -6,7 +6,8 @@
 #include <stdint.h>
 
 void ss2voice_init(const char *dir);              /* NULL 또는 없는 폴더 = 비활성 */
-void ss2voice_say(const char *text, int prio);    /* prio 1=심판(끼어듦) 0=해설 */
+void ss2voice_say(const char *text, int prio);
+void ss2voice_say_parts(const char *k1, const char *k2, const char *k3, int prio);    /* prio 1=심판(끼어듦) 0=해설 */
 void ss2voice_mix(int16_t *buf, int frames);      /* 44.1kHz 스테레오 s16 에 가산 */
 int  ss2voice_on(void);
 int  ss2voice_count(void);

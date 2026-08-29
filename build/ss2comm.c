@@ -59,10 +59,12 @@ void ss2comm_set_ram(void *p) { (void)p; }
 __attribute__((weak)) void ss2voice_say(const char *t, int p){ (void)t; (void)p; }
 __attribute__((weak)) int  ss2voice_on(void){ return 0; }
 __attribute__((weak)) int  ss2voice_has_text(const char *t){ (void)t; return 0; }
+__attribute__((weak)) void ss2voice_say_parts(const char *a, const char *b, const char *c, int p){ (void)a;(void)b;(void)c;(void)p; }
 #else
 void ss2voice_say(const char *t, int p);
 int  ss2voice_on(void);
 int  ss2voice_has_text(const char *t);
+void ss2voice_say_parts(const char *a, const char *b, const char *c, int p);
 #endif
 
 #include "ss2comm_lines.h"
@@ -256,7 +258,9 @@ static unsigned rng = 2463534242u;
 #define GAP_BATTLE  270   /* 4.5초 — 공방 중 최소 간격 */
 #define GAP_OTHER    96   /* 1.6초 — 화면 전환·메뉴에서는 촘촘해도 된다 */
 #define GAP_RESULT  150   /* 결과 계열은 한 박자 더 */
-typedef struct { char text[160]; short ev; short spk; unsigned at; } ss2q;
+typedef struct { char text[160]; short ev; short spk; unsigned at;
+                 char vkn[56], vks[112];   /* 이어붙이기 조각키(합성) — 비면 통짜/자막 */
+               } ss2q;
 static ss2q q[QN];
 static int q_head, q_cnt;
 static unsigned q_next;
@@ -583,9 +587,25 @@ static int ev_voicefb(int ev){
     default: return -1;
   }
 }
+/* 꼬리 조각키: %s 뒤 문자열의 첫 조사를 이름 받침에 맞춰 확정해 합성키로 만든다.
+   fill_name 과 같은 규칙 — 둘이 어긋나면 자막과 소리가 갈린다. */
+static int splice_suffix(const char *rest, const char *who, char *out, size_t cap){
+  int b = kr_batchim(who), i;
+  const char *tail = rest; const char *josa = 0;
+  if(b >= 0){
+    for(i = 0; JOSA[i][0]; i++){
+      size_t l0 = strlen(JOSA[i][0]), l1 = strlen(JOSA[i][1]);
+      int noB = (b == 0) || (i == 0 && b == 8);
+      if(!strncmp(rest, JOSA[i][0], l0)){ josa = JOSA[i][noB ? 0 : 1]; tail = rest + l0; break; }
+      if(!strncmp(rest, JOSA[i][1], l1)){ josa = JOSA[i][noB ? 0 : 1]; tail = rest + l1; break; }
+    }
+  }
+  return snprintf(out, cap, "\x01S%d\x01%s%s", cm_spk, josa ? josa : "", tail) < (int)cap;
+}
 static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   const char *cand[EVMAXV]; int n=0, i, key;
   const char *fmt;
+  char spl_kn[56] = "", spl_ks[112] = ""; int spl_on = 0;
   if(!cm_on || ev<0 || ev>=EV_N) return 0;
   key = EVCD[ev].key;
   if(cd[key] > cm_f) return 0;
@@ -611,6 +631,26 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
           if(ss2voice_has_text(tb)) vd[nvd++] = cand[i];
         }
         if(nvd || pass) break;
+        /* 통짜 전멸 — 기술명 계열이면 [이름][꼬리] 조각으로 말할 수 있는 후보를 찾는다.
+           (제보: 「어색해도 이어붙여라」) 조각도 없으면 자매 이벤트로. */
+        if(ev_voicefb(ev) >= 0 && who && *who){
+          const char *sp2[EVMAXV]; int ns2 = 0;
+          snprintf(spl_kn, sizeof spl_kn, "\x01N%d\x01%s", cm_spk, who);
+          if(ss2voice_has_text(spl_kn)){
+            for(i = 0; i < n; i++){
+              const char *ph = strstr(cand[i], "%s");
+              if(!ph || cand[i][0] != '%') continue;      /* 이름이 문두인 꼴만 */
+              if(!splice_suffix(ph + 2, who, tb, sizeof tb)) continue;
+              if(ss2voice_has_text(tb)) sp2[ns2++] = cand[i];
+            }
+          }
+          if(ns2){
+            fmt = sp2[rnd()%(unsigned)ns2];
+            splice_suffix(strstr(fmt,"%s") + 2, who, spl_ks, sizeof spl_ks);
+            spl_on = 1;
+            goto picked;
+          }
+        }
         { int fb = ev_voicefb(ev);
           if(fb < 0) break;
           ev = fb; key = EVCD[ev].key;
@@ -627,6 +667,7 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
       else                             fmt = cs[rnd()%(unsigned)cn];
     }
   }
+picked:
   fmt_one(fmt, who, n1, n2, outbuf, sizeof(outbuf));
   if(said_recently(outbuf)) return 0;      /* 최근에 한 말은 다시 안 한다 */
   { int slot;
@@ -659,6 +700,9 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
     q[slot].at = cm_f;
     q[slot].ev = (short)ev;
     q[slot].spk = (short)cm_spk;
+    q[slot].vkn[0] = q[slot].vks[0] = 0;
+    if(spl_on){ snprintf(q[slot].vkn,sizeof q[slot].vkn,"%s",spl_kn);
+                snprintf(q[slot].vks,sizeof q[slot].vks,"%s",spl_ks); }
   }
   cd[key] = cm_f + EVCD[ev].cool;   /* 실린 다음에만 — 큐에서 밀려난 말이 쿨다운까지 먹으면 재시도가 막힌다 */
   return 1;
@@ -803,6 +847,7 @@ void ss2comm_notify(const char *text){
   snprintf(q[slot].text,sizeof(q[slot].text),"%s",text);
   q[slot].ev = -1;                       /* 표정·강조 없음 */
   q[slot].spk = (short)cm_spk;
+  q[slot].vkn[0] = q[slot].vks[0] = 0;
   q[slot].at  = cm_f;                    /* 안내는 최근-중복 검사를 거치지 않는다 */
 }
 
@@ -1431,7 +1476,8 @@ out:
     snprintf(curline,sizeof(curline),"%s",chosen.text);
     cur_ev = chosen.ev; cur_spk = chosen.spk; cur_f = cm_f; last_line_f = cm_f;
     mark_said(curline);
-    ss2voice_say(curline, 0);                    /* 온에어 = 음성도 이 순간 */
+    if(chosen.vkn[0]) ss2voice_say_parts(0, chosen.vkn, chosen.vks, 0);   /* 이어붙이기 */
+    else              ss2voice_say(curline, 0);  /* 온에어 = 음성도 이 순간 */
     /* 공방 중에는 넓게 벌린다. 말할 기회가 드물어야 아무 말이나 안 하게 된다.
        결과 계열(승패 화면·한마디 더·전적)은 한 박자 더. */
     q_next = cm_f + ((cur_ev==EV_WINSCR||cur_ev==EV_LOSESCR||cur_ev==EV_WINTALK||
