@@ -28,8 +28,11 @@ static int      vc_n;
 static struct { unsigned h; short *pcm; int len; unsigned used; } cache[VC_CACHE];
 static unsigned cache_tick;
 
-static short *cur_pcm; static int cur_len, cur_pos, cur_prio;
-static short *own_pcm;   /* 이어붙인 결합 버퍼 — 캐시 밖, 우리가 free */
+/* 2채널 — [0] 심판(prio>=1) / [1] 해설(prio 0). 한쪽이 도는 동안 다른 쪽이
+   기다리다 밀리는 손실을 없앤다(제보: 「딜레이되는 시점에 2번째 채널로 이어서」).
+   같은 채널 안에서는 예전처럼 새 말이 옛 말을 교체한다(자막과 동기). */
+static struct { short *pcm; int len, pos, prio; short *own; } vch[2];
+#define VCH_OF(prio) ((prio) >= 1 ? 0 : 1)
 
 static unsigned fnv1a(const char *s){
   unsigned h = 2166136261u;
@@ -77,7 +80,10 @@ void ss2voice_init(const char *dir){
   char path[600]; FILE *f; char line[600];
   const char *env = getenv("SS2VOICE_DIR");
   if(env && *env) dir = env;                     /* 하네스 우선 */
-  vc_ready = 0; vc_n = 0; cur_pcm = 0;
+  vc_ready = 0; vc_n = 0;
+  { int c; for(c = 0; c < 2; c++){
+      if(vch[c].own) free(vch[c].own);
+      vch[c].pcm = vch[c].own = 0; vch[c].len = vch[c].pos = 0; } }
   if(pak_f){ fclose(pak_f); pak_f = 0; pak_n = 0; }
   if(!dir || !*dir) return;
   snprintf(vc_dir, sizeof vc_dir, "%s", dir);
@@ -104,8 +110,12 @@ void ss2voice_init(const char *dir){
 
 int ss2voice_on(void){ return vc_ready; }
 
-int ss2voice_playing_prio(void){   /* 지금 도는 클립의 우선순위. 무재생 = -1 */
-  return (vc_ready && cur_pcm && cur_pos < cur_len) ? cur_prio : -1;
+int ss2voice_playing_prio(void){   /* 지금 도는 클립의 최고 우선순위. 무재생 = -1 */
+  int c, best = -1;
+  if(!vc_ready) return -1;
+  for(c = 0; c < 2; c++)
+    if(vch[c].pcm && vch[c].pos < vch[c].len && vch[c].prio > best) best = vch[c].prio;
+  return best;
 }
 int ss2voice_count(void){ return pak_f ? pak_n : vc_n; }
 
@@ -163,7 +173,8 @@ got:
            free(out); out = r; n = m; }
   }
   for(i = 1; i < VC_CACHE; i++) if(!cache[i].pcm || cache[i].used < cache[worst].used) worst = i;
-  if(cache[worst].pcm && cache[worst].pcm != cur_pcm) free(cache[worst].pcm);
+  if(cache[worst].pcm && cache[worst].pcm != vch[0].pcm
+                      && cache[worst].pcm != vch[1].pcm) free(cache[worst].pcm);
   cache[worst].h = h; cache[worst].pcm = out; cache[worst].len = n; cache[worst].used = ++cache_tick;
   *len = n;
   return out;
@@ -184,10 +195,11 @@ static int has_clip(unsigned h){
   return 0;
 }
 static void vc_start(unsigned h, int prio){
+  int c = VCH_OF(prio);
   int len = 0; short *pcm = clip_get(h, &len);
-  if(!pcm){ cur_pcm = 0; return; }
-  if(own_pcm){ free(own_pcm); own_pcm = 0; }       /* 물러나는 결합 버퍼 정리 */
-  cur_pcm = pcm; cur_len = len; cur_pos = 0; cur_prio = prio;
+  if(!pcm){ vch[c].pcm = 0; return; }
+  if(vch[c].own){ free(vch[c].own); vch[c].own = 0; }   /* 물러나는 결합 버퍼 정리 */
+  vch[c].pcm = pcm; vch[c].len = len; vch[c].pos = 0; vch[c].prio = prio;
 }
 /* 이어붙이기 — 기술명처럼 조합이 폭발하는 대사는 [이름][꼬리] 조각을 즉석에서
    한 버퍼로 이어 재생한다 (제보: 「어색해도 그 방식으로」). 조각은 합성키
@@ -196,7 +208,7 @@ void ss2voice_say_parts(const char *k1, const char *k2, const char *k3, int prio
   const char *ks[3]; short *pc[3]; int ln[3], nk = 0, i, tot = 0, gap = 1764, off = 0;
   short *buf;
   if(!vc_ready) return;
-  if(cur_pcm && cur_pos < cur_len && cur_prio > prio) return;   /* 구령 보호 — say 와 동일 */
+  /* 채널이 갈려 구령 보호가 필요 없다 — 해설은 해설 채널에서만 교체된다 */
   if(k1 && *k1) ks[nk++] = k1;
   if(k2 && *k2) ks[nk++] = k2;
   if(k3 && *k3) ks[nk++] = k3;
@@ -212,9 +224,10 @@ void ss2voice_say_parts(const char *k1, const char *k2, const char *k3, int prio
     memcpy(buf + off, pc[i], (size_t)ln[i] * 2); off += ln[i];
     if(i < nk - 1){ memset(buf + off, 0, (size_t)gap * 2); off += gap; }
   }
-  if(own_pcm) free(own_pcm);
-  own_pcm = buf;
-  cur_pcm = buf; cur_len = off; cur_pos = 0; cur_prio = prio;
+  { int c = VCH_OF(prio);
+    if(vch[c].own) free(vch[c].own);
+    vch[c].own = buf;
+    vch[c].pcm = buf; vch[c].len = off; vch[c].pos = 0; vch[c].prio = prio; }
 }
 
 void ss2voice_say(const char *text, int prio){
@@ -223,23 +236,30 @@ void ss2voice_say(const char *text, int prio){
   h = fnv1a(text);
   if(!has_clip(h)) return;                       /* 팩에 없는 대사 = 자막만 */
   /* 적시 시작 — 자막이 갈리는 그 순간 음성도 갈린다. 줄 세우지 않는다.
-     (제보 확정: 「끊겨도 적시에 시작해야 한다」 — 대기열은 타이밍을 미뤄서 폐기)
-     단 하나의 예외: 구령(심판, prio 1)이 도는 동안 잡담(prio 0)은 포기한다 —
-     「2회전!」「승부!」가 라운드 시작 잡담에 즉시 끊겨 안 들린다는 제보. */
-  if(cur_pcm && cur_pos < cur_len && cur_prio > prio) return;
+     구령과 해설은 채널이 갈려 서로 못 끊는다 — 겹치면 믹서가 해설을 낮춘다. */
   vc_start(h, prio);
 }
 
 void ss2voice_mix(int16_t *buf, int frames){
-  int i;
-  if(!vc_ready || !cur_pcm || cur_pos >= cur_len) return;
+  int i, a0, a1;
+  if(!vc_ready) return;
+  a0 = vch[0].pcm && vch[0].pos < vch[0].len;
+  a1 = vch[1].pcm && vch[1].pos < vch[1].len;
+  if(!a0 && !a1) return;
   for(i = 0; i < frames; i++){
     int l = buf[i * 2], r = buf[i * 2 + 1], v = 0;
-    if(cur_pos < cur_len) v = cur_pcm[cur_pos++];
+    if(vch[0].pcm && vch[0].pos < vch[0].len) v += vch[0].pcm[vch[0].pos++];
+    if(vch[1].pcm && vch[1].pos < vch[1].len){
+      int v1 = vch[1].pcm[vch[1].pos++];
+      /* 구령과 겹치는 동안만 해설 70% — 폰 스피커에서 둘 다 들리게 */
+      if(vch[0].pcm && vch[0].pos < vch[0].len) v1 = v1 * 7 / 10;
+      v += v1;
+    }
     l += v; r += v;   /* 게임 소리는 그대로, 음성만 가산 (제보: 「볼륨 줄이지 말기」) */
     if(l > 32767) l = 32767; if(l < -32768) l = -32768;
     if(r > 32767) r = 32767; if(r < -32768) r = -32768;
     buf[i * 2] = (int16_t)l; buf[i * 2 + 1] = (int16_t)r;
   }
-  if(cur_pos >= cur_len) cur_pcm = 0;
+  if(vch[0].pcm && vch[0].pos >= vch[0].len) vch[0].pcm = 0;
+  if(vch[1].pcm && vch[1].pos >= vch[1].len) vch[1].pcm = 0;
 }
