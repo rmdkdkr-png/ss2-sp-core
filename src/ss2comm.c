@@ -271,6 +271,7 @@ static unsigned rng = 2463534242u;
 #define GAP_RESULT  150   /* 결과 계열은 한 박자 더 */
 typedef struct { char text[160]; short ev; short spk; unsigned at;
                  char vkn[56], vks[112];   /* 이어붙이기 조각키(합성) — 비면 통짜/자막 */
+                 char vkh[96];             /* 머리 조각키 — 이름이 문중인 줄에만 */
                } ss2q;
 static ss2q q[QN];
 static int q_head, q_cnt;
@@ -672,10 +673,24 @@ static int splice_suffix(const char *rest, const char *who, char *out, size_t ca
   }
   return snprintf(out, cap, "\x01S%d\x01%s%s", cm_spk, josa ? josa : "", tail) < (int)cap;
 }
+/* 이름 조각키 — 톤 클립 우선, 없으면 무톤(v2 팩). 팩에 있는 키만 성공. */
+static int spk_name_key(char *out, size_t cap, int ev, const char *who){
+  if(!who || !*who) return 0;
+  snprintf(out, cap, "\x01N%d/%d\x01%s", cm_spk, ev_tone(ev), who);
+  if(ss2voice_has_text(out)) return 1;
+  snprintf(out, cap, "\x01N%d\x01%s", cm_spk, who);
+  return ss2voice_has_text(out) ? 1 : 0;
+}
+/* 머리 조각키 — 이름이 문중인 줄의 앞부분. 꼬리와 같은 S 계열 키(같은 말=같은 소리). */
+static int head_key(char *out, size_t cap, const char *fmt, const char *ph){
+  size_t hl = (size_t)(ph - fmt);
+  if(hl == 0 || hl > 60) return 0;
+  return snprintf(out, cap, "\x01S%d\x01%.*s", cm_spk, (int)hl, fmt) < (int)cap;
+}
 static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   const char *cand[EVMAXV]; int n=0, i, key;
   const char *fmt;
-  char spl_kn[56] = "", spl_ks[112] = ""; int spl_on = 0;
+  char spl_kn[56] = "", spl_ks[112] = "", spl_kh[96] = ""; int spl_on = 0;
   if(!cm_on || ev<0 || ev>=EV_N) return 0;
   key = EVCD[ev].key;
   if(cd[key] > cm_f) return 0;
@@ -712,24 +727,36 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
           if(ss2voice_has_text(tb)) vd[nvd++] = cand[i];
         }
         if(nvd || pass) break;
-        /* 통짜 전멸 — 기술명 계열이면 [이름][꼬리] 조각으로 말할 수 있는 후보를 찾는다.
-           (제보: 「어색해도 이어붙여라」) 조각도 없으면 자매 이벤트로. */
-        if(ev_voicefb(ev) >= 0 && who && *who){
+        /* 통짜 전멸 — [머리][이름][꼬리] 조각 결합을 시도한다(제보: 「어색해도
+           이어붙여라」 + 「문중도 지원해라」). 이름이 문중이면 머리 조각까지 세 조각.
+           %m(내 캐릭터)도 같은 길 — 이름 조각을 재사용한다. 그래도 없으면 자매 이벤트. */
+        if(who && *who){
           const char *sp2[EVMAXV]; int ns2 = 0;
-          snprintf(spl_kn, sizeof spl_kn, "\x01N%d/%d\x01%s", cm_spk, ev_tone(ev), who);
-          if(!ss2voice_has_text(spl_kn))               /* 톤 클립이 없으면 무톤(현행 팩) */
-            snprintf(spl_kn, sizeof spl_kn, "\x01N%d\x01%s", cm_spk, who);
-          if(ss2voice_has_text(spl_kn)){
-            for(i = 0; i < n; i++){
-              const char *ph = strstr(cand[i], "%s");
-              if(!ph || cand[i][0] != '%') continue;      /* 이름이 문두인 꼴만 */
-              if(!splice_suffix(ph + 2, who, tb, sizeof tb)) continue;
-              if(ss2voice_has_text(tb)) sp2[ns2++] = cand[i];
+          char kn_s[56] = "", kn_m[56] = "";
+          const char *me2 = my_name();
+          spk_name_key(kn_s, sizeof kn_s, ev, who);
+          spk_name_key(kn_m, sizeof kn_m, ev, me2);
+          for(i = 0; i < n; i++){
+            const char *ph = strstr(cand[i], "%s"), *nm2 = who, *kn2 = kn_s;
+            char hk[96];
+            if(!ph){ ph = strstr(cand[i], "%m"); nm2 = me2; kn2 = kn_m; }
+            if(!ph || !kn2[0]) continue;
+            if(strchr(cand[i], '%') != ph) continue;      /* %d 혼합 줄은 조각 불가 */
+            if(ph != cand[i]){                            /* 문중 — 머리 조각 필요 */
+              if(!head_key(hk, sizeof hk, cand[i], ph)) continue;
+              if(!ss2voice_has_text(hk)) continue;
             }
+            if(!splice_suffix(ph + 2, nm2, tb, sizeof tb)) continue;
+            if(ss2voice_has_text(tb)) sp2[ns2++] = cand[i];
           }
           if(ns2){
+            const char *ph, *nm2;
             fmt = sp2[rnd()%(unsigned)ns2];
-            splice_suffix(strstr(fmt,"%s") + 2, who, spl_ks, sizeof spl_ks);
+            ph = strstr(fmt, "%s"); nm2 = who;
+            if(!ph){ ph = strstr(fmt, "%m"); nm2 = me2; }
+            snprintf(spl_kn, sizeof spl_kn, "%s", nm2 == who ? kn_s : kn_m);
+            if(ph != fmt) head_key(spl_kh, sizeof spl_kh, fmt, ph);
+            splice_suffix(ph + 2, nm2, spl_ks, sizeof spl_ks);
             spl_on = 1;
             goto picked;
           }
@@ -795,9 +822,10 @@ picked:
     q[slot].at = cm_f;
     q[slot].ev = (short)ev;
     q[slot].spk = (short)cm_spk;
-    q[slot].vkn[0] = q[slot].vks[0] = 0;
+    q[slot].vkn[0] = q[slot].vks[0] = q[slot].vkh[0] = 0;
     if(spl_on){ snprintf(q[slot].vkn,sizeof q[slot].vkn,"%s",spl_kn);
-                snprintf(q[slot].vks,sizeof q[slot].vks,"%s",spl_ks); }
+                snprintf(q[slot].vks,sizeof q[slot].vks,"%s",spl_ks);
+                snprintf(q[slot].vkh,sizeof q[slot].vkh,"%s",spl_kh); }
   }
   if(fmt) fmt_mark_match(fmt);      /* 실린 문형만 — 이번 판에는 같은 꼴을 다시 뽑지 않는다 */
   cd[key] = cm_f + EVCD[ev].cool;   /* 실린 다음에만 — 큐에서 밀려난 말이 쿨다운까지 먹으면 재시도가 막힌다 */
@@ -943,7 +971,7 @@ void ss2comm_notify(const char *text){
   snprintf(q[slot].text,sizeof(q[slot].text),"%s",text);
   q[slot].ev = -1;                       /* 표정·강조 없음 */
   q[slot].spk = (short)cm_spk;
-  q[slot].vkn[0] = q[slot].vks[0] = 0;
+  q[slot].vkn[0] = q[slot].vks[0] = q[slot].vkh[0] = 0;
   q[slot].at  = cm_f;                    /* 안내는 최근-중복 검사를 거치지 않는다 */
 }
 
@@ -1622,7 +1650,8 @@ out:
     if(dbgseq()) fprintf(stderr, "[AIR f=%u ev=%d spk=%d] %s\n", cm_f, cur_ev, cur_spk, curline);
     if(cur_ev == EV_REL || cur_ev == EV_LORE || cur_ev == EV_STORYCHAT || cur_ev == EV_QUOTE)
       lore_at = cm_f;               /* 서사(회상 모드) 발화 시각 — 호격 완충용 */
-    if(chosen.vkn[0]) ss2voice_say_parts(0, chosen.vkn, chosen.vks, 0);   /* 이어붙이기 */
+    if(chosen.vkn[0]) ss2voice_say_parts(chosen.vkh[0] ? chosen.vkh : 0,
+                                          chosen.vkn, chosen.vks, 0);      /* 이어붙이기 */
     else              ss2voice_say(curline, 0);  /* 온에어 = 음성도 이 순간 */
     /* 공방 중에는 넓게 벌린다. 말할 기회가 드물어야 아무 말이나 안 하게 된다.
        결과 계열(승패 화면·한마디 더·전적)은 한 박자 더. */
