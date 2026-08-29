@@ -91,6 +91,7 @@ static int svc_in_battle(void);   /* 아래에 정의 — cur_char 가 먼저 �
 /* ── 런타임 슬롯 — 오버레이 메뉴에서 바꿀 수 있게 표를 복사해 둔다 ── */
 static signed char svc_slot_run[SVC_CHAR_COUNT][7];
 static int svc_slot_ready;
+static int svc_slots_dirty;        /* 편집됨 — 프론트가 파일로 흘려보낸다 */
 static void svc_slots_ensure(void)
 {
    int c, k;
@@ -161,8 +162,64 @@ void svcsp_set_slot(int c, int k, int mv)
    if (c < 0 || c >= SVC_CHAR_COUNT || k < 0 || k >= 7) return;
    if (mv >= svc_chars[c].n || mv < 0) mv = -1;
    svc_slot_run[c][k] = (signed char)mv;
+   svc_slots_dirty = 1;
 }
-void svcsp_reset_slots(void) { svc_slot_ready = 0; svc_slots_ensure(); }
+void svcsp_reset_slots(void) { svc_slot_ready = 0; svc_slots_ensure(); svc_slots_dirty = 1; }
+
+/* ── 러시 마무리 픽커 — 대표 초필(flags 32)과, 게이지 불발 시 낼 필살기 ── */
+static const svc_move *svc_pick_super(int chr)
+{
+   int i;
+   if (chr < 0 || chr >= SVC_CHAR_COUNT || !svc_chars[chr].mv) return 0;
+   for (i = 0; i < svc_chars[chr].n; i++)
+   {
+      const svc_move *m = &svc_chars[chr].mv[i];
+      if ((m->flags & 32) && !(m->flags & (4 | 8))) return m;
+   }
+   return 0;
+}
+static const svc_move *svc_pick_fallback(int chr)
+{
+   int mi, i;
+   if (chr < 0 || chr >= SVC_CHAR_COUNT || !svc_chars[chr].mv) return 0;
+   svc_slots_ensure();
+   mi = svc_slot_run[chr][SL_N];
+   if (mi >= 0 && mi < svc_chars[chr].n && !(svc_chars[chr].mv[mi].flags & (4 | 32)))
+      return &svc_chars[chr].mv[mi];
+   for (i = 0; i < svc_chars[chr].n; i++)
+   {
+      const svc_move *m = &svc_chars[chr].mv[i];
+      if (!(m->flags & (1 | 4 | 8 | 32))) return m;
+   }
+   return 0;
+}
+
+/* ── 슬롯 배치 내보내기/들여오기 — <system>/ngpsvc_slots.bin (파일 IO 는 프론트) ── */
+int svcsp_slots_dirty(void) { int d = svc_slots_dirty; svc_slots_dirty = 0; return d; }
+int svcsp_slots_export(unsigned char *buf, int cap)
+{
+   int c, k, n = 0;
+   if (!buf || cap < 4 + SVC_CHAR_COUNT * 7) return 0;
+   svc_slots_ensure();
+   buf[n++] = 'N'; buf[n++] = 'S'; buf[n++] = 'V'; buf[n++] = '1';
+   for (c = 0; c < SVC_CHAR_COUNT; c++)
+      for (k = 0; k < 7; k++) buf[n++] = (unsigned char)svc_slot_run[c][k];
+   return n;
+}
+void svcsp_slots_import(const unsigned char *buf, int len)
+{
+   int c, k, n = 4;
+   if (!buf || len < 4 + SVC_CHAR_COUNT * 7) return;
+   if (buf[0] != 'N' || buf[1] != 'S' || buf[2] != 'V' || buf[3] != '1') return;
+   svc_slots_ensure();
+   for (c = 0; c < SVC_CHAR_COUNT; c++)
+      for (k = 0; k < 7; k++)
+      {
+         signed char v = (signed char)buf[n++];
+         if (v < -1 || v >= (signed char)svc_chars[c].n) v = -1;   /* 표가 줄었을 때 방어 */
+         svc_slot_run[c][k] = v;
+      }
+}
 
 /* 기술표가 없는 캐릭터 → 그냥 펀치 */
 static const unsigned char mo_basic[] = {0x00};
@@ -198,6 +255,16 @@ static uint8_t   bank_at_compile;  /* 컴파일 시점 뱅크 — 재시도 성�
 static uint8_t   prev_pad_btn;
 static int       attack_was_kick;  /* 마지막 자기 노멀이 킥(B)이었나 — 쿄 dud 는 킥 캔슬만 */
 static uint8_t   prev_hp2v;
+/* ── 모던 자동 콤보 상태 (러시/어시스트/기술키 판별) ── */
+static uint16_t  prev_ret;         /* 물리 비트 이전 프레임 — 기본기 엣지 검출 */
+static uint32_t  bas_last_at;      /* 마지막 기본기 눌림 (연타 창 판정) */
+static int       rush_n;           /* 연타 단계. 0=없음 */
+static uint8_t   rush_prev_btn;    /* 직전 연타 계열 (0x10 P / 0x20 K) — 교대용 */
+static uint32_t  rush_hit0;        /* 러시 시작 시점의 hit_at — 이후 히트 여부 */
+static const svc_move *rush_fb;    /* 마무리 초필 불발 시 갈아탈 필살기 */
+static uint8_t   rush_conv;        /* 3타째 치환 버튼 (물리 버튼 잡는 동안 유지) */
+static uint16_t  rush_conv_src;    /* 치환 대상 물리 비트 */
+
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
 int  svcsp_disp_seq;       /* 새 발동마다 +1. 프론트가 엣지 검출 */
 const char *svcsp_last_name = 0;
@@ -431,6 +498,42 @@ static const svc_move *svc_chain_next(void)
    return &chain_tbl[idx];
 }
 
+/* R(기술키) 한 번 = 기술 발동 하나. 상황별 경로(즉시/보류/캔슬)는 실측 규칙 그대로 */
+static void svc_fire_sp(uint8_t held)
+{
+   const svc_move *m = svc_resolve(held);
+   if (svc_dbg()) fprintf(stderr, "[svcsp] edge chr=%d air=%d anim=%d -> %s\n",
+                          CPUExRAM[OFF_CHAR1], svc_airborne(), CPUExRAM[OFF_ANIM],
+                          m ? m->name : "(null)");
+   if (m)
+   {
+      int need_ground = !(m->flags & 4);
+      /* 킬캔슬: 자기 평타 직후(24f)의 기술키는 회복을 기다리지 않는다 —
+         캔슬창이 히트 후 0~8f 라서 기다리면 놓친다 (실측 §19).
+         히트가 아니면 게임이 그냥 먹는다 (가드·헛침 캔슬 불가 실측). */
+      /* 노멀 캔슬: 창 안의 모션+버튼은 게임이 캐릭터별 지정기로 낸다 (실측 §24·§25).
+         류·켄 등은 지정기가 공격기라 손맛 그대로 콤보 — 캔슬을 살린다.
+         쿄는 지정기가 누에잡기(비공격 카운터, dud) — 창을 회피해 깨끗하게 낸다. */
+      int chr2 = CPUExRAM[OFF_CHAR1];
+      int dud  = ((chr2 < SVC_CHAR_COUNT) ? svc_chars[chr2].cancel_dud : 0)
+                 && attack_was_kick;   /* 쿄 실측: 킥 캔슬=누에(꽝), 펀치 캔슬=물기(콤보) */
+      int own_atk = (frames - my_attack_at) <= (dud ? 40 : 24) && !svc_airborne();
+      int kill_cancel = own_atk && !dud && (frames - hit_at) <= 14;
+      if (need_ground && svc_airborne())
+         { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
+      else if (kill_cancel)
+         { svc_compile_cancel = 1; svc_compile(m); svc_compile_cancel = 0; }
+      else if (own_atk && dud)
+         { pending = m; pending_left = PENDING_FRAMES; pending_kind = 4; }
+      else if (own_atk)
+         { pending = m; pending_left = 30; pending_kind = 1; }   /* 선입력 — 히트 순간 발사 */
+      else if (!svc_actable())
+         { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
+      else
+         svc_compile(m);
+   }
+}
+
 uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본 비트 */
 {
    uint16_t trig, edge;
@@ -439,10 +542,11 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       if (off < 0) { const char *e = getenv("SVCSP_OFF"); off = (e && *e == '1'); }
       if (off) { prev_trig = 0; return pad; }
    }
-   if (!svc_engine_now())
-   {  /* 기본 레이아웃: A·B=약 고정, Y=강펀치(C) X=강킥(D), L·R=A+B.
+   {  /* 기본 레이아웃(양 모드 공통): A·B=약 고정, Y=강펀치(C) X=강킥(D), L=A+B.
          약 고정 = 물리 버튼을 6f(실측 약 상한)에서 강제 해제 — 꾹 눌러도 강이 안 된다.
-         메뉴에서는 그냥 짧은 A 누름과 같아 부작용 없음. */
+         메뉴에서는 그냥 짧은 A 누름과 같아 부작용 없음.
+         모던(엔진 켬)에서도 기본기 여섯 자리는 그대로다 — 「기본기는 콤보,
+         기술키는 SP」(제보). 기술키는 R 하나만 넘어간다. 끔이면 R 도 A+B. */
       static int hold_p, hold_k, wk_p, wk_k;
       wk_p = (ret & (1u << 0)) ? wk_p + 1 : 0;            /* 물리 B버튼 = NGP A */
       wk_k = (ret & (1u << 8)) ? wk_k + 1 : 0;            /* 물리 A버튼 = NGP B */
@@ -453,16 +557,65 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       if (ret & (1u << 9)) hold_k = SVC_HOLD_STRONG; else if (hold_k) hold_k--;
       if (hold_p) pad |= 0x10;                            /* NGP A 지속 = 강펀치 */
       if (hold_k) pad |= 0x20;                            /* NGP B 지속 = 강킥 */
-      if (ret & ((1u << 10) | (1u << 11))) pad |= 0x30;   /* L·R = A+B(백플립) */
+      if (ret & (1u << 10)) pad |= 0x30;                  /* L = A+B(백플립) */
+   }
+   if (!svc_engine_now())
+   {
+      if (ret & (1u << 11)) pad |= 0x30;                  /* 엔진 끔: R 도 A+B */
       prev_trig = 0;
       return pad;
    }
-   trig = (ret & ((1u << 9) | (1u << 11))) ? 1u : 0u;     /* 엔진 켬: X·R = 트리거 */
-   if (ret & ((1u << 1) | (1u << 10))) pad |= 0x30;       /*          Y·L = A+B  */
+   trig = (ret & (1u << 11)) ? 1u : 0u;                   /* 엔진 켬: R = 기술키 */
    edge = (uint16_t)(trig & ~prev_trig);
    prev_trig = trig;
    frames++;
    if (chain_left > 0) chain_left--;
+   /* ── 모던 자동 콤보: 「기본기는 콤보, 기술키는 SP」 ──────────────
+      · 러시: 기본기 연타(24f 창). 3타째는 P/K 를 교대로 갈아 끼우고,
+        히트가 확인된 4타째를 마무리(대표 초필)로 바꾼다. 초필이 게이지
+        부족으로 불발이면 재시도 훅이 필살기로 갈아탄다.
+      · 어시스트: R(기술키)을 잡은 채 기본기 연타 — 같은 사다리.
+        R 엣지 쪽은 3f 판별 대기(sp_defer)로 N슬롯 오발을 막는다. */
+   if (rush_conv)
+   {  /* 3타째 교대 치환 — 물리 버튼을 잡고 있는 동안 유지 */
+      if ((ret & rush_conv_src) && !svc_active())
+         pad = (uint8_t)((pad & (uint8_t)~0x30) | rush_conv);
+      else rush_conv = 0;
+   }
+   if (svc_in_battle() && !svc_active())
+   {
+      uint16_t bnew  = (uint16_t)(ret & (uint16_t)~prev_ret);
+      uint16_t bmask = (uint16_t)((1u << 0) | (1u << 8) | (1u << 1) | (1u << 9));
+      if (bnew & bmask)
+      {
+         int in_window = (frames - bas_last_at) <= 24;
+         if (in_window || (trig & 1u)) rush_n++; else rush_n = 1;
+         bas_last_at = frames;
+         if (rush_n == 1) rush_hit0 = hit_at;
+         if (rush_n >= 4 && hit_at > rush_hit0 && (frames - hit_at) <= 40)
+         {
+            const svc_move *sup = svc_pick_super(CPUExRAM[OFF_CHAR1]);
+            if (sup)
+            {
+               rush_fb = svc_pick_fallback(CPUExRAM[OFF_CHAR1]);
+               pending = 0; pending_kind = 0;
+               svc_compile(sup);
+            }
+            rush_n = 0; rush_conv = 0;
+         }
+         else if (rush_n == 3)
+         {
+            uint8_t want = (rush_prev_btn == 0x10) ? 0x20 : 0x10;
+            rush_conv = want; rush_conv_src = (uint16_t)(bnew & bmask);
+            pad = (uint8_t)((pad & (uint8_t)~0x30) | want);
+            rush_prev_btn = want;
+         }
+         else
+            rush_prev_btn = (uint8_t)((pad & 0x10) ? 0x10 : ((pad & 0x20) ? 0x20 : rush_prev_btn));
+      }
+      else if (rush_n && (frames - bas_last_at) > 40) { rush_n = 0; rush_conv = 0; }
+   }
+   prev_ret = ret;
    /* 유저가 직접 누른 평타 감지 — 매크로 중이 아닐 때의 A/B 새 눌림 */
    if (!svc_active())
    {
@@ -499,10 +652,16 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       {
          uint8_t bnow = CPUExRAM[OFF_BANK];
          if (retry_mv && bnow != bank_at_compile && bnow != 255)
-            retry_mv = 0;                      /* 뱅크 변화 = 진짜 발동 */
+            { retry_mv = 0; rush_fb = 0; }     /* 뱅크 변화 = 진짜 발동 */
          if (retry_mv && !svc_active() && !pending && frames - macro_end_at >= 12)
          {
-            if (retry_cnt >= 3) retry_mv = 0;
+            if (rush_fb)
+            {  /* 러시 마무리 초필 불발(뱅크 그대로) = 게이지 부족 — 필살기로 갈아탄다 */
+               const svc_move *fb = rush_fb;
+               rush_fb = 0;
+               svc_compile(fb);
+            }
+            else if (retry_cnt >= 3) retry_mv = 0;
             else if (!retry_at) retry_at = frames + 2;
             else if (frames >= retry_at)
             {
@@ -575,39 +734,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       }
    }
    if ((edge & 1u) && svc_in_battle())
-   {
-      const svc_move *m = svc_resolve(pad);
-      if (svc_dbg()) fprintf(stderr, "[svcsp] edge chr=%d air=%d anim=%d -> %s\n",
-                             CPUExRAM[OFF_CHAR1], svc_airborne(), CPUExRAM[OFF_ANIM],
-                             m ? m->name : "(null)");
-      if (m)
-      {
-         int need_ground = !(m->flags & 4);
-         /* 킬캔슬: 자기 평타 직후(24f)의 X 는 회복을 기다리지 않는다 —
-            캔슬창이 히트 후 0~8f 라서 기다리면 놓친다 (실측 §19).
-            히트가 아니면 게임이 그냥 먹는다 (가드·헛침 캔슬 불가 실측). */
-         /* 노멀 캔슬: 창 안의 모션+버튼은 게임이 캐릭터별 지정기로 낸다 (실측 §24·§25).
-            류·켄 등은 지정기가 공격기라 손맛 그대로 콤보 — 캔슬을 살린다.
-            쿄는 지정기가 누에잡기(비공격 카운터, dud) — 창을 회피해 깨끗하게 낸다. */
-         int chr2 = CPUExRAM[OFF_CHAR1];
-         int dud  = ((chr2 < SVC_CHAR_COUNT) ? svc_chars[chr2].cancel_dud : 0)
-                    && attack_was_kick;   /* 쿄 실측: 킥 캔슬=누에(꽝), 펀치 캔슬=물기(콤보) */
-         int own_atk = (frames - my_attack_at) <= (dud ? 40 : 24) && !svc_airborne();
-         int kill_cancel = own_atk && !dud && (frames - hit_at) <= 14;
-         if (need_ground && svc_airborne())
-            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
-         else if (kill_cancel)
-            { svc_compile_cancel = 1; svc_compile(m); svc_compile_cancel = 0; }
-         else if (own_atk && dud)
-            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 4; }
-         else if (own_atk)
-            { pending = m; pending_left = 30; pending_kind = 1; }   /* 선입력 — 히트 순간 발사 */
-         else if (!svc_actable())
-            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
-         else
-            svc_compile(m);
-      }
-   }
+      svc_fire_sp(pad);   /* 즉시 발동 — 미루면 방향-모션 인접이 깨져 판정이 달라진다(실측) */
 
    if (svc_active()) return svc_step_out(trig & 1u);   /* 트리거 프레임에도 첫 스텝이 나간다 */
    return pad;
@@ -625,4 +752,6 @@ void svcsp_reset(void)
    hold_elapsed = 0; svcsp_last_strong = 0;
    chain_mv = 0; chain_tbl = 0; chain_left = 0;
    svcsp_last_ok = -1; svcsp_last_name = 0;
+   prev_ret = 0; bas_last_at = 0; rush_n = 0; rush_prev_btn = 0; rush_hit0 = 0;
+   rush_fb = 0; rush_conv = 0; rush_conv_src = 0;
 }

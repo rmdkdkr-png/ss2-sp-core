@@ -139,6 +139,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "above",
    },
    {
+      "ngp_svcsp_engine",
+      "SvC 모던 조작 (원버튼 필살기)",
+      NULL,
+      "SNK vs. Capcom MotM 전용. 켜면 R가 기술키가 됩니다 - 방향+R = 배치된 필살기(짧게 약, 길게 강), 기본기 연타 = 자동 콤보(히트 확인 후 초필 마무리, 게이지 부족이면 필살기). B/A 약, Y/X 강, L=A+B는 그대로. 배치는 게임 중 아래+옵션 메뉴에서. 끄면 R=A+B.",
+      NULL,
+      "system",
+      {
+         { "enabled",  "켬" },
+         { "disabled", "끔" },
+         { NULL, NULL },
+      },
+      "enabled"
+   },
+   {
       "ngp_svcsp_toast",
       "SvC 기술명 표시",
       NULL,

@@ -43,17 +43,10 @@ int  svcsp_get_slot(int c, int k);
 void svcsp_set_slot(int c, int k, int mv);
 void svcsp_reset_slots(void);
 
-/* 오버레이 메뉴용 (ss2sp 의 style API 대응) */
-int  svcsp_char_count(void);
-const char *svcsp_char_name(int c);
-int  svcsp_cur_char(void);            /* 전투 중이 아니면 -1 */
-int  svcsp_move_count(int c);
-const char *svcsp_move_name(int c, int i);
-int  svcsp_move_flags(int c, int i);
-int  svcsp_move_notation(int c, int i, char *out, int cap);
-int  svcsp_get_slot(int c, int k);
-void svcsp_set_slot(int c, int k, int mv);
-void svcsp_reset_slots(void);
+/* 슬롯 배치 저장/복원 — 파일 IO 는 프론트 몫 (<system>/ngpsvc_slots.bin) */
+int  svcsp_slots_dirty(void);                              /* 읽으면 플래그가 접힌다 */
+int  svcsp_slots_export(unsigned char *buf, int cap);
+void svcsp_slots_import(const unsigned char *buf, int len);
 
 #ifdef __cplusplus
 }

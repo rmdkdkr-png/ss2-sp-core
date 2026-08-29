@@ -334,7 +334,7 @@ void StateAction(StateMem *sm, int load, int data_only)
 static bool update_video = false;
 
 #define MEDNAFEN_CORE_NAME_MODULE "ngp"
-#define MEDNAFEN_CORE_NAME "Beetle NeoPop (SS2 One-button)"
+#define MEDNAFEN_CORE_NAME "Beetle NeoPop (SVC Modern)"
 /* TODO/FIXME - only thing missing is flash/RTC refactors */
 /* 실행기(HTML)와 같은 버전을 달아 둔다 — 레트로아크 코어 정보에서 확인할 수 있다 */
 #define SS2SP_VERSION "0.6"
@@ -391,6 +391,9 @@ extern void    svcsp_set_engine(int on);
 extern int     svcsp_engine_on(void);
 extern void    svcsp_reset(void);
 extern void    svcsp_set_rom(const void *rom, unsigned len);
+extern int     svcsp_slots_dirty(void);
+extern int     svcsp_slots_export(unsigned char *buf, int cap);
+extern void    svcsp_slots_import(const unsigned char *buf, int len);
 extern int     svcsp_rom_ok(void);
 extern char    svcsp_last_disp[64];
 extern int     svcsp_disp_seq;
@@ -447,6 +450,8 @@ static void ss2_set_geometry(void)
    if (environ_cb)
       environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geom);
 }
+
+static char svc_slots_file[560];   /* <system>/ngpsvc_slots.bin — 비면 저장 안 함 */
 
 static void ss2_overlay_apply(void)
 {
@@ -519,6 +524,11 @@ static void check_variables(void)
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       ss2comm_set_duo(!strcmp(var.value, "enabled"));
+
+   var.key   = "ngp_svcsp_engine";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      svcsp_set_engine(strcmp(var.value, "disabled") != 0);
 
    var.key   = "ngp_svcsp_toast";
    var.value = NULL;
@@ -692,6 +702,23 @@ bool retro_load_game(const struct retro_game_info *info)
       snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
       ss2comm_toast(ver_toast, 180);
    }
+   if (svcsp_rom_ok())
+   {  /* SvC 슬롯 배치 복원 — <시스템>/ngpsvc_slots.bin (없으면 기본 배치) */
+      const char *sd2 = NULL;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sd2) && sd2 && *sd2)
+      {
+         FILE *sf2;
+         unsigned char sbuf[160];
+         snprintf(svc_slots_file, sizeof svc_slots_file, "%s/ngpsvc_slots.bin", sd2);
+         sf2 = fopen(svc_slots_file, "rb");
+         if (sf2)
+         {
+            size_t sn = fread(sbuf, 1, sizeof sbuf, sf2);
+            fclose(sf2);
+            svcsp_slots_import(sbuf, (int)sn);
+         }
+      }
+   }
    ss2comm_reset();
 
    surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
@@ -806,6 +833,17 @@ static void update_input(void)
          }
          ss2_ov_prev = ret;
          ss2_overlay_apply();
+         if (svc_slots_file[0] && svcsp_slots_dirty())
+         {  /* 슬롯 편집 즉시 저장 — 130B, 오버레이 열린 동안만 닿는 경로 */
+            FILE *sf3 = fopen(svc_slots_file, "wb");
+            if (sf3)
+            {
+               unsigned char sbuf[160];
+               int sn = svcsp_slots_export(sbuf, (int)sizeof sbuf);
+               if (sn > 0) fwrite(sbuf, 1, (size_t)sn, sf3);
+               fclose(sf3);
+            }
+         }
          input_buf = 0;
          return;
       }

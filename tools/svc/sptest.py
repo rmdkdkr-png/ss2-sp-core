@@ -23,15 +23,15 @@ def probe(tag, prelines):
     return sc
 
 CASES=[
- ('중립X',   ['1 X'],            lambda b,a,hp: 22 in b),
- ('아래X',   ['2 D','1 D X'],    lambda b,a,hp: 23 in b),
- ('뒤X',     ['2 L','1 L X'],    lambda b,a,hp: any(x==0 for x in b) and min(a)<=12),
- ('앞X',     ['2 R','1 R X'],    lambda b,a,hp: min(a)<=12),
- ('공중X',   ['2 U','14 -','1 X'], lambda b,a,hp: 4 in b),
- ('경직X',   ['3 B','4 -','1 X'], lambda b,a,hp: 22 in b),
- ('걷기40X', ['40 R','1 X'],     lambda b,a,hp: 22 in b),
- ('걷기100X',['100 R','1 X'],    lambda b,a,hp: 22 in b),
- ('밀착뒤X', ['170 R','2 L','1 L X'], lambda b,a,hp: hp>0 or min(a)<=12),  # 밀착 팔청 → 피해 기대
+ ('중립X',   ['1 R1'],            lambda b,a,hp: 22 in b),
+ ('아래X',   ['2 D','1 D R1'],    lambda b,a,hp: 23 in b),
+ ('뒤X',     ['2 L','1 L R1'],    lambda b,a,hp: any(x==0 for x in b) and min(a)<=12),
+ ('앞X',     ['2 R','1 R R1'],    lambda b,a,hp: min(a)<=12),
+ ('공중X',   ['2 U','14 -','1 R1'], lambda b,a,hp: 4 in b),
+ ('경직X',   ['3 B','4 -','1 R1'], lambda b,a,hp: 22 in b),
+ ('걷기40X', ['40 R','1 R1'],     lambda b,a,hp: 22 in b),
+ ('걷기100X',['100 R','1 R1'],    lambda b,a,hp: 22 in b),
+ ('밀착뒤X', ['170 R','2 L','1 L R1'], lambda b,a,hp: hp>0 or min(a)<=12),  # 밀착 팔청 → 피해 기대
 ]
 sc=['1 -']
 for tag,pre,_ in CASES: sc+=probe(tag,pre)
@@ -52,7 +52,7 @@ for tag,_,chk in CASES:
 
 # 선택화면 (프레임 정렬)
 sc=['1 -','!load svc_psel.st','60 -','!q_ref',
-    '!load svc_psel.st','30 -','1 X','29 -','!q_x']
+    '!load svc_psel.st','30 -','1 R1','29 -','!q_x']
 run(sc,'spS.csv')
 a=ppm('q_ref'); b=ppm('q_x')
 diff=sum(1 for i in range(0,len(a[2]),3) if a[2][i:i+3]!=b[2][i:i+3])
@@ -63,7 +63,7 @@ print('%-10s 바뀐 픽셀 %d %s'%('선택화면X',diff,'PASS' if ok else 'FAIL'
 ss2st=os.path.expanduser('~/ss2/saves/ss2/tk_base.st')
 if os.path.exists(ss2st):
     import shutil; shutil.copy(ss2st,'ss2_tk.st')
-    sc=['1 -','!load ss2_tk.st','30 -','1 X','60 -','!ss2ok']
+    sc=['1 -','!load ss2_tk.st','30 -','1 R1','60 -','!ss2ok']
     run(sc,'spT.csv',rom=SS2)
     ok=os.path.exists('svc_ss2ok.ram'); npass+=ok
     print('%-10s %s'%('SS2불간섭','PASS' if ok else 'FAIL'))
@@ -72,7 +72,7 @@ print('== %d 통과 =='%npass)
 # 홀드 = 강 (독물기) — X 를 잡고 있으면 버튼 스텝이 늘어난다
 SAMH=(6,14,22,30,40,52,66,82,100)
 sc=['1 -']
-for tag,pre in (('h탭',['1 X']),('h꾹',['40 X'])):
+for tag,pre in (('h탭',['1 R1']),('h꾹',['40 R1'])):
     sc+=['!load svc_c0_0.st','30 -']+pre
     prev=0
     for s2 in SAMH: sc+=['%d -'%(s2-prev),'!w %s@%d'%(tag,s2)]; prev=s2

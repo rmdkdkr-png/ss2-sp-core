@@ -35,6 +35,7 @@ def flags_of(mv, charge):
     if mv.get('air'):  f |= 4
     if mv.get('status') in ('가이드만','불일치'): f |= 8   # 미검증
     if charge: f |= 16
+    if mv.get('kind') == 'super': f |= 32   # 초필 — 러시 마무리 픽커용
     return f
 
 def emit(chars):
@@ -47,7 +48,7 @@ def emit(chars):
     w('typedef struct { const char *name; const unsigned char *motion; unsigned char len;')
     w('                 unsigned char btn; unsigned char flags;')
     w('                 signed char next, next_hold; } svc_move;   /* 파생(렛카) — 표 인덱스, -1 없음 */')
-    w('/* flags: 1=근접 4=공중 8=미검증 16=모으기(첫 방향을 길게) */')
+    w('/* flags: 1=근접 4=공중 8=미검증 16=모으기(첫 방향을 길게) 32=초필 */')
     w('')
     tables = {}
     for ch in chars:

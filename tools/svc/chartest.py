@@ -30,9 +30,9 @@ sc=['1 -']
 for cid in range(18):
     st=st_of.get(cid)
     if not st or not os.path.exists(st): continue
-    sc+=probe('c%d_N'%cid,   st, ['1 X'])
-    sc+=probe('c%d_D'%cid,   st, ['2 D','1 D X'])
-    sc+=probe('c%d_AIR'%cid, st, ['2 U','14 -','1 X'])
+    sc+=probe('c%d_N'%cid,   st, ['1 R1'])
+    sc+=probe('c%d_D'%cid,   st, ['2 D','1 D R1'])
+    sc+=probe('c%d_AIR'%cid, st, ['2 U','14 -','1 R1'])
 run(sc,'ct.csv')
 
 rows={}
