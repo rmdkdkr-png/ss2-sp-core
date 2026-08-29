@@ -17,7 +17,7 @@ cc -O1 -DSS2SP_RAM_POINTER -DSS2COMM_TEST -I. -o /tmp/ss2_test_flow test_flow.c 
 cc -O1 -DSS2SP_RAM_POINTER -DSS2COMM_TEST -I. -o /tmp/ss2_round2 test_round2.c ss2comm.c
 OUT=$(SS2COMM_DBGSEQ=1 /tmp/ss2_round2 2>&1 >/dev/null)
 echo "$OUT" | grep -q "2회전!" || { echo "round2 콜 실패"; exit 1; }
-echo "$OUT" | grep -q "한 판!"  || { echo "한 판! 훅 실패"; exit 1; }
+echo "$OUT" | grep -qE "한 판!|완승!" || { echo "한 판!/완승! 훅 실패"; exit 1; }   # 무피격 승은 완승! 이 정답
 echo "==== round2 call PASS ===="
 
 # ── 플레이어 축 회귀: 뒤지는 판 응원(%m 치환·리터럴 유출 금지) ──

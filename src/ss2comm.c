@@ -285,6 +285,9 @@ static char     ref_text[160];
 static int ref_enabled = 1;       /* 심판 온오프 — 끄면 쿠로코가 아예 안 선다 (설정에서 토글) */
 static unsigned char ref_flash;   /* 반짝이 — 「승부!」「한 판!」 같은 구령은 게임 연출처럼 깜빡인다 */
 static int ref_ttl;               /* 이 줄의 수명 — 구령은 짧게 */
+static unsigned char intro_pending;    /* 인트로 진입 때 상대 미탑재 — 인트로 동안 재확인한다
+                                          (제보: 첫 대전(스토리)에서 쿠로코 구령·자막이 통째로 실종) */
+static unsigned char intro_nw;         /* 그 인트로가 새 매치였나 — 지각 대진 콜용 */
 static unsigned char intro_beat1_done; /* 「자아 — 정정당당히!」 (연출 카운터 시동값 15) */
 static unsigned char intro_beat2_done; /* 「N회전!」 (시동값 33 — 2·3회전 인트로는 이것만 온다) */
 static unsigned char intro_shout_done; /* 이 인트로에서 「승부!」를 이미 외쳤나 (징글 + F1 이중 발성 방지) */
@@ -460,7 +463,7 @@ void ss2comm_reset(void){
   st_shk[0]=st_shk[1]=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
-  ref_next=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
+  ref_next=0; intro_pending=0; intro_nw=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
   curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk;
@@ -1121,6 +1124,23 @@ const char *ss2comm_frame(void){
   /* ── 심판 안무 — 게임 마커로 구동한다. 시계 예약은 연타로 인트로가 줄면 어긋난다
         (세이브스테이트 실측: 새 매치 인트로 518 → 연타 시 214 프레임) ── */
   if(mode==MD_MENU && scr>=8 && hp1>0 && hp2>0){
+    /* 첫 대전 인트로는 진입 순간 상대 개체가 아직 없을 수 있다(스토리 프롤로그 직후).
+       그대로 굳히면 구령 3연이 통째로 죽는다 — 개체가 실리는 즉시 승격한다.
+       beat1(+354f)보다 훨씬 먼저 실리므로 구령은 제때 나간다. */
+    if(intro_pending){
+      int opl = opp_read();
+      if(opl >= 0){
+        int mel = blk_char(rd(OFF_BLK1));
+        intro_pending = 0;
+        intro_refok = (opl != 14);
+        if(intro_nw && intro_refok && mel >= 0){   /* 지각 대진 콜 */
+          char t[96];
+          snprintf(t, sizeof t, "%s 대 %s!", CHARFULL[mel], CHARFULL[opl]);
+          ref_say3(t, 1, 0, 180);
+        }
+        if(dbgseq()) fprintf(stderr, "[INTRO+ f=%u] late op=%d refok=%d\n", cm_f, opl, intro_refok);
+      }
+    }
     /* (hp 조건: 무한 대전의 승리 포즈도 F0/scr8 로 온다 — 체력이 둘 다 서 있어야 인트로다)
        인트로 글 연출 카운터의 **시동값**이 어느 글인지 알려준다(0→값 에지):
        15 = 「자아」, 30 = 「정정당당히」(자아와 한 박자로 묶는다), 33 = 「N회전」.
@@ -1155,7 +1175,13 @@ const char *ss2comm_frame(void){
   }
   if(plate2_at && cm_f >= plate2_at){
     plate2_at = 0;
-    if(ref_stands()) ref_say3("훌륭하오!", 1, 0, 120);
+    if(ref_stands()){
+      /* 후속 멘트 4종 회전 — 매번 「훌륭하오!」는 단조롭다(제보) */
+      static const char *const PL2[4] = { "훌륭하오!", "장한 승부였소!", "명승부로다!", "다음 상대가 기다리오!" };
+      static unsigned char pl2_i;
+      pl2_i = (unsigned char)((pl2_i + 1u + (rnd() % 3u)) & 3u);   /* 직전 것 회피 */
+      ref_say3(PL2[pl2_i], 1, 0, 120);
+    }
   }
 
   /* ── 라운드 인트로 진입: mode F0 + scr 8 — 선수들이 서고 「자아…승부!」가 도는 구간 ──
@@ -1177,6 +1203,8 @@ const char *ss2comm_frame(void){
                 || (op2 >= 0 && op2 != st_oppChar)
                 || st_myR >= 2 || st_opR >= 2);   /* 결판난 매치는 재개일 수 없다 */
     intro_refok  = (op2 >= 0 && op2 != 14);
+    intro_pending = (unsigned char)(op2 < 0);   /* 상대 늦탑재 — 아래 승격 루프가 이어받는다 */
+    intro_nw      = (unsigned char)(nw ? 1 : 0);
     intro_roundN = nw ? 1 : st_roundN + 1;
     if(dbgseq()) fprintf(stderr, "[INTRO f=%u] me2=%d op2=%d nw=%d refok=%d introN=%d rN=%d lastF=%u oppChar=%d\n",
                          cm_f, me2, op2, nw, intro_refok, intro_roundN, st_roundN, st_lastFightF, st_oppChar);
@@ -1428,7 +1456,9 @@ const char *ss2comm_frame(void){
     if(hit2 && !hit1 && st_roundN==1 && hp2>0 && !pend_name && (p_hp2-hp2)>=4) (((rnd()&1) && say_weap(st_oppChar)) || emit(EV_FIRSTBLOOD));
   }
 
-  if(hit1 && hit2 && hp1<=0 && hp2<=0 && !st_ko){ st_ko=1; st_fHp1=st_fHp2=0; pend_take(0); flow_round('d'); emit(EV_DKO); }
+  if(hit1 && hit2 && hp1<=0 && hp2<=0 && !st_ko){ st_ko=1; st_fHp1=st_fHp2=0; pend_take(0); flow_round('d');
+    if(ref_stands()) ref_shout("무승부!");
+    emit(EV_DKO); }
   else{
     if(hit2 && hp2<=0 && !st_ko){
       int sup; const char *nm = pend_take(&sup);
@@ -1438,8 +1468,9 @@ const char *ss2comm_frame(void){
       st_myR++; flow_round('w');
       /* 체력바가 벌어지는 그 순간 — 심판이 먼저 찍는다. 매치가 갈렸으면 「승부 결정!」 */
       if(ref_stands()){
-        ref_shout(st_myR>=2 ? "승부 결정!" : "한 판!");
-        plate_at = cm_f + 180; plate_char = st_myChar;   /* 본명은 3초 뒤 — 팻말(KO+390)엔 「훌륭하오!」 */
+        /* 게임이 PERFECT 를 띄우는 판은 심판도 「완승!」 (제보: 「완승 이런 것도 있거든」) */
+        ref_shout(hp1>=128 ? "완승!" : st_myR>=2 ? "승부 결정!" : "한 판!");
+        plate_at = cm_f + 180; plate_char = st_myChar;   /* 본명은 3초 뒤 — 팻말(KO+390)엔 후속 멘트 */
       }
       { int mw = (st_myR>=2); int said;
         if(mw && !st_settled){ sess_streak++; sess_wins++; sess_games++; st_settled=1; }
@@ -1481,7 +1512,7 @@ const char *ss2comm_frame(void){
         if(surv>0 && surv_live) emitn(EV_SURVEND, surv);
         st_opR++; flow_round('l');
         if(ref_stands()){
-          ref_shout(st_opR>=2 ? "승부 결정!" : "한 판!");
+          ref_shout(hp2>=128 ? "완승!" : st_opR>=2 ? "승부 결정!" : "한 판!");
           plate_at = cm_f + 180; plate_char = st_oppChar;
         }
         if(st_opR>=2 && !st_settled){ sess_streak=0; sess_lastLossChar=st_oppChar; sess_games++; st_settled=1; }
@@ -1661,7 +1692,7 @@ out:
                       cur_ev==EV_LOSETALK||cur_ev==EV_RECORD) ? GAP_RESULT
                     : (ev_prio(cur_ev) >= 3) ? GAP_OTHER      /* 관계·안내는 드무니 막지 않는다 */
                     : (mode==MD_BATTLE && !st_ko) ? GAP_BATTLE : GAP_OTHER);
-      if(ss2voice_on()) g += g/2;   /* 더빙판은 말이 실시간을 먹는다 — 빈도 1.5배 완화(제보) */
+      /* 팩 1.5배 완화는 폐지 — 3채널·체이닝이 실시간 겹침을 흡수한다(제보: 「빈도 늘어도 되겠다」) */
       q_next = cm_f + g; }
     return curline;
   }

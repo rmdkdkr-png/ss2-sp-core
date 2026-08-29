@@ -29,6 +29,7 @@ static uint8_t ram[16384];
 #define OPPID  0x17DF
 
 static int h1, h2;   /* 시뮬 체력 */
+static int late_op = -1;   /* 늦탑재 시나리오 — 인트로 초입 6프레임 뒤 상대 개체가 실린다 */
 static void w16(int off, int v){ ram[off] = v & 0xFF; ram[off+1] = (v>>8) & 0xFF; }
 static void stepf(int mode, int scr)
 {
@@ -45,6 +46,7 @@ static void intro(int first)
     int i;
     stepf(0xF0, 8);
     for(i = 0; i < 5; i++) stepf(0xF0, 8);
+    if(late_op >= 0){ ram[OPPID] = (uint8_t)late_op; late_op = -1; }
     if(first){ seqdown(15); seqdown(30); }
     seqdown(33);
     ram[JING] = 2; stepf(0xF0, 8); ram[JING] = 0;
@@ -92,10 +94,11 @@ int main(int argc, char **argv)
         ram[BLK1] = (uint8_t)(8 * (me * 2));
         ram[BLK2] = (uint8_t)(8 * (op * 2));   /* 실기: 인트로에도 상대 블록이 실려 있다 */
         ram[OPPID] = (uint8_t)op;
+        if(m % 10 == 0){ ram[OPPID] = 0xFF; late_op = op; }   /* 첫 대전형 늦탑재 재현 */
         h1 = 128; h2 = 128;
         fprintf(stderr, "[MATCH %d spk=%s me=%d op=%d flavor=%d]\n",
                 m, ss2comm_speaker_name(spk), me, op, flavor);
-        for(i = 0; i < 30; i++) stepf(0xF0, 0);
+        for(i = 0; i < (m % 10 == 0 ? 700 : 30); i++) stepf(0xF0, 0);   /* 늦탑재 매치는 실기처럼 공백을 길게 — 이어받기 창(600f) 밖 */
         intro(1);
         /* 인트로 초입은 실기처럼 0xFF, 전투에 들어가면 개체가 실린다(OPPID 복원) —
            내내 0xFF 로 두면 전투 진입부가 매 라운드를 새 매치로 오판한다(검수 실증) */
