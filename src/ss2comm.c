@@ -178,6 +178,7 @@ static int st_lastStage = -1;
 static unsigned st_roundStart, st_offAt, st_actAt, st_menuAt, st_selChatAt, st_hitAt;
 static int st_selChatN;
 static int st_myChar = -1, st_oppChar = -1;
+static unsigned lore_at;         /* 마지막 서사(관계·야사) 온에어 프레임 */
 static unsigned st_lastFightF;   /* 진짜 격투(F1+scr8)를 마지막으로 본 프레임 — 새 매치 판정용.
                                     문구·스토리 화면도 mode 는 F1 이라 st_offAt 으로는
                                     「방금 전투에서 나옴」과 「스토리 읽는 중」을 못 가른다 */
@@ -550,7 +551,9 @@ static const char *const JOSA[][2] = {
    fill_name(조사 보정)을 재사용한다. 내 캐릭터를 모르면 「그대」로 부른다. */
 static void fill_name(char *out, size_t cap, const char *fmt, const char *who);
 static const char *my_name(void){
-  return (st_myChar >= 0 && st_myChar < 15) ? CHARNAME[st_myChar] : "그대";
+  if(st_myChar < 0 || st_myChar >= 15) return "그대";
+  if(ROST2SPK[st_myChar] == cm_spk) return "그대";   /* 해설자 본인 캐릭터 — 제 이름을 3인칭으로 부르면 우습다 */
+  return CHARNAME[st_myChar];
 }
 static int fill_me(char *out, size_t cap, const char *fmt){
   char tmp[176]; const char *ph = strstr(fmt, "%m");
@@ -656,12 +659,14 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
   for(i=0;i<EVMAXV;i++) if(LINES[cm_spk][ev][i]) cand[n++]=LINES[cm_spk][ev][i];
   if(!n && (ev == EV_PCHEER || ev == EV_PJUDGE)){
     /* v3 골격 임시 대사 — 표(gen_lines)에 정식 편입 전까지의 공용분. 시대극 문어체. */
-    static const char *const PCH[3] = {
-      "%m! 물러서지 마라!", "%m, 아직이다 — 검을 다시 세워라!", "버텨라 %m! 승부는 지금부터다!" };
-    static const char *const PJD[3] = {
-      "%m의 검이 제대로 섰군!", "좋다 %m, 그 기세로다!", "방금 그 한 수… %m, 훌륭하다!" };
+    static const char *const PCH[6] = {
+      "%m! 물러서지 마라!", "%m, 아직이다 — 검을 다시 세워라!", "버텨라 %m! 승부는 지금부터다!",
+      "%m, 검을 믿어라!", "아직이다, %m! 판은 살아 있다!", "%m! 그 정도에 꺾일 검이냐!" };
+    static const char *const PJD[6] = {
+      "%m의 검이 제대로 섰군!", "좋다 %m, 그 기세로다!", "방금 그 한 수… %m, 훌륭하다!",
+      "%m! 지금 그 수, 실로 매섭다!", "보았는가! %m의 검이다!", "%m, 오늘 검이 울고 있구나!" };
     const char *const *tb = (ev == EV_PCHEER) ? PCH : PJD;
-    for(i = 0; i < 3; i++) cand[n++] = tb[i];
+    for(i = 0; i < 6; i++) cand[n++] = tb[i];
   }
   if(!n) return 0;
   /* %s 채움용 상대 이름 — 음성 우대 검사에도 필요해서 미리 정한다.
@@ -1555,6 +1560,10 @@ out:
          그 순간이 지나 없느니만 못하다 (제보). 스테일 창이 알아서 걷어간다. */
       if(st_ko && (ev0==EV_REL || ev0==EV_LORE || ev0==EV_START
                    || ev0==EV_VSQ || ev0==EV_STORYCHAT)) continue;
+      /* 서사 직후의 호격 완충 — 관객에게 회상을 들려주다 한 문장 만에 선수에게
+         소리치면 어색하다(제보: 「그 미묘한 부분」). 8초는 저온끼리 잇는다. */
+      if(lore_at && cm_f - lore_at < 560 &&
+         (ev0==EV_PCHEER || ev0==EV_PJUDGE || ev0==EV_START)) continue;
       if(best < 0){ best = c; continue; }
       { int pc = ev_prio(ev0), pb = ev_prio(q[best].ev);
         if(pc > pb || (pc == pb && q[c].at > q[best].at)) best = c; }
@@ -1567,6 +1576,8 @@ out:
     cur_ev = chosen.ev; cur_spk = chosen.spk; cur_f = cm_f; last_line_f = cm_f;
     mark_said(curline);
     if(dbgseq()) fprintf(stderr, "[AIR f=%u ev=%d spk=%d] %s\n", cm_f, cur_ev, cur_spk, curline);
+    if(cur_ev == EV_REL || cur_ev == EV_LORE || cur_ev == EV_STORYCHAT || cur_ev == EV_QUOTE)
+      lore_at = cm_f;               /* 서사(회상 모드) 발화 시각 — 호격 완충용 */
     if(chosen.vkn[0]) ss2voice_say_parts(0, chosen.vkn, chosen.vks, 0);   /* 이어붙이기 */
     else              ss2voice_say(curline, 0);  /* 온에어 = 음성도 이 순간 */
     /* 공방 중에는 넓게 벌린다. 말할 기회가 드물어야 아무 말이나 안 하게 된다.
