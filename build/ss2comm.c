@@ -60,11 +60,13 @@ __attribute__((weak)) void ss2voice_say(const char *t, int p){ (void)t; (void)p;
 __attribute__((weak)) int  ss2voice_on(void){ return 0; }
 __attribute__((weak)) int  ss2voice_has_text(const char *t){ (void)t; return 0; }
 __attribute__((weak)) void ss2voice_say_parts(const char *a, const char *b, const char *c, int p){ (void)a;(void)b;(void)c;(void)p; }
+__attribute__((weak)) int  ss2voice_playing_prio(void){ return -1; }
 #else
 void ss2voice_say(const char *t, int p);
 int  ss2voice_on(void);
 int  ss2voice_has_text(const char *t);
 void ss2voice_say_parts(const char *a, const char *b, const char *c, int p);
+int  ss2voice_playing_prio(void);
 #endif
 
 #include "ss2comm_lines.h"
@@ -663,7 +665,7 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
     { const char *const *cs = nvd ? vd : cand; int cn = nvd ? nvd : n;
       const char *nm[EVMAXV]; int nn=0;
       for(i=0;i<cn;i++) if(strstr(cs[i],"%s")) nm[nn++]=cs[i];
-      if(nn && nn<cn && (rnd()%10u)<8) fmt = nm[rnd()%(unsigned)nn];
+      if(nn && nn<cn && (rnd()%10u)<4) fmt = nm[rnd()%(unsigned)nn];
       else                             fmt = cs[rnd()%(unsigned)cn];
     }
   }
@@ -1457,7 +1459,9 @@ out:
      KO·총평을 통째로 굶긴다. 몰린 구호는 ref_text 가 덮어써서 **최신 것 하나로 합쳐진다** —
      세 판이 순식간에 지나가면 「셋째 판」만 나오는 게 맞다. */
 
-  if(q_cnt && cm_f >= q_next){
+  /* 구령(심판)이 도는 동안은 해설을 안 뽑는다 — 구령은 1초 안짝이라 스테일 창을
+     넘기지 않고, 끝나는 프레임에 해설이 바로 이어진다. 「구호가 먼저, 해설이 그 뒤」. */
+  if(q_cnt && cm_f >= q_next && ss2voice_playing_prio() < 1){
     /* 등급이 높은 것부터. 같은 등급이면 **제일 최근 것**을 낸다.
        예전에는 먼저 들어온 쪽을 냈다. 그러면 말할 차례가 왔을 때 이미 지난 얘기를
        하게 되고, 그걸 막으려고 「몇 초 지나면 버린다」는 창을 캐릭터별로 매번
@@ -1480,10 +1484,12 @@ out:
     else              ss2voice_say(curline, 0);  /* 온에어 = 음성도 이 순간 */
     /* 공방 중에는 넓게 벌린다. 말할 기회가 드물어야 아무 말이나 안 하게 된다.
        결과 계열(승패 화면·한마디 더·전적)은 한 박자 더. */
-    q_next = cm_f + ((cur_ev==EV_WINSCR||cur_ev==EV_LOSESCR||cur_ev==EV_WINTALK||
+    { unsigned g = ((cur_ev==EV_WINSCR||cur_ev==EV_LOSESCR||cur_ev==EV_WINTALK||
                       cur_ev==EV_LOSETALK||cur_ev==EV_RECORD) ? GAP_RESULT
                     : (ev_prio(cur_ev) >= 3) ? GAP_OTHER      /* 관계·안내는 드무니 막지 않는다 */
                     : (mode==MD_BATTLE && !st_ko) ? GAP_BATTLE : GAP_OTHER);
+      if(ss2voice_on()) g += g/2;   /* 더빙판은 말이 실시간을 먹는다 — 빈도 1.5배 완화(제보) */
+      q_next = cm_f + g; }
     return curline;
   }
   return 0;

@@ -103,6 +103,10 @@ void ss2voice_init(const char *dir){
 }
 
 int ss2voice_on(void){ return vc_ready; }
+
+int ss2voice_playing_prio(void){   /* 지금 도는 클립의 우선순위. 무재생 = -1 */
+  return (vc_ready && cur_pcm && cur_pos < cur_len) ? cur_prio : -1;
+}
 int ss2voice_count(void){ return pak_f ? pak_n : vc_n; }
 
 static int has_clip(unsigned h);           /* 아래 정의 — 전방 선언 */
@@ -192,6 +196,7 @@ void ss2voice_say_parts(const char *k1, const char *k2, const char *k3, int prio
   const char *ks[3]; short *pc[3]; int ln[3], nk = 0, i, tot = 0, gap = 1764, off = 0;
   short *buf;
   if(!vc_ready) return;
+  if(cur_pcm && cur_pos < cur_len && cur_prio > prio) return;   /* 구령 보호 — say 와 동일 */
   if(k1 && *k1) ks[nk++] = k1;
   if(k2 && *k2) ks[nk++] = k2;
   if(k3 && *k3) ks[nk++] = k3;
@@ -218,8 +223,10 @@ void ss2voice_say(const char *text, int prio){
   h = fnv1a(text);
   if(!has_clip(h)) return;                       /* 팩에 없는 대사 = 자막만 */
   /* 적시 시작 — 자막이 갈리는 그 순간 음성도 갈린다. 줄 세우지 않는다.
-     (제보 확정: 「끊겨도 적시에 시작해야 한다」 — 대기열은 타이밍을 미뤄서 폐기) */
-  (void)prio;
+     (제보 확정: 「끊겨도 적시에 시작해야 한다」 — 대기열은 타이밍을 미뤄서 폐기)
+     단 하나의 예외: 구령(심판, prio 1)이 도는 동안 잡담(prio 0)은 포기한다 —
+     「2회전!」「승부!」가 라운드 시작 잡담에 즉시 끊겨 안 들린다는 제보. */
+  if(cur_pcm && cur_pos < cur_len && cur_prio > prio) return;
   vc_start(h, prio);
 }
 
@@ -229,7 +236,7 @@ void ss2voice_mix(int16_t *buf, int frames){
   for(i = 0; i < frames; i++){
     int l = buf[i * 2], r = buf[i * 2 + 1], v = 0;
     if(cur_pos < cur_len) v = cur_pcm[cur_pos++];
-    l = (l * 7) / 16 + v;   r = (r * 7) / 16 + v;   /* 덕킹 0.44 + 음성 가산 */
+    l += v; r += v;   /* 게임 소리는 그대로, 음성만 가산 (제보: 「볼륨 줄이지 말기」) */
     if(l > 32767) l = 32767; if(l < -32768) l = -32768;
     if(r > 32767) r = 32767; if(r < -32768) r = -32768;
     buf[i * 2] = (int16_t)l; buf[i * 2 + 1] = (int16_t)r;

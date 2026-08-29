@@ -12,5 +12,6 @@ void ss2voice_mix(int16_t *buf, int frames);      /* 44.1kHz 스테레오 s16 �
 int  ss2voice_on(void);
 int  ss2voice_count(void);
 int  ss2voice_has_text(const char *text);
+int  ss2voice_playing_prio(void);
 
 #endif
