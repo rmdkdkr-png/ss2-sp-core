@@ -61,6 +61,7 @@ static int svc_tail_frames(void){ static int v=-1; if(v<0){const char*e=getenv("
    원버튼 모션 엔진은 기본 꺼짐: 순정 ABLE(アバレ) 모드가 그 역할을 대신한다(§29). */
 #define SVC_HOLD_STRONG 12
 static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴에서만 켠다 */
+static int svc_native_basics;                   /* 앱 모드 — 기본기는 순정 통과(탭 약/홀드 강) */
 static int svc_engine_now(void)
 {
    if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
@@ -542,6 +543,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       if (off < 0) { const char *e = getenv("SVCSP_OFF"); off = (e && *e == '1'); }
       if (off) { prev_trig = 0; return pad; }
    }
+   if (!svc_native_basics)
    {  /* 기본 레이아웃(양 모드 공통): A·B=약 고정, Y=강펀치(C) X=강킥(D), L=A+B.
          약 고정 = 물리 버튼을 6f(실측 약 상한)에서 강제 해제 — 꾹 눌러도 강이 안 된다.
          메뉴에서는 그냥 짧은 A 누름과 같아 부작용 없음.
@@ -561,7 +563,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
    }
    if (!svc_engine_now())
    {
-      if (ret & (1u << 11)) pad |= 0x30;                  /* 엔진 끔: R 도 A+B */
+      if (!svc_native_basics && (ret & (1u << 11))) pad |= 0x30;   /* 엔진 끔: R 도 A+B */
       prev_trig = 0;
       return pad;
    }
@@ -738,6 +740,22 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
 
    if (svc_active()) return svc_step_out(trig & 1u);   /* 트리거 프레임에도 첫 스텝이 나간다 */
    return pad;
+}
+
+/* ── 앱(NGP.emu) 어댑터 — 레트로패드가 없는 프론트용 ────────────────
+   기본기 A/B 는 순정 그대로(탭=약/홀드=강 — 강 전용 버튼이 없는 프론트),
+   기술키는 trig bit0 하나(앱의 SP 키). 러시/어시스트/초필 폴백은 그대로 돈다. */
+uint8_t svcsp_frame_app(uint8_t pad, uint16_t trig)
+{
+   uint16_t ret = 0;
+   uint8_t out;
+   if (pad & 0x10) ret |= (1u << 0);    /* NGP A(펀치) → 약P 엣지 자리 */
+   if (pad & 0x20) ret |= (1u << 8);    /* NGP B(킥)  → 약K 엣지 자리 */
+   if (trig & 1u)  ret |= (1u << 11);   /* SP 키 → 기술키 */
+   svc_native_basics = 1;
+   out = svcsp_frame(pad, ret);
+   svc_native_basics = 0;
+   return out;
 }
 
 void svcsp_reset(void)
