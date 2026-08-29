@@ -12,3 +12,10 @@ python3 check_glyph.py . || exit 1
 
 cc -O1 -DSS2SP_RAM_POINTER -DSS2COMM_TEST -I. -o /tmp/ss2_test_flow test_flow.c ss2comm.c
 /tmp/ss2_test_flow
+
+# ── 2회전 콜 회귀: 인트로에서 상대 미인식이어도 이어받아 발화 ──
+cc -O1 -DSS2SP_RAM_POINTER -DSS2COMM_TEST -I. -o /tmp/ss2_round2 test_round2.c ss2comm.c
+OUT=$(SS2COMM_DBGSEQ=1 /tmp/ss2_round2 2>&1 >/dev/null)
+echo "$OUT" | grep -q "2회전!" || { echo "round2 콜 실패"; exit 1; }
+echo "$OUT" | grep -q "한 판!"  || { echo "한 판! 훅 실패"; exit 1; }
+echo "==== round2 call PASS ===="

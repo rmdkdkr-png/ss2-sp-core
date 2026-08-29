@@ -13,6 +13,7 @@
    기술명은 롬 버전 종속이라 코어/앱에서는 다루지 않는다 — 흥·썰 위주. */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>   /* SS2COMM_DBGSEQ 진단용 getenv */
 #include "ss2comm.h"
 
 #ifdef SS2SP_RAM_POINTER
@@ -483,8 +484,10 @@ static const char *const CHARFULL[15] = {
 /* 심판은 **해설 대기열을 쓰지 않는다.** 다른 목소리니 줄도 따로 선다.
    같은 칸을 쓰게 했더니 승부가 갈리는 순간 구호가 총평을 밀어냈다 —
    둘 다 나와야 하는 자리다. 구호가 먼저, 해설이 그 뒤. */
+static int dbgseq(void){ static int d=-1; if(d<0){const char*e=getenv("SS2COMM_DBGSEQ"); d=(e&&*e=='1');} return d; }
 static void ref_say3(const char *text, int force, int flash, int ttl){
   if(!cm_on || !ref_enabled || !text || !*text) return;
+  if(dbgseq()) fprintf(stderr, "[REF f=%u] %s\n", cm_f, text);
   if(!force && said_recently(text)) return;
   snprintf(ref_text, sizeof ref_text, "%s", text);
   ss2voice_say(text, 1);                         /* 심판은 해설을 끊는다 */
@@ -983,6 +986,16 @@ const char *ss2comm_frame(void){
     st_menuAt = cm_f; st_selChatAt = cm_f; st_selChatN = 0;
   }
 
+  if(dbgseq()){
+    static int ls=-1, lj=-1, lm=-1, lsc=-1;
+    int sq = rd(OFF_SEQTXT), jg = rd(OFF_JING);
+    if(sq!=ls || jg!=lj || mode!=lm || scr!=lsc){
+      fprintf(stderr, "[SEQ f=%u] mode=%02X scr=%d seq=%d jing=%d rN=%d myR=%d opR=%d lastF=%u b12=%d%d\n",
+              cm_f, mode, scr, sq, jg, st_roundN, st_myR, st_opR, st_lastFightF,
+              intro_beat1_done, intro_beat2_done);
+      ls=sq; lj=jg; lm=mode; lsc=scr;
+    }
+  }
   if(mode==MD_QUOTE  && p_mode!=MD_QUOTE)  emit(EV_QUOTE);
   if(mode==MD_ENDING && p_mode!=MD_ENDING) emit(EV_ENDING);
 
@@ -1031,12 +1044,23 @@ const char *ss2comm_frame(void){
      BLK 가 낡아서 「카즈키 대 카즈키」 같은 헛호명이 났다 — 호명은 이제 여기서만. */
   if(mode==MD_MENU && scr>=8 && hp1>0 && hp2>0 && !(p_mode==MD_MENU && p_scr>=8)){
     int me2 = blk_char(rd(OFF_BLK1)), op2 = opp_read();
+    /* 2·3회전 인트로(114f)는 짧아서 상대 개체가 아직 안 실릴 때가 있다 — 직전 라운드
+       값을 이어받는다 — 2·3회전 콜 실종의 진범: op2=-1 이면 ①refok=0 으로 구령이
+       통째로 죽고 ②op2 != st_oppChar 가 참이 되어 새 매치로 오판(1회전! 재발화)까지
+       겹쳤다. 이어받기는 「방금까지 싸우던 판」(10초 내)에만 — 셀렉트를 거친 새 매치는
+       lastFightF 가 오래돼 타지 않는다. */
+    { int fresh = st_lastFightF && cm_f - st_lastFightF <= 600;
+      if(op2 < 0 && fresh && st_oppChar >= 0) op2 = st_oppChar;
+      if(me2 < 0 && fresh && st_myChar  >= 0) me2 = st_myChar; }
     /* 새 매치 = 격투를 오래 안 봤거나 **상대가 바뀌었거나** — 무한 대전은 75프레임 만에
        다음 상대가 와서 시간만 보면 「라운드 재개」로 오판, 호명이 통째로 빠졌다 */
-    int nw  = (!st_lastFightF || cm_f - st_lastFightF > 180 || op2 != st_oppChar
+    int nw  = (!st_lastFightF || cm_f - st_lastFightF > 180
+                || (op2 >= 0 && op2 != st_oppChar)
                 || st_myR >= 2 || st_opR >= 2);   /* 결판난 매치는 재개일 수 없다 */
     intro_refok  = (op2 >= 0 && op2 != 14);
     intro_roundN = nw ? 1 : st_roundN + 1;
+    if(dbgseq()) fprintf(stderr, "[INTRO f=%u] me2=%d op2=%d nw=%d refok=%d introN=%d rN=%d lastF=%u oppChar=%d\n",
+                         cm_f, me2, op2, nw, intro_refok, intro_roundN, st_roundN, st_lastFightF, st_oppChar);
     plate_at = 0; plate2_at = 0;         /* 못 낸 팻말 호명이 남아 있으면 여기서 접는다 */
     if(nw && intro_refok && me2 >= 0){
       char t[96];
@@ -1467,13 +1491,20 @@ out:
        하게 되고, 그걸 막으려고 「몇 초 지나면 버린다」는 창을 캐릭터별로 매번
        손봐야 했다. 뽑을 때 최신을 고르면 애초에 상할 일이 없다 —
        상태는 매 프레임 보고 있고, 지켜야 하는 건 **말 사이 간격 하나**뿐이다. */
-    int i, best = q_head;
+    int i, best = -1;
     ss2q chosen;
-    for(i = 1; i < q_cnt; i++){
+    for(i = 0; i < q_cnt; i++){
       int c = (q_head + i) % QN;
-      int pc = ev_prio(q[c].ev), pb = ev_prio(q[best].ev);
-      if(pc > pb || (pc == pb && q[c].at > q[best].at)) best = c;
+      int ev0 = q[c].ev;
+      /* 판이 갈린 뒤 대전썰 금지 — 구령·총평 뒤에 뒤늦게 「대전 전 썰」이 풀리면
+         그 순간이 지나 없느니만 못하다 (제보). 스테일 창이 알아서 걷어간다. */
+      if(st_ko && (ev0==EV_REL || ev0==EV_LORE || ev0==EV_START
+                   || ev0==EV_VSQ || ev0==EV_STORYCHAT)) continue;
+      if(best < 0){ best = c; continue; }
+      { int pc = ev_prio(ev0), pb = ev_prio(q[best].ev);
+        if(pc > pb || (pc == pb && q[c].at > q[best].at)) best = c; }
     }
+    if(best < 0) return 0;
     chosen = q[best];
     if(best != q_head) q[best] = q[q_head];
     q_head = (q_head+1)%QN; q_cnt--;
