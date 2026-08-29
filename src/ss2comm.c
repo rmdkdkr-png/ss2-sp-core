@@ -2008,27 +2008,86 @@ static const char *ov_bgname(int i){
   return nm[i & 7];
 }
 void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
-  int bw, bh, bx, by, x, y, i, rows;
+  /* 옻칠 + 금장 — 게임의 SNK 금색 문법으로 맞춘 설정창.
+     160×152 캔버스라 굵은 픽셀 미학으로 간다: 타이틀 바, 선택 하이라이트 바,
+     좌측 금 커서, 목록이 길면 스크롤 창 + 우측 트랙 (예전엔 화면 밖으로 잘렸다). */
+  enum { TITLE_H = 16, FOOT_H = 13, ROW_H = 13 };
+  static const uint16_t C_FRAME = 0x8B00;   /* 청동 테 */
+  static const uint16_t C_TBAND = 0x39C1;   /* 타이틀 바 바탕(짙은 청동) */
+  static const uint16_t C_SELBG = 0x5201;   /* 선택 바 */
+  static const uint16_t C_TRACK = 0x2104;   /* 스크롤 트랙 */
+  static const uint16_t C_TXT   = 0xC618;   /* 비선택 은회색 */
+  static const uint16_t C_HINT  = 0x8C51;   /* 힌트 회갈색 */
+  int bw, bh, bx, by, x, y, i, rows, first, shown, maxr;
+  int ry0;                                  /* 목록 시작 y */
+  const char *title = 0, *foot = 0;
+  char tbuf[64];
   if(!ov_on || !ov_n || !fb) return;
   rows = ov_n;
 #ifdef SS2OV_SP
   rows = (ov_page == 2) ? sp_move_count(ov_spstyle) + 1
        : (ov_page == 1) ? ov_sp_rows() : ov_n + 1;
 #endif
-  bw = w - 12; bh = 17 + rows*13 + 4;
-  bx = 6; by = (h - bh) / 2; if(by < 0) by = 0;
+  maxr = (h - (TITLE_H + FOOT_H + 6)) / ROW_H;
+  if(maxr < 3) maxr = 3;
+  first = 0;
+  if(rows > maxr){
+    first = (int)ov_cur - maxr / 2;
+    if(first < 0) first = 0;
+    if(first > rows - maxr) first = rows - maxr;
+  }
+  shown = rows - first; if(shown > maxr) shown = maxr;
+
+  bw = w - 8; bx = 4;
+  bh = TITLE_H + shown * ROW_H + FOOT_H + 4;
+  by = (h - bh) / 2; if(by < 0) by = 0;
+  ry0 = by + TITLE_H + 2;
+
   for(y = 0; y < bh && by + y < h; y++)
     for(x = 0; x < bw; x++){
-      uint16_t *p = &fb[(by+y)*pitch_px + bx + x];
-      if(y==0 || y==bh-1 || x==0 || x==bw-1) *p = COL_GOLD;
-      else *p = (uint16_t)((*p >> 3) & 0x18E3);
+      uint16_t *p = &fb[(by + y) * pitch_px + bx + x];
+      int edge = (y == 0 || y == bh - 1 || x == 0 || x == bw - 1);
+      int corner = ((y == 0 || y == bh - 1) && (x == 0 || x == bw - 1));
+      if(corner) continue;                            /* 모서리 1px 컷 = 라운드 */
+      if(edge){ *p = C_FRAME; continue; }
+      if((y == 1 || y == bh - 2) && (x == 1 || x == bw - 2)) { *p = C_FRAME; continue; }
+      if(y < TITLE_H)            *p = C_TBAND;        /* 타이틀 바 */
+      else if(y == TITLE_H)      *p = C_FRAME;        /* 타이틀 밑줄 */
+      else if(y == bh - FOOT_H)  *p = C_FRAME;        /* 힌트 윗줄 */
+      else                       *p = (uint16_t)(((*p >> 2) & 0x39E7) + 0x0841); /* 옻칠 */
     }
+
 #ifdef SS2OV_SP
-  if(ov_page == 2){
-    char t[64], buf[96];
-    snprintf(t, sizeof t, "%s — 기술 고르기 (A 선택)", ov_slotname(ov_pickslot));
-    draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+3, 0, h, 99, COL_GOLD, 0);
-    for(i = 0; i < rows; i++){
+  if(ov_page == 2){ snprintf(tbuf, sizeof tbuf, "%s — 기술 고르기", ov_slotname(ov_pickslot)); title = tbuf;
+                    foot = "A 배정 · B 뒤로"; }
+  else if(ov_page == 1){ title = "SP 기술 배치"; foot = "A 선택 · B 뒤로"; }
+  else
+#endif
+  { title = "빠른 설정 v" SS2COMM_VERSION; foot = "←→ 값 · A 켬끔 · B 닫기"; }
+  draw_line11(fb, pitch_px, bx + 6, bx + bw - 4, title, title + strlen(title),
+              by + 2, 0, h, 99, COL_GOLD, 1);
+  draw_line11(fb, pitch_px, bx + 6, bx + bw - 4, foot, foot + strlen(foot),
+              by + bh - FOOT_H + 2, 0, h, 99, C_HINT, 0);
+
+  /* 스크롤 트랙 — 목록이 창보다 길 때만 */
+  if(rows > maxr){
+    int th = shown * ROW_H, ty;
+    int knob_h = th * shown / rows; if(knob_h < 6) knob_h = 6;
+    int knob_y = (th - knob_h) * first / (rows - shown);
+    for(ty = 0; ty < th; ty++)
+      for(x = 0; x < 3; x++){
+        uint16_t *p = &fb[(ry0 + ty) * pitch_px + bx + bw - 6 + x];
+        if(ry0 + ty >= h) break;
+        *p = (ty >= knob_y && ty < knob_y + knob_h) ? COL_GOLD : C_TRACK;
+      }
+  }
+
+  for(i = first; i < first + shown; i++){
+    char buf[96]; const char *txt = buf;
+    int sel = (i == (int)ov_cur);
+    int yy = ry0 + (i - first) * ROW_H;
+#ifdef SS2OV_SP
+    if(ov_page == 2){
       if(i == 0) snprintf(buf, sizeof buf, "— 비움 —");
       else{
         char nt[16], ar[48];
@@ -2037,17 +2096,7 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
         snprintf(buf, sizeof buf, "%s %s%s", ar, sp_move_name(ov_spstyle, i - 1),
                  (sp_move_flags(ov_spstyle, i - 1) & 4) ? "(공중)" : "");
       }
-      draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
-                  (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
-    }
-    return;
-  }
-  if(ov_page == 1){
-    char t[64], buf[96];
-    int st = sp_cur(); if(st >= 0) ov_spstyle = st;
-    snprintf(t, sizeof t, "SP 배치  (B 돌아가기)");
-    draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+3, 0, h, 99, COL_GOLD, 0);
-    for(i = 0; i < rows; i++){
+    }else if(ov_page == 1){
       if(i == 0){
         char sl[40]; sp_label(ov_spstyle, sl, sizeof sl);
         snprintf(buf, sizeof buf, "캐릭터 : %s", sl);
@@ -2064,29 +2113,34 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
         }
       }else if(i == ss2sp_slot_count() + 1) snprintf(buf, sizeof buf, "기본 배치로 되돌리기");
       else snprintf(buf, sizeof buf, "← 빠른 설정으로");
-      draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
-                  (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
+    }else
+#endif
+    if(i < ov_n){
+      const char *vs;
+      ss2ovitem *it = &ov_it[i];
+      if(it->kind == 1)      vs = ss2comm_speaker_name(*it->v);
+      else if(it->kind == 2) vs = ov_bgname(*it->v);
+      else                   vs = *it->v ? "켬" : "끔";
+      snprintf(buf, sizeof buf, "%s : %s", it->name, vs);
     }
-    return;
-  }
-#endif
-  { const char *t = "빠른 설정 v" SS2COMM_VERSION "  (B 닫기)";
-    draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+3, 0, h, 99, COL_GOLD, 0); }
-  for(i = 0; i < ov_n; i++){
-    char buf[72]; const char *vs;
-    ss2ovitem *it = &ov_it[i];
-    if(it->kind == 1)      vs = ss2comm_speaker_name(*it->v);
-    else if(it->kind == 2) vs = ov_bgname(*it->v);
-    else                   vs = *it->v ? "켬" : "끔";
-    snprintf(buf, sizeof buf, "%s : %s", it->name, vs);
-    draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
-                (i == ov_cur) ? COL_GOLD : 0xDEDB, 0);
-  }
 #ifdef SS2OV_SP
-  { const char *t = "SP 기술 배치 →";
-    draw_line11(fb, pitch_px, bx, bx+bw, t, t+strlen(t), by+17+ov_n*13, 0, h, 99,
-                (ov_cur == ov_n) ? COL_GOLD : 0xDEDB, 0); }
+    else snprintf(buf, sizeof buf, "SP 기술 배치 →");
+#else
+    else buf[0] = 0;
 #endif
+    if(sel){                                          /* 선택 바 + 좌측 금 커서 */
+      int sy;
+      for(sy = -1; sy < ROW_H - 1; sy++){
+        uint16_t *ln;
+        if(yy + sy < 0 || yy + sy >= h) continue;
+        ln = &fb[(yy + sy) * pitch_px];
+        for(x = bx + 2; x < bx + bw - (rows > maxr ? 7 : 2); x++) ln[x] = C_SELBG;
+        ln[bx + 2] = COL_GOLD; ln[bx + 3] = COL_GOLD;
+      }
+    }
+    draw_line11(fb, pitch_px, bx + 7, bx + bw - (rows > maxr ? 9 : 4), txt, txt + strlen(txt),
+                yy, 0, h, 99, sel ? COL_WHITE : C_TXT, sel);
+  }
 }
 
 int ss2comm_band_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_BAND_H : 0; }
