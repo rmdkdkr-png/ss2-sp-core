@@ -590,7 +590,9 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
    if (svc_in_battle() && !svc_active())
    {
       uint16_t bnew  = (uint16_t)(ret & (uint16_t)~prev_ret);
-      uint16_t bmask = (uint16_t)((1u << 0) | (1u << 8) | (1u << 1) | (1u << 9));
+      /* 약 기본기만 센다 — 강 연타는 ABLE 수동 콤보의 몫이라 건드리면 안 된다
+         (제보: 「ABLE 강펀치 독물기 콤보가 안 나간다」 — 3타째 치환이 범인이었다) */
+      uint16_t bmask = (uint16_t)((1u << 0) | (1u << 8));
       if (bnew & bmask)
       {
          int in_window = (frames - bas_last_at) <= 24;
@@ -598,13 +600,13 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
          bas_last_at = frames;
          if (rush_n == 1) rush_hit0 = hit_at;
          if (rush_n >= 4 && hit_at > rush_hit0 && (frames - hit_at) <= 40)
-         {
-            const svc_move *sup = svc_pick_super(CPUExRAM[OFF_CHAR1]);
-            if (sup)
+         {  /* 마무리 = 필살기 (제보: 「약펀치 콤보는 필살기로」 — 초필은 게이지·연출이
+               무거워 연타 마무리로는 안 어울린다. 초필은 방향+기술키로 직접). */
+            const svc_move *fin = svc_pick_fallback(CPUExRAM[OFF_CHAR1]);
+            if (fin)
             {
-               rush_fb = svc_pick_fallback(CPUExRAM[OFF_CHAR1]);
                pending = 0; pending_kind = 0;
-               svc_compile(sup);
+               svc_compile(fin);
             }
             rush_n = 0; rush_conv = 0;
          }
