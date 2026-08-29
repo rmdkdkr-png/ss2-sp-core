@@ -23,6 +23,7 @@ static uint8_t ram[16384];
 #define ACT1   0x0E3E
 #define ACT2   0x0E7E
 #define BLK1   0x1B51
+#define BLK2   0x1D51
 #define SEQTXT 0x17D1
 #define JING   0x0000
 #define OPPID  0x17DF
@@ -89,19 +90,22 @@ int main(int argc, char **argv)
         ss2comm_reset();
         memset(ram, 0, sizeof(ram));
         ram[BLK1] = (uint8_t)(8 * (me * 2));
+        ram[BLK2] = (uint8_t)(8 * (op * 2));   /* 실기: 인트로에도 상대 블록이 실려 있다 */
         ram[OPPID] = (uint8_t)op;
         h1 = 128; h2 = 128;
         fprintf(stderr, "[MATCH %d spk=%s me=%d op=%d flavor=%d]\n",
                 m, ss2comm_speaker_name(spk), me, op, flavor);
         for(i = 0; i < 30; i++) stepf(0xF0, 0);
         intro(1);
+        /* 인트로 초입은 실기처럼 0xFF, 전투에 들어가면 개체가 실린다(OPPID 복원) —
+           내내 0xFF 로 두면 전투 진입부가 매 라운드를 새 매치로 오판한다(검수 실증) */
         switch(flavor){
-        case 0: round_play(1, 1); ram[OPPID] = 0xFF; intro(0); round_play(1, 1); break;
-        case 1: round_play(0, 1); ram[OPPID] = 0xFF; intro(0); round_play(0, 0); break;
-        case 2: round_play(1, 0); ram[OPPID] = 0xFF; intro(0); round_play(0, 1);
-                ram[OPPID] = 0xFF; intro(0); round_play(1, 2); break;
-        case 3: round_play(1, 0); ram[OPPID] = 0xFF; intro(0); round_play(1, 0); break;
-        case 4: round_play(0, 2); ram[OPPID] = 0xFF; intro(0); round_play(0, 2); break;
+        case 0: round_play(1, 1); ram[OPPID] = 0xFF; intro(0); ram[OPPID] = (uint8_t)op; round_play(1, 1); break;
+        case 1: round_play(0, 1); ram[OPPID] = 0xFF; intro(0); ram[OPPID] = (uint8_t)op; round_play(0, 0); break;
+        case 2: round_play(1, 0); ram[OPPID] = 0xFF; intro(0); ram[OPPID] = (uint8_t)op; round_play(0, 1);
+                ram[OPPID] = 0xFF; intro(0); ram[OPPID] = (uint8_t)op; round_play(1, 2); break;
+        case 3: round_play(1, 0); ram[OPPID] = 0xFF; intro(0); ram[OPPID] = (uint8_t)op; round_play(1, 0); break;
+        case 4: round_play(0, 2); ram[OPPID] = 0xFF; intro(0); ram[OPPID] = (uint8_t)op; round_play(0, 2); break;
         }
         /* 결과 화면 */
         stepf(0xF1, 2); stepf(0xF1, 2); stepf(0xF1, 2); stepf(0xF1, 2); stepf(0xF1, 2); stepf(0xF1, 2);

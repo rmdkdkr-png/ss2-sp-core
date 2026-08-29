@@ -56,8 +56,10 @@ int main(void)
     for(i = 0; i < nseen; i++){
         if(strstr(seen[i], "%m")) ok_leak = 0;
         if(strstr(seen[i], "하오마루")) saw_name = 1;
-        if(strstr(seen[i], "물러서지") || strstr(seen[i], "검을 다시 세워라")
-           || strstr(seen[i], "승부는 지금부터")) ok_cheer = 1;
+        /* 하오마루 PCHEER 행(LINES 정식 편입분)의 지문 — 대사 개작 시 함께 갱신 */
+        if(strstr(seen[i], "죽지 않았다고") || strstr(seen[i], "검을 다시 잡는")
+           || strstr(seen[i], "한 잔 걸친") || strstr(seen[i], "밀리면 어때")
+           || strstr(seen[i], "침 바르면")  || strstr(seen[i], "배에 힘")) ok_cheer = 1;
         fprintf(stderr, "[LINE] %s\n", seen[i]);
     }
     fprintf(stderr, "cheer=%d name=%d leak없음=%d\n", ok_cheer, saw_name, ok_leak);

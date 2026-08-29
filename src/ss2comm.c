@@ -179,6 +179,10 @@ static unsigned st_roundStart, st_offAt, st_actAt, st_menuAt, st_selChatAt, st_h
 static int st_selChatN;
 static int st_myChar = -1, st_oppChar = -1;
 static unsigned lore_at;         /* 마지막 서사(관계·야사) 온에어 프레임 */
+static unsigned loresaid_h[24];  /* 이번 매치에 이미 푼 서사 — 같은 썰 재탕 컷(제보: 반복 검수) */
+static int      loresaid_n;
+static unsigned fmtsaid_h[48];   /* 이번 매치에 이미 쓴 문형 — 변형이 남아 있으면 겹치지 않게 뽑는다 */
+static int      fmtsaid_n;
 static unsigned st_lastFightF;   /* 진짜 격투(F1+scr8)를 마지막으로 본 프레임 — 새 매치 판정용.
                                     문구·스토리 화면도 mode 는 F1 이라 st_offAt 으로는
                                     「방금 전투에서 나옴」과 「스토리 읽는 중」을 못 가른다 */
@@ -316,6 +320,24 @@ static void mark_said(const char *s){
   recent_h[recent_i] = line_hash(s); recent_f[recent_i] = cm_f;
   recent_i = (recent_i + 1) % RECENT_N;
 }
+/* 서사(관계·야사)는 30초 창으로 부족하다 — 한 매치가 몇 분이라 같은 썰이 또 풀린다.
+   매치 단위로 기억한다. 24를 넘으면 그냥 안 적는다(한 판에 그만큼 나올 일 없음). */
+static int lore_said_match(const char *s){
+  unsigned h = line_hash(s); int i;
+  for(i = 0; i < loresaid_n; i++) if(loresaid_h[i] == h) return 1;
+  return 0;
+}
+static void lore_mark_match(const char *s){
+  if(loresaid_n < 24) loresaid_h[loresaid_n++] = line_hash(s);
+}
+static int fmt_said_match(const char *s){
+  unsigned h = line_hash(s); int i;
+  for(i = 0; i < fmtsaid_n; i++) if(fmtsaid_h[i] == h) return 1;
+  return 0;
+}
+static void fmt_mark_match(const char *s){
+  if(fmtsaid_n < 48) fmtsaid_h[fmtsaid_n++] = line_hash(s);
+}
 
 
 /* ── 무엇을 먼저 말할까 ────────────────────────────────────────────
@@ -430,6 +452,7 @@ void ss2comm_reset(void){
   p_mode=p_scr=-1; p_hp1=p_hp2=-1; p_a1=p_a2=0; p_surv=p_stage=0;
   st_ko=st_low1=st_low2=st_lead=st_rev=0;
   st_won=st_lost=st_resultDone=0;
+  loresaid_n=0; fmtsaid_n=0;
   st_myR=st_opR=0; st_roundN=1; st_fb=st_longSaid=st_dblLow=0;
   st_fHp1=st_fHp2=0; st_settled=0;
   blk_boot=-1; blk_moved=0; st_survSaid=-1; st_streakSaid=-1; surv_seen=-1; surv_live=0; st_oppGand=0;
@@ -720,8 +743,16 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
         }
       }
     }
-    { const char *const *cs = nvd ? vd : cand; int cn = nvd ? nvd : n;
-      const char *nm[EVMAXV]; int nn=0;
+    { const char *const *cs0 = nvd ? vd : cand; int cn0 = nvd ? nvd : n;
+      /* 이번 판에 이미 쓴 문형은 걸러서 뽑는다 — 변형이 6개라도 복원추출이면
+         서너 번 만에 절반이 겹친다(시뮬 실증). 변형을 다 썼으면 그때는 허용. */
+      const char *cs[EVMAXV]; int cn = 0;
+      const char *nm[EVMAXV]; int nn = 0;
+      for(i=0;i<cn0;i++) if(!fmt_said_match(cs0[i])) cs[cn++]=cs0[i];
+      if(!cn){
+        if(ev_prio(ev) == 0) return 0;  /* 잔반응은 변형이 다 떨어지면 침묵이 낫다(반복 검수) */
+        for(i=0;i<cn0;i++) cs[cn++]=cs0[i];
+      }
       for(i=0;i<cn;i++) if(strstr(cs[i],"%s")) nm[nn++]=cs[i];
       if(nn && nn<cn && (rnd()%10u)<4) fmt = nm[rnd()%(unsigned)nn];
       else                             fmt = cs[rnd()%(unsigned)cn];
@@ -730,6 +761,10 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
 picked:
   fmt_one(fmt, who, n1, n2, outbuf, sizeof(outbuf));
   if(said_recently(outbuf)) return 0;      /* 최근에 한 말은 다시 안 한다 */
+  if(ev == EV_REL || ev == EV_LORE){
+    if(lore_said_match(outbuf)) return 0;  /* 같은 썰은 같은 매치에서 한 번만 */
+    lore_mark_match(outbuf);
+  }
   { int slot;
     if(q_cnt < QN) slot = (q_head + q_cnt++) % QN;
     else {
@@ -764,6 +799,7 @@ picked:
     if(spl_on){ snprintf(q[slot].vkn,sizeof q[slot].vkn,"%s",spl_kn);
                 snprintf(q[slot].vks,sizeof q[slot].vks,"%s",spl_ks); }
   }
+  if(fmt) fmt_mark_match(fmt);      /* 실린 문형만 — 이번 판에는 같은 꼴을 다시 뽑지 않는다 */
   cd[key] = cm_f + EVCD[ev].cool;   /* 실린 다음에만 — 큐에서 밀려난 말이 쿨다운까지 먹으면 재시도가 막힌다 */
   return 1;
 }
@@ -1173,7 +1209,13 @@ const char *ss2comm_frame(void){
     st_won=st_lost=st_resultDone=0;
     st_actAt=cm_f; st_roundStart=cm_f;
     cd[CK_KO]=0; cd[CK_REV]=0;
-    if(!st_lastFightF || cm_f-st_lastFightF > 180 || opp_read() != st_oppChar
+    int opx = opp_read();
+    /* 상대 개체가 아직/잠시 안 실렸으면 직전 판 값을 이어받는다 — 인트로(2·3회전 콜)와
+       같은 병: -1 을 「상대 바뀜」으로 읽으면 매 라운드가 새 매치가 되어
+       정산·관계대사가 재발화한다(시뮬 검수에서 실증). 이어받기는 10초 내 재개에만. */
+    if(opx < 0 && st_lastFightF && cm_f - st_lastFightF <= 600 && st_oppChar >= 0)
+      opx = st_oppChar;
+    if(!st_lastFightF || cm_f-st_lastFightF > 180 || opx != st_oppChar
        || st_myR >= 2 || st_opR >= 2){   /* 새 매치 — 시간·상대 교체·직전 매치 결판 */
       const char *rel;
       /* 전판 정산 — 2선승 결말을 못 본 채 떠난 매치(무한대전 1라운드제·타임오버·중도 이탈).
@@ -1184,11 +1226,13 @@ const char *ss2comm_frame(void){
         else if(st_myR > st_opR){ sess_streak++; sess_wins++; sess_games++; }
       }
       st_settled=0;
+      loresaid_n=0; fmtsaid_n=0;          /* 새 매치 — 서사·문형 재탕 컷도 새로 센다 */
+      if(dbgseq()) fprintf(stderr, "[NEWMATCH f=%u opx=%d oppChar=%d lastF=%u myR=%d opR=%d]\n", cm_f, opx, st_oppChar, st_lastFightF, st_myR, st_opR);
       st_myR=st_opR=0; st_roundN=1;
       st_fb=st_longSaid=st_dblLow=0;
       flow_reset(1);                              /* v0.7 관전 기억 — 매치 통째로 */
       st_myChar  = blk_char(rd(OFF_BLK1));
-      st_oppChar = opp_read();
+      st_oppChar = opx;
       st_oppGand = opp_is_gand();
       /* 판을 여는 건 **심판 하나**다. 예전에는 여기서 심판 구호 + EV_START(「하오마루 대
          겐주로…」) + 관계 대사가 한꺼번에 몰려, 두 칸짜리 대기열이 막히면서
