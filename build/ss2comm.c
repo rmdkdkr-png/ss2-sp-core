@@ -1566,6 +1566,7 @@ out:
     snprintf(curline,sizeof(curline),"%s",chosen.text);
     cur_ev = chosen.ev; cur_spk = chosen.spk; cur_f = cm_f; last_line_f = cm_f;
     mark_said(curline);
+    if(dbgseq()) fprintf(stderr, "[AIR f=%u ev=%d spk=%d] %s\n", cm_f, cur_ev, cur_spk, curline);
     if(chosen.vkn[0]) ss2voice_say_parts(0, chosen.vkn, chosen.vks, 0);   /* 이어붙이기 */
     else              ss2voice_say(curline, 0);  /* 온에어 = 음성도 이 순간 */
     /* 공방 중에는 넓게 벌린다. 말할 기회가 드물어야 아무 말이나 안 하게 된다.
