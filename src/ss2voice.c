@@ -102,6 +102,7 @@ void ss2voice_init(const char *dir){
 }
 
 int ss2voice_on(void){ return vc_ready; }
+int ss2voice_count(void){ return pak_f ? pak_n : vc_n; }
 
 static int has_clip(unsigned h);           /* 아래 정의 — 전방 선언 */
 int ss2voice_has_text(const char *text){   /* 엔진의 대사 선택용 — 이 문장, 말할 수 있나 */

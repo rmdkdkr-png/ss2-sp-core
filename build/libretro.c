@@ -389,6 +389,7 @@ extern void    ss2sp_set_layout(int sp);
 extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 extern void    ss2voice_init(const char *dir);
 extern void    ss2voice_mix(int16_t *buf, int frames);
+extern int     ss2voice_on(void);
 extern void    svcsp_set_engine(int on);
 extern int     svcsp_engine_on(void);
 extern void    svcsp_reset(void);
@@ -705,6 +706,13 @@ bool retro_load_game(const struct retro_game_info *info)
       }
       else
          ss2voice_init(NULL);   /* SS2VOICE_DIR 환경변수는 init 안에서 우선 적용 */
+      if (ss2voice_on())
+      {  /* 어느 팩이 실렸는지 육안 확인 — 클립 수가 곧 팩 버전이다 */
+         extern int ss2voice_count(void);
+         static char vt[32];
+         snprintf(vt, sizeof vt, "VOICE %d", ss2voice_count());
+         ss2comm_toast(vt, 150);
+      }
    }
 
    surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
