@@ -74,14 +74,15 @@ static void round_play(int win, int pace)
 int main(int argc, char **argv)
 {
     int N = argc > 1 ? atoi(argv[1]) : 100;
+    int S = argc > 2 ? atoi(argv[2]) : 0;   /* 변주 시드 — 매핑 오프셋 */
     int m;
     ss2comm_set_ram(ram);
     ss2comm_set_enabled(1);
     for(m = 0; m < N; m++){
-        int spk = m % 15;
-        int me  = (m * 7 + 2) % 15;
-        int op  = (m * 3 + 1) % 14;                 /* 유가(14) 제외 */
-        int flavor = m % 5;
+        int spk = (m + S) % 15;
+        int me  = (m * 7 + 2 + S * 5) % 15;
+        int op  = (m * 3 + 1 + S * 11) % 14;        /* 유가(14) 제외 */
+        int flavor = (m + S * 2) % 5;
         int i;
         if(op == me) op = (op + 1) % 14;
         ss2comm_set_speaker(spk);
