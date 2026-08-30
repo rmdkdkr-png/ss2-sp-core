@@ -399,6 +399,7 @@ extern char    svcsp_last_disp[64];
 extern int     svcsp_disp_seq;
 static bool    svcsp_toast_on = true;
 static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
+static unsigned char ov_band = 1, ov_band_p = 1;     /* 기술명 띠(화면 밖) 온오프 */
 extern const char *ss2sp_last_name;
 /* ── SS2 캐릭터 해설 엔진 (ss2comm.c) ── */
 extern void        ss2comm_set_ram(void *p);
@@ -467,6 +468,11 @@ static void ss2_overlay_apply(void)
       ov_sp_p = ov_sp;
    }
    if (ov_toast != ov_toast_p) { svcsp_toast_on = ov_toast != 0; ov_toast_p = ov_toast; }
+   if (ov_band  != ov_band_p)
+   {  /* 띠는 화면 세로를 바꾼다 — 지오메트리를 다시 알려야 프론트가 안 깨진다 */
+      if (!ss2comm_rom_is_ss2()) { ss2comm_sp_band(ov_band); ss2_set_geometry(); }
+      ov_band_p = ov_band;
+   }
    if (ov_sides != ov_sides_p)
    {
       ss2_sides = ov_sides != 0;
@@ -561,6 +567,7 @@ static void check_variables(void)
       int on = 1;
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
          on = strcmp(var.value, "disabled") != 0;
+      ov_band = ov_band_p = (unsigned char)on;   /* 오버레이 그림자값을 옵션과 맞춘다 */
       if (!ss2comm_rom_is_ss2())
       {
          int prev = ss2comm_band_h();
@@ -640,6 +647,7 @@ void retro_reset(void)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
@@ -711,6 +719,7 @@ bool retro_load_game(const struct retro_game_info *info)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
