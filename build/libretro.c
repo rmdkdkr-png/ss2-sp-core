@@ -400,6 +400,8 @@ extern int     svcsp_disp_seq;
 static bool    svcsp_toast_on = true;
 static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
 static unsigned char ov_vol = 10, ov_vol_p = 10;     /* 해설 볼륨 노브(x10%) */
+static unsigned char ov_dub = 1, ov_dub_p = 1;       /* 더빙 온오프(오버레이) */
+extern void ss2voice_set_dub(int on);
 static bool cv_booted = false;   /* check_variables 런타임 재호출 — 화면 설정류는 부팅 때만
                                     (제보: 해설 바꿀 때마다 기둥아트가 옵션 파일값으로 롤백) */
 extern void ss2voice_set_volume(int pct);
@@ -459,6 +461,7 @@ static void ss2_overlay_apply(void)
 {
    if (ov_spk   != ov_spk_p)   { ss2comm_set_speaker(ov_spk);  ov_spk_p   = ov_spk; }
    if (ov_vol   != ov_vol_p)   { ss2voice_set_volume(ov_vol * 10); ov_vol_p = ov_vol; }
+   if (ov_dub   != ov_dub_p)   { ss2voice_set_dub(ov_dub);         ov_dub_p = ov_dub; }
    if (ov_chat  != ov_chat_p)  { ss2comm_set_enabled(ov_chat); ov_chat_p  = ov_chat; }
    if (ov_ref   != ov_ref_p)   { ss2comm_set_ref(ov_ref);      ov_ref_p   = ov_ref; }
    if (ov_sp    != ov_sp_p)
@@ -561,6 +564,15 @@ static void check_variables(void)
       }
    }
 
+   var.key   = "ngp_ss2sp_dub";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      int on = strcmp(var.value, "disabled") != 0;
+      ss2voice_set_dub(on);
+      ov_dub = ov_dub_p = (unsigned char)on;
+   }
+
    var.key   = "ngp_ss2sp_comm_vol";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -629,6 +641,7 @@ void retro_reset(void)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_extra("더빙", &ov_dub);
       ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
@@ -701,6 +714,7 @@ bool retro_load_game(const struct retro_game_info *info)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_extra("더빙", &ov_dub);
       ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }

@@ -62,12 +62,14 @@ __attribute__((weak)) int  ss2voice_on(void){ return 0; }
 __attribute__((weak)) int  ss2voice_has_text(const char *t){ (void)t; return 0; }
 __attribute__((weak)) void ss2voice_say_parts(const char *a, const char *b, const char *c, int p){ (void)a;(void)b;(void)c;(void)p; }
 __attribute__((weak)) int  ss2voice_playing_prio(void){ return -1; }
+__attribute__((weak)) int  ss2voice_dub_on(void){ return 1; }
 #else
 void ss2voice_say(const char *t, int p);
 int  ss2voice_on(void);
 int  ss2voice_has_text(const char *t);
 void ss2voice_say_parts(const char *a, const char *b, const char *c, int p);
 int  ss2voice_playing_prio(void);
+int  ss2voice_dub_on(void);
 #endif
 
 #include "ss2comm_lines.h"
@@ -801,7 +803,7 @@ picked:
   if(said_recently(outbuf)) return 0;      /* 최근에 한 말은 다시 안 한다 */
   /* 팩 모드: 목소리 없는 해설은 자막도 내보내지 않는다 — 고정 변형(전적류)까지 전 경로
      (제보: 「대사가 나와도 더빙이 안 붙는다」). 조각 결합이 성사된 줄은 통과. */
-  if(ss2voice_on() && !spl_on && !ss2voice_has_text(outbuf)) return 0;
+  if(ss2voice_on() && ss2voice_dub_on() && !spl_on && !ss2voice_has_text(outbuf)) return 0;
   if(ev == EV_REL || ev == EV_LORE){
     if(lore_said_match(outbuf)) return 0;  /* 같은 썰은 같은 매치에서 한 번만 */
     lore_mark_match(outbuf);
@@ -2122,7 +2124,7 @@ static int draw_line11(uint16_t *fb,int pitch_px,int x0,int x1,const char *s,con
                        int ytop,int clipTop,int clipBot,int show,uint16_t col,int bold);
 typedef struct { const char *name; unsigned char *v; unsigned char max; unsigned char kind; } ss2ovitem;
 static int ov_svc = 0;      /* 1 = SvC — SP 배치 페이지가 svcsp 표를 쓴다 */
-static ss2ovitem ov_it[8];
+static ss2ovitem ov_it[10];
 static int ov_n = 0;
 static unsigned char ov_on = 0, ov_cur = 0;
 void ss2comm_overlay_bind(unsigned char *chat, unsigned char *spk, unsigned char *ref,
@@ -2261,13 +2263,13 @@ static int ov_sp_rows(void){ return 3 + ss2sp_slot_count(); }  /* 캐릭터 + �
 void ss2comm_overlay_spmode(int svc){ ov_svc = !!svc; }
 /* 페이지 0 에 토글 항목 하나를 덧붙인다 (SvC 기술명 표시 등) */
 void ss2comm_overlay_bind_knob(const char *name, unsigned char *v, int max){
-  if(ov_n >= 8 || !v) return;
+  if(ov_n >= 10 || !v) return;
   ov_it[ov_n].name = name; ov_it[ov_n].v = v;
   ov_it[ov_n].max = (unsigned char)max; ov_it[ov_n].kind = 2;
   ov_n++;
 }
 void ss2comm_overlay_bind_extra(const char *name, unsigned char *v){
-  if(ov_n >= 8 || !v) return;
+  if(ov_n >= 10 || !v) return;
   ov_it[ov_n].name = name; ov_it[ov_n].v = v; ov_it[ov_n].max = 1; ov_it[ov_n].kind = 0;
   ov_n++;
 }

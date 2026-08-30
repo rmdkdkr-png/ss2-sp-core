@@ -201,6 +201,9 @@ got:
 
 static unsigned vc_clock;   /* 믹스한 샘플 시계 — 대기 스테일(1.2초) 판정용 */
 static int vc_vol = 100;    /* 해설 볼륨 % (0~150) — 게임 소리는 건드리지 않는다 */
+static int vc_user_on = 1;  /* 더빙 온오프(오버레이) — 꺼도 팩은 로드 유지, 자막 전용 모드 */
+void ss2voice_set_dub(int on){ vc_user_on = on ? 1 : 0; }
+int  ss2voice_dub_on(void){ return vc_user_on; }
 void ss2voice_set_volume(int pct){
   if(pct < 0) pct = 0;
   if(pct > 150) pct = 150;
@@ -305,6 +308,7 @@ static void vc_start(unsigned h, int prio){
 /* 이어붙이기 — [머리][이름][꼬리] 조각을 트림해 12ms 틈으로 한 버퍼에 잇는다.
    조각은 합성키(제어문자 접두, 실대사 해시와 충돌 불가)로 팩에 들어 있다. */
 void ss2voice_say_parts(const char *k1, const char *k2, const char *k3, int prio){
+  if(!vc_user_on) return;                    /* 더빙 꺼짐 — 자막만 */
   const char *ks[3]; short *pc[3]; int ln[3], a0[3], a1[3];
   int nk = 0, i, tot = 0, gap = 530, off = 0, c = VCH_OF(prio);
   short *buf;
@@ -333,6 +337,7 @@ void ss2voice_say_parts(const char *k1, const char *k2, const char *k3, int prio
 }
 
 void ss2voice_say(const char *text, int prio){
+  if(!vc_user_on) return;                    /* 더빙 꺼짐 — 자막만 */
   unsigned h;
   if(!vc_ready || !text || !*text) return;
   h = fnv1a(text);
@@ -344,7 +349,7 @@ void ss2voice_say(const char *text, int prio){
 
 void ss2voice_mix(int16_t *buf, int frames){
   int i, c, a0v, a1v;
-  if(!vc_ready) return;
+  if(!vc_ready || !vc_user_on) return;
   for(c = 0; c < VCN; c++)
     if((!vch[c].pcm || vch[c].pos >= vch[c].len) && vnq_n[c]) vq_pop(c);
   a0v = 0; a1v = 0;
