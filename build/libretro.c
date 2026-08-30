@@ -647,6 +647,9 @@ void retro_reset(void)
    }
    else
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_extra("더빙", &ov_dub);
+      ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
       static char ver_toast[48];
@@ -720,6 +723,9 @@ bool retro_load_game(const struct retro_game_info *info)
    }
    else
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_extra("더빙", &ov_dub);
+      ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
       static char ver_toast[48];
