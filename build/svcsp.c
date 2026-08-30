@@ -240,7 +240,7 @@ static uint16_t  prev_trig;
 static uint16_t  prev_pad_dir;
 static const svc_move *pending;
 static int       pending_left;
-static int       pending_kind;     /* 0 일반 1 캔슬 선입력 2 파생(히트 확인) 3 창닫힘 후 재시전 */
+static int       pending_kind;     /* 0 일반(착지·회복 대기) 1 캔슬 선입력(히트 순간 발사) 2 파생 4 캔슬창 회피(dud) */
 static int       warm;             /* 전투 게이트 연속 프레임 */
 static int       verify_left;
 static int       svc_is_rom;       /* 헤더 판별 결과 */
@@ -472,6 +472,8 @@ static const svc_move *svc_resolve(uint8_t held)
 
 /* held = 트리거(X/R)가 아직 눌려 있는가. 버튼 스텝에서 잡고 있으면
    프레임을 소비하지 않고 늘린다 → 게임이 홀드 = 강(독물기)으로 받는다. */
+static int svc_chain_idx(void);
+
 static uint8_t svc_step_out(int held)
 {
    uint8_t out = q[q_i].pad;
@@ -488,21 +490,29 @@ static uint8_t svc_step_out(int held)
          q_n = q_i = 0; q_left = 0;
          macro_end_at = frames;
          /* 파생이 있는 기술이면 재입력 창을 연다 (실측: 첫 기술 시작 +2~36f 수용) */
-         if (chain_mv && chain_tbl &&
-             ((svcsp_last_strong ? chain_mv->next_hold : chain_mv->next) >= 0))
-            chain_left = 34;
+         if (chain_mv && chain_tbl && svc_chain_idx() >= 0)
+            chain_left = 34;   /* 조건은 svc_chain_next 와 같은 규칙이어야 한다 —
+                                  예전엔 여기만 next_hold 폴백을 빼먹어서, 홀드로 발동한
+                                  next_hold=-1 기술(죄읊기·구상)은 창이 아예 안 열렸다 */
       }
    }
    return out;                    /* 매크로 중 사용자 입력은 무시 */
 }
 
+/* 지금 이어질 파생의 표 인덱스 (없으면 -1) — 창 개방과 실제 선택이 같은 답을 쓰게 */
+static int svc_chain_idx(void)
+{
+   int idx;
+   if (!chain_mv || !chain_tbl) return -1;
+   idx = svcsp_last_strong ? chain_mv->next_hold : chain_mv->next;
+   if (idx < 0 && svcsp_last_strong) idx = chain_mv->next;   /* 홀드 전용이 없으면 약 파생 */
+   return idx;
+}
+
 /* 지금 파생 창에서 X 를 누르면 나갈 기술 (없으면 0) */
 static const svc_move *svc_chain_next(void)
 {
-   int idx;
-   if (!chain_mv || !chain_tbl) return 0;
-   idx = svcsp_last_strong ? chain_mv->next_hold : chain_mv->next;
-   if (idx < 0 && svcsp_last_strong) idx = chain_mv->next;   /* 홀드 전용이 없으면 약 파생 */
+   int idx = svc_chain_idx();
    if (idx < 0) return 0;
    return &chain_tbl[idx];
 }
