@@ -531,6 +531,12 @@ static void check_variables(void)
    if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       ss2comm_set_duo(!strcmp(var.value, "enabled"));
 
+   var.key   = "ngp_svcsp_engine";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      svcsp_set_engine(strcmp(var.value, "disabled") ? 1 : 0);
+   if (svcsp_rom_ok()) ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
+
    var.key   = "ngp_svcsp_toast";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -640,16 +646,16 @@ void retro_reset(void)
    if (svcsp_rom_ok())
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
-      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
-      ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);   /* 음성 항목은 SS2 전용 — SvC 는 더빙이 없다 */
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
+   {
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
       ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
       ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
+   }
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
       static char ver_toast[48];
@@ -716,16 +722,16 @@ bool retro_load_game(const struct retro_game_info *info)
    if (svcsp_rom_ok())
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
-      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
-      ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);   /* 음성 항목은 SS2 전용 — SvC 는 더빙이 없다 */
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
+   {
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
       ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
       ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
+   }
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
       static char ver_toast[48];
@@ -870,7 +876,7 @@ static void update_input(void)
       ss2_ov_prev = ret;
    }
 
-   if (ss2sp_enable)
+   if (ss2sp_enable || svcsp_rom_ok())   /* SvC 입력은 SS2 전용 옵션에 매이지 않는다 */
    {
       /* v0.5: 트리거는 SP 하나뿐(X, 그리고 손이 편한 쪽을 위해 R 도 같은 자리).
          A+B 버튼(Y·L)은 패드 바이트에 A·B 를 한꺼번에 세워 준다 —

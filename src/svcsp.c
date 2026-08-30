@@ -63,7 +63,12 @@ static int svc_tail_frames(void){ static int v=-1; if(v<0){const char*e=getenv("
 static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴에서만 켠다 */
 static int svc_engine_now(void)
 {
-   if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
+   if (svc_engine < 0)
+   {  /* 기본 켬 — ABLE(순정 간이입력)은 세이브 해금 롬에만 있어서 평범한 롬에는 없다.
+        SVCSP_FORCE=0 으로 끌 수 있다 (대조군 시험용). */
+      const char *e = getenv("SVCSP_FORCE");
+      svc_engine = e ? (*e == '1') : 1;
+   }
    return svc_engine;
 }
 void svcsp_set_engine(int on) { svc_engine = !!on; }
@@ -196,6 +201,8 @@ static int       compile_no_retry; /* 파생 등 재시도 금지 컴파일 표�
 static uint8_t   bank_at_compile;  /* 컴파일 시점 뱅크 — 재시도 성공 판정은 뱅크 변화로
                                       (씹힌 평타도 카운터는 리셋해서 카운터만으론 속는다) */
 static uint8_t   prev_pad_btn;
+static uint8_t   dir_latch;        /* 마지막으로 잡았던 방향 */
+static uint32_t  dir_latch_at;     /* 그 프레임 */
 static int       attack_was_kick;  /* 마지막 자기 노멀이 킥(B)이었나 — 쿄 dud 는 킥 캔슬만 */
 static uint8_t   prev_hp2v;
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
@@ -463,6 +470,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
    prev_trig = trig;
    frames++;
    if (chain_left > 0) chain_left--;
+   if (pad & PAD_DIR_MASK) { dir_latch = (uint8_t)(pad & PAD_DIR_MASK); dir_latch_at = frames; }
    /* 유저가 직접 누른 평타 감지 — 매크로 중이 아닐 때의 A/B 새 눌림 */
    if (!svc_active())
    {
@@ -576,7 +584,12 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
    }
    if ((edge & 1u) && svc_in_battle())
    {
-      const svc_move *m = svc_resolve(pad);
+      /* 방향과 기술키는 1~2프레임 어긋나기 쉽다(터치·패드 공통) — 엣지에 방향이
+         비면 직전 4프레임의 방향을 이어받는다 (「기술키 누르면 좌우를 못 알아듣는다」 제보) */
+      uint8_t held = pad;
+      const svc_move *m;
+      if (!(held & PAD_DIR_MASK) && frames - dir_latch_at <= 4) held |= dir_latch;
+      m = svc_resolve(held);
       if (svc_dbg()) fprintf(stderr, "[svcsp] edge chr=%d air=%d anim=%d -> %s\n",
                              CPUExRAM[OFF_CHAR1], svc_airborne(), CPUExRAM[OFF_ANIM],
                              m ? m->name : "(null)");
@@ -625,4 +638,5 @@ void svcsp_reset(void)
    hold_elapsed = 0; svcsp_last_strong = 0;
    chain_mv = 0; chain_tbl = 0; chain_left = 0;
    svcsp_last_ok = -1; svcsp_last_name = 0;
+   dir_latch = 0; dir_latch_at = 0;
 }

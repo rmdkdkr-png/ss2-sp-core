@@ -37,7 +37,11 @@ static int envcb(unsigned cmd,void*data){
   if(cmd==3){*(int*)data=1;return 1;}
   if(cmd==9||cmd==31){*(const char**)data=".";return 1;}
   if(cmd==52||cmd==53||cmd==67) return 1;
-  if(cmd==15){struct{const char*k;const char*v;}*v=data; v->v=NULL; return 0;}
+  if(cmd==15){ /* GET_VARIABLE — 코어 옵션 경로도 시험 대상이다 */
+    struct{const char*k;const char*v;}*v=data;
+    const char *ov=getenv(v->k);            /* 예: ngp_svcsp_engine=disabled */
+    if(ov){ v->v=ov; return 1; }
+    v->v=NULL; return 0;}
   return 0;
 }
 static void dump(const char*tag,const uint8_t*ram,size_t rlen){
@@ -129,11 +133,15 @@ int main(int argc,char**argv){
       if(k>=2 && !strcmp(cmd,"w")){
         static FILE *csv = NULL;
         if(!csv){ const char*cp=getenv("PROBE_CSV"); csv=fopen(cp?cp:"probe.csv","w");
-          fprintf(csv,"tag,frame,bank,hp2,p1x,p2x,anim,chr,style,p1y,kanim,pow1,pow2\n"); }
-        fprintf(csv,"%s,%ld,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", arg, frame,
-                ram[0x09AD], ram[0x08CF], ram[0x092E], ram[0x0934],
+          fprintf(csv,"tag,frame,bank,hp2,p1x,p2x,anim,chr,style,p1y,kanim,pow1,pow2,face\n"); }
+        { int x1 = ram[0x092E] | (ram[0x092F]<<8);      /* ★16비트 — 하위만 보면 256px 경계에서 뒤집힌다 (실측 §27) */
+          int x2 = ram[0x0934] | (ram[0x0935]<<8);
+          fprintf(csv,"%s,%ld,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", arg, frame,
+                ram[0x09AD], ram[0x08CF], x1, x2,
                 ram[0x0C7E], ram[0x08A0], ram[0x08BE], ram[0x0930],
-                ram[0x0C7F], ram[0x0963], ram[0x0AE3]);
+                ram[0x0C7F], ram[0x0963], ram[0x0AE3],
+                x1 > x2 ? 1 : 0);                            /* face 1 = P1 이 왼쪽을 본다 (svc_facing_left 와 같은 식) */
+        }
         fflush(csv); continue;
       }
       if(k>=1){ dump(cmd,ram,rlen); printf("  [%ld] %s 덤프\n",frame,cmd); }

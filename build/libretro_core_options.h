@@ -139,6 +139,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "above",
    },
    {
+      "ngp_svcsp_engine",
+      "SvC 원버튼 필살기",
+      NULL,
+      "기술 버튼 하나로 필살기가 나갑니다. 방향을 잡고 누르면 그 방향 기술. (SNK vs. Capcom MotM 전용)",
+      NULL,
+      "system",
+      {
+         { "enabled",  "켬" },
+         { "disabled", "끔" },
+         { NULL, NULL },
+      },
+      "enabled"
+   },
+   {
       "ngp_svcsp_toast",
       "SvC 기술명 표시",
       NULL,
