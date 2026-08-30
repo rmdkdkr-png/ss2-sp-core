@@ -1,0 +1,11 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!F0
+20 D
+!F1
+20 -
+!F2
+200 -
+!F3
+20 D
+!F4

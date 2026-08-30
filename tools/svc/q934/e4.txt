@@ -1,0 +1,9 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+340 -
+600 R
+!save x.st
+30 -
+!X_idle
+!load x.st
+30 D
+!X_cr

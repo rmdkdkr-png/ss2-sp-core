@@ -1,0 +1,16 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+80 -
+!save b1.st
+20 -
+!A_idle
+!load b1.st
+20 D
+!A_cr
+!load b1.st
+200 -
+!save b2.st
+20 -
+!B_idle
+!load b2.st
+20 D
+!B_cr

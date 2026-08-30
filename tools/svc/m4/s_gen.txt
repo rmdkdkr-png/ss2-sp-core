@@ -1,0 +1,104 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+40 -
+3 D
+3 D R
+3 R
+3 R A
+12 -
+!w CROSS_s40_absR
+20 -
+!w CROSS_s40_absR_late
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+40 -
+3 D
+3 D L
+3 L
+3 L A
+12 -
+!w CROSS_s40_mirL
+20 -
+!w CROSS_s40_mirL_late
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+60 -
+3 D
+3 D R
+3 R
+3 R A
+12 -
+!w CROSS_s60_absR
+20 -
+!w CROSS_s60_absR_late
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+60 -
+3 D
+3 D L
+3 L
+3 L A
+12 -
+!w CROSS_s60_mirL
+20 -
+!w CROSS_s60_mirL_late
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+80 -
+3 D
+3 D R
+3 R
+3 R A
+12 -
+!w CROSS_s80_absR
+20 -
+!w CROSS_s80_absR_late
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+80 -
+3 D
+3 D L
+3 L
+3 L A
+12 -
+!w CROSS_s80_mirL
+20 -
+!w CROSS_s80_mirL_late
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+3 D
+3 D R
+3 R
+3 R A
+12 -
+!w NORM_absR
+20 -
+!w NORM_absR_late
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+3 D
+3 D L
+3 L
+3 L A
+12 -
+!w NORM_mirL
+20 -
+!w NORM_mirL_late

@@ -1,0 +1,35 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+60 -
+!G_svc_fight_0
+15 R
+!G_svc_fight_1
+15 R
+!G_svc_fight_2
+15 R
+!G_svc_fight_3
+15 R
+!G_svc_fight_4
+15 R
+!G_svc_fight_5
+15 R
+!G_svc_fight_6
+15 R
+!G_svc_fight_7
+15 R
+!G_svc_fight_8
+15 L
+!G_svc_fight_9
+15 L
+!G_svc_fight_10
+15 L
+!G_svc_fight_11
+15 L
+!G_svc_fight_12
+15 L
+!G_svc_fight_13
+15 L
+!G_svc_fight_14
+15 L
+!G_svc_fight_15
+15 L
+!G_svc_fight_16

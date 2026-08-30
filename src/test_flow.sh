@@ -13,13 +13,6 @@ python3 check_glyph.py . || exit 1
 cc -O1 -DSS2SP_RAM_POINTER -DSS2COMM_TEST -I. -o /tmp/ss2_test_flow test_flow.c ss2comm.c
 /tmp/ss2_test_flow
 
-# ── 효과음 훅 회귀: 감지 원점에 붙었나(해설 쿨다운을 안 타는가) ──
-# emit_ex 로 보내면 첫 줄 쿨다운(cd[key] > cm_f)에 걸려 연타가 씹힌다.
-# 매 프레임 12연타를 넣어 12번 다 불리는지로 그걸 잡는다. 세기 경계(>=12/>=4)가
-# 기둥 흔들림과 어긋나지 않는지도 같이 본다 — 화면과 소리가 따로 놀면 어색하다.
-cc -O1 -DSS2SP_RAM_POINTER -DSS2COMM_TEST -I. -o /tmp/ss2_test_sfx test_sfx.c ss2comm.c
-/tmp/ss2_test_sfx || { echo "sfx 훅 실패"; exit 1; }
-
 # ── 2회전 콜 회귀: 인트로에서 상대 미인식이어도 이어받아 발화 ──
 cc -O1 -DSS2SP_RAM_POINTER -DSS2COMM_TEST -I. -o /tmp/ss2_round2 test_round2.c ss2comm.c
 OUT=$(SS2COMM_DBGSEQ=1 /tmp/ss2_round2 2>&1 >/dev/null)

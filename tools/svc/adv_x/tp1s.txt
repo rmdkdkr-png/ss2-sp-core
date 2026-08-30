@@ -1,0 +1,5 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+360 -
+!poke 092E=100
+3 -
+!u3

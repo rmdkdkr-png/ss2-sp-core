@@ -1,0 +1,21 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+360 -
+!n0
+3 D
+3 D R
+3 R
+2 R A
+6 A
+!n1
+4 -
+!n2
+4 -
+!n3
+4 -
+!n4
+4 -
+!n5
+4 -
+!n6
+4 -
+!n7

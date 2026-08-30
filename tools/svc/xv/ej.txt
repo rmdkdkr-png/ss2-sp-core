@@ -1,0 +1,73 @@
+!load /home/dudu/ss2/saves/svc/svc_c1_3.st
+500 R
+6 U R
+!j0
+2 R
+!j1
+2 R
+!j2
+2 R
+!j3
+2 R
+!j4
+2 R
+!j5
+2 R
+!j6
+2 R
+!j7
+2 R
+!j8
+2 R
+!j9
+2 R
+!j10
+2 R
+!j11
+2 R
+!j12
+2 R
+!j13
+2 R
+!j14
+2 R
+!j15
+2 R
+!j16
+2 R
+!j17
+2 R
+!j18
+2 R
+!j19
+2 R
+!j20
+2 R
+!j21
+2 R
+!j22
+2 R
+!j23
+2 R
+!j24
+2 R
+!j25
+2 R
+!j26
+2 R
+!j27
+2 R
+!j28
+2 R
+!j29
+2 R
+!j30
+2 R
+!j31
+2 R
+!j32
+2 R
+!j33
+2 R
+!j34
+2 R

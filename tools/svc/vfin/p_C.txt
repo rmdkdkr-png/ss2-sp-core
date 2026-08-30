@@ -1,0 +1,4 @@
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+30 -
+100 -
+!PC

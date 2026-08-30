@@ -1,0 +1,13 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+40 -
+!base
+!poke 0AB4=200
+1 -
+!wpoke1
+2 -
+!wpoke3
+!poke 0AAE=20
+1 -
+!spoke1
+2 -
+!spoke3

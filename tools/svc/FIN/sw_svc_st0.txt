@@ -1,0 +1,20 @@
+!load /home/dudu/ss2/saves/svc/svc_st0.st
+30 -
+!p svc_st0_idle
+60 R
+!p svc_st0_R
+60 L
+!p svc_st0_L
+6 U R
+30 -
+!p svc_st0_J
+20 A
+!p svc_st0_A
+20 B
+!p svc_st0_B
+20 D
+!p svc_st0_D
+200 R
+!p svc_st0_RR
+200 L
+!p svc_st0_LL

@@ -1,0 +1,82 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+20 -
+12 L
+12 L
+12 L
+12 L
+12 L
+12 L
+12 L
+12 L
+12 L
+12 L
+12 L
+12 L
+12 R
+!ight_00
+12 R
+!ight_01
+12 R
+!ight_02
+12 R
+!ight_03
+12 R
+!ight_04
+12 R
+!ight_05
+12 R
+!ight_06
+12 R
+!ight_07
+12 R
+!ight_08
+12 R
+!ight_09
+12 R
+!ight_10
+12 R
+!ight_11
+12 R
+!ight_12
+12 R
+!ight_13
+12 R
+!ight_14
+12 R
+!ight_15
+12 R
+!ight_16
+12 R
+!ight_17
+12 R
+!ight_18
+12 R
+!ight_19
+12 R
+!ight_20
+12 R
+!ight_21
+12 R
+!ight_22
+12 R
+!ight_23
+12 R
+!ight_24
+12 R
+!ight_25
+12 R
+!ight_26
+12 R
+!ight_27
+12 R
+!ight_28
+12 R
+!ight_29
+12 R
+!ight_30
+12 R
+!ight_31
+12 R
+!ight_32
+12 R
+!ight_33

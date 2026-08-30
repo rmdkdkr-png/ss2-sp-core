@@ -1,0 +1,27 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+360 -
+!s_svc_sparring
+!load /home/dudu/ss2/saves/svc/svc_spar2.st
+360 -
+!s_svc_spar2
+!load /home/dudu/ss2/saves/svc/svc_spar3.st
+360 -
+!s_svc_spar3
+!load /home/dudu/ss2/saves/svc/svc_spar4.st
+360 -
+!s_svc_spar4
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+360 -
+!s_svc_f2
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+360 -
+!s_svc_fight
+!load /home/dudu/ss2/saves/svc/svc_c1_0.st
+360 -
+!s_svc_c1_0
+!load /home/dudu/ss2/saves/svc/svc_c2_0.st
+360 -
+!s_svc_c2_0
+!load /home/dudu/ss2/saves/svc/svc_c3_0.st
+360 -
+!s_svc_c3_0

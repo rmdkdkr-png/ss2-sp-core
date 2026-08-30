@@ -1,0 +1,5 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+60 -
+!poke 0AB4=250
+10 -
+!Z10

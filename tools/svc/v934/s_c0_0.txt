@@ -1,0 +1,11 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+90 -
+!Sc0_0_a
+120 R
+!Sc0_0_b
+120 R
+!Sc0_0_c
+200 L
+!Sc0_0_d
+200 L
+!Sc0_0_e

@@ -1,0 +1,20 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+30 -
+!p svc_fight_idle
+60 R
+!p svc_fight_R
+60 L
+!p svc_fight_L
+6 U R
+30 -
+!p svc_fight_J
+20 A
+!p svc_fight_A
+20 B
+!p svc_fight_B
+20 D
+!p svc_fight_D
+200 R
+!p svc_fight_RR
+200 L
+!p svc_fight_LL

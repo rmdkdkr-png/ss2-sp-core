@@ -1,0 +1,7 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+30 -
+!p A0
+300 L
+!p LWALL
+600 R
+!p RWALL

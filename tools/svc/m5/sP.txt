@@ -1,0 +1,10 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 092E=201
+!poke 092F=0
+!poke 0934=202
+!poke 0935=0
+!poke 0954=203
+!poke 0955=0
+!w poke
+!P1

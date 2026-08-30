@@ -1,0 +1,5 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 0C74=128
+2 -
+!pk_c74

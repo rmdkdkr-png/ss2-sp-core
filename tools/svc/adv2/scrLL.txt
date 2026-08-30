@@ -1,0 +1,81 @@
+!load mid.st
+5 L
+!LL00
+5 L
+!LL01
+5 L
+!LL02
+5 L
+!LL03
+5 L
+!LL04
+5 L
+!LL05
+5 L
+!LL06
+5 L
+!LL07
+5 L
+!LL08
+5 L
+!LL09
+5 L
+!LL10
+5 L
+!LL11
+5 L
+!LL12
+5 L
+!LL13
+5 L
+!LL14
+5 L
+!LL15
+5 L
+!LL16
+5 L
+!LL17
+5 L
+!LL18
+5 L
+!LL19
+5 L
+!LL20
+5 L
+!LL21
+5 L
+!LL22
+5 L
+!LL23
+5 L
+!LL24
+5 L
+!LL25
+5 L
+!LL26
+5 L
+!LL27
+5 L
+!LL28
+5 L
+!LL29
+5 L
+!LL30
+5 L
+!LL31
+5 L
+!LL32
+5 L
+!LL33
+5 L
+!LL34
+5 L
+!LL35
+5 L
+!LL36
+5 L
+!LL37
+5 L
+!LL38
+5 L
+!LL39

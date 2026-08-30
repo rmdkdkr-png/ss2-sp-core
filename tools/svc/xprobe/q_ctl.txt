@@ -1,0 +1,4 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+10 -
+!q_ctl

@@ -1,0 +1,12 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+320 -
+!L0
+60 R
+20 -
+!L1
+60 R
+20 -
+!L2
+120 L
+20 -
+!L3

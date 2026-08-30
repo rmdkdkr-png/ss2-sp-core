@@ -1,0 +1,8 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+220 L
+30 -
+300 R
+30 -
+!save mid.st
+!MID

@@ -1,0 +1,35 @@
+!load /home/dudu/ss2/saves/svc/svc_c1_3.st
+60 -
+!G_svc_c1_3_0
+15 R
+!G_svc_c1_3_1
+15 R
+!G_svc_c1_3_2
+15 R
+!G_svc_c1_3_3
+15 R
+!G_svc_c1_3_4
+15 R
+!G_svc_c1_3_5
+15 R
+!G_svc_c1_3_6
+15 R
+!G_svc_c1_3_7
+15 R
+!G_svc_c1_3_8
+15 L
+!G_svc_c1_3_9
+15 L
+!G_svc_c1_3_10
+15 L
+!G_svc_c1_3_11
+15 L
+!G_svc_c1_3_12
+15 L
+!G_svc_c1_3_13
+15 L
+!G_svc_c1_3_14
+15 L
+!G_svc_c1_3_15
+15 L
+!G_svc_c1_3_16

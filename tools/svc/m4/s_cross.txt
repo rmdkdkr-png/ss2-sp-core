@@ -1,0 +1,50 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+60 R
+4 -
+!w close60
+30 U R
+30 R
+20 -
+!w cross60
+!X60
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+4 -
+!w close90
+30 U R
+30 R
+20 -
+!w cross90
+!X90
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+120 R
+4 -
+!w close120
+30 U R
+30 R
+20 -
+!w cross120
+!X120
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+150 R
+4 -
+!w close150
+30 U R
+30 R
+20 -
+!w cross150
+!X150
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+180 R
+4 -
+!w close180
+30 U R
+30 R
+20 -
+!w cross180
+!X180

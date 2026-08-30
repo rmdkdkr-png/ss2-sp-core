@@ -1,0 +1,5 @@
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+20 -
+!poke AB0=94
+1 -
+!K1

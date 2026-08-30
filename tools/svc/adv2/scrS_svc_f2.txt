@@ -1,0 +1,30 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+60 -
+15 L
+!S_svc_f2_L0
+15 L
+!S_svc_f2_L1
+15 L
+!S_svc_f2_L2
+15 L
+!S_svc_f2_L3
+15 L
+!S_svc_f2_L4
+15 L
+!S_svc_f2_L5
+25 R
+!S_svc_f2_R0
+25 R
+!S_svc_f2_R1
+25 R
+!S_svc_f2_R2
+25 R
+!S_svc_f2_R3
+25 R
+!S_svc_f2_R4
+25 R
+!S_svc_f2_R5
+25 R
+!S_svc_f2_R6
+25 R
+!S_svc_f2_R7

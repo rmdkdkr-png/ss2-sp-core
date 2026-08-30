@@ -1,0 +1,11 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+!lab s
+90 -
+!lab toL
+240 L
+!lab wait
+420 -
+!lab toR
+700 R
+!lab end
+60 -

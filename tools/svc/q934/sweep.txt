@@ -1,0 +1,222 @@
+=== svc_c0_0.st
+  00 chr  0/10 hp 42/48 y1=128 | P1 scr= 32 wld= 94 | P2 scr= 90 wld=152 | cam  62/ 62 | P1scr-P2scr= -58 P1wld-P2wld= -58
+  01 chr  0/10 hp 42/48 y1=128 | P1 scr= 75 wld=137 | P2 scr= 93 wld=155 | cam  62/ 62 | P1scr-P2scr= -18 P1wld-P2wld= -18
+  02 chr  0/10 hp 42/48 y1=128 | P1 scr= 79 wld=141 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -17 P1wld-P2wld= -17
+  03 chr  0/10 hp 42/48 y1=128 | P1 scr= 76 wld=138 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -20 P1wld-P2wld= -20
+  04 chr  0/10 hp 40/48 y1=128 | P1 scr= 65 wld=127 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -31 P1wld-P2wld= -31
+  05 chr  0/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=102 wld=164 | cam  62/ 62 | P1scr-P2scr= -39 P1wld-P2wld= -39
+  06 chr  0/10 hp 39/48 y1=128 | P1 scr= 70 wld=132 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -42 P1wld-P2wld= -42
+  07 chr  0/10 hp 39/48 y1=128 | P1 scr= 70 wld=132 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -42 P1wld-P2wld= -42
+  08 chr  0/10 hp 39/48 y1=128 | P1 scr= 67 wld=129 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -45 P1wld-P2wld= -45
+  09 chr  0/10 hp 39/48 y1=128 | P1 scr= 67 wld=129 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -45 P1wld-P2wld= -45
+  10 chr  0/10 hp 39/48 y1= 88 | P1 scr= 67 wld=129 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -45 P1wld-P2wld= -45
+  11 chr  0/10 hp 39/48 y1=128 | P1 scr= 67 wld=129 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -45 P1wld-P2wld= -45
+  12 chr  0/10 hp 39/48 y1=128 | P1 scr= 58 wld=120 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -54 P1wld-P2wld= -54
+  13 chr  0/10 hp 33/48 y1=128 | P1 scr= 55 wld=117 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -57 P1wld-P2wld= -57
+  14 chr  0/10 hp 33/48 y1= 90 | P1 scr= 35 wld= 97 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -77 P1wld-P2wld= -77
+  15 chr  0/10 hp 33/48 y1= 99 | P1 scr= 28 wld= 67 | P2 scr=127 wld=166 | cam  39/ 39 | P1scr-P2scr= -99 P1wld-P2wld= -99
+  16 chr  0/10 hp 33/48 y1=128 | P1 scr= 16 wld= 45 | P2 scr=137 wld=166 | cam  29/ 29 | P1scr-P2scr=-121 P1wld-P2wld=-121
+  17 chr  0/10 hp 33/48 y1=128 | P1 scr= 20 wld= 45 | P2 scr=141 wld=166 | cam  25/ 25 | P1scr-P2scr=-121 P1wld-P2wld=-121
+  18 chr  0/10 hp 33/48 y1=128 | P1 scr= 47 wld= 85 | P2 scr=128 wld=166 | cam  38/ 38 | P1scr-P2scr= -81 P1wld-P2wld= -81
+  19 chr  0/10 hp 33/48 y1=128 | P1 scr= 53 wld= 91 | P2 scr=128 wld=166 | cam  38/ 38 | P1scr-P2scr= -75 P1wld-P2wld= -75
+  20 chr  0/10 hp 33/48 y1=128 | P1 scr= 61 wld= 99 | P2 scr=128 wld=166 | cam  38/ 38 | P1scr-P2scr= -67 P1wld-P2wld= -67
+=== svc_c1_0.st
+  00 chr  1/10 hp 42/48 y1=128 | P1 scr= 32 wld= 94 | P2 scr= 90 wld=152 | cam  62/ 62 | P1scr-P2scr= -58 P1wld-P2wld= -58
+  01 chr  1/10 hp 42/48 y1=128 | P1 scr= 75 wld=137 | P2 scr= 93 wld=155 | cam  62/ 62 | P1scr-P2scr= -18 P1wld-P2wld= -18
+  02 chr  1/10 hp 42/48 y1=128 | P1 scr= 79 wld=141 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -17 P1wld-P2wld= -17
+  03 chr  1/10 hp 42/48 y1=128 | P1 scr= 76 wld=138 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -20 P1wld-P2wld= -20
+  04 chr  1/10 hp 40/48 y1=128 | P1 scr= 65 wld=127 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -31 P1wld-P2wld= -31
+  05 chr  1/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=102 wld=164 | cam  62/ 62 | P1scr-P2scr= -39 P1wld-P2wld= -39
+  06 chr  1/10 hp 39/48 y1=128 | P1 scr= 70 wld=132 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -42 P1wld-P2wld= -42
+  07 chr  1/10 hp 39/42 y1=128 | P1 scr= 70 wld=132 | P2 scr=128 wld=190 | cam  62/ 62 | P1scr-P2scr= -58 P1wld-P2wld= -58
+  08 chr  1/10 hp 39/42 y1=128 | P1 scr= 50 wld=132 | P2 scr=130 wld=212 | cam  82/ 82 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  09 chr  1/10 hp 39/42 y1=128 | P1 scr= 46 wld=132 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -82 P1wld-P2wld= -82
+  10 chr  1/10 hp 39/42 y1= 94 | P1 scr= 46 wld=132 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -82 P1wld-P2wld= -82
+  11 chr  1/10 hp 39/42 y1=128 | P1 scr= 46 wld=132 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -82 P1wld-P2wld= -82
+  12 chr  1/10 hp 39/42 y1=128 | P1 scr= 46 wld=132 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -82 P1wld-P2wld= -82
+  13 chr  1/10 hp 39/42 y1=128 | P1 scr= 93 wld=179 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -35 P1wld-P2wld= -35
+  14 chr  1/10 hp 39/42 y1= 90 | P1 scr= 73 wld=159 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -55 P1wld-P2wld= -55
+  15 chr  1/10 hp 39/42 y1= 99 | P1 scr= 43 wld=129 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -85 P1wld-P2wld= -85
+  16 chr  1/10 hp 39/42 y1=128 | P1 scr= 16 wld= 88 | P2 scr=142 wld=214 | cam  72/ 72 | P1scr-P2scr=-126 P1wld-P2wld=-126
+  17 chr  1/10 hp 39/42 y1=128 | P1 scr= 17 wld= 87 | P2 scr=144 wld=214 | cam  70/ 70 | P1scr-P2scr=-127 P1wld-P2wld=-127
+  18 chr  1/10 hp 39/42 y1=128 | P1 scr= 41 wld=127 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -87 P1wld-P2wld= -87
+  19 chr  1/10 hp 39/42 y1=128 | P1 scr= 51 wld=137 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -77 P1wld-P2wld= -77
+  20 chr  1/10 hp 39/42 y1=128 | P1 scr= 70 wld=156 | P2 scr=128 wld=214 | cam  86/ 86 | P1scr-P2scr= -58 P1wld-P2wld= -58
+=== svc_c2_0.st
+  00 chr 12/10 hp 42/48 y1=128 | P1 scr= 32 wld= 94 | P2 scr= 90 wld=152 | cam  62/ 62 | P1scr-P2scr= -58 P1wld-P2wld= -58
+  01 chr 12/10 hp 42/48 y1=128 | P1 scr= 75 wld=137 | P2 scr= 93 wld=155 | cam  62/ 62 | P1scr-P2scr= -18 P1wld-P2wld= -18
+  02 chr 12/10 hp 42/48 y1=128 | P1 scr= 79 wld=141 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -17 P1wld-P2wld= -17
+  03 chr 12/10 hp 42/48 y1=128 | P1 scr= 76 wld=138 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -20 P1wld-P2wld= -20
+  04 chr 12/10 hp 40/48 y1=128 | P1 scr= 65 wld=127 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -31 P1wld-P2wld= -31
+  05 chr 12/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=102 wld=164 | cam  62/ 62 | P1scr-P2scr= -39 P1wld-P2wld= -39
+  06 chr 12/10 hp 39/48 y1=128 | P1 scr= 70 wld=132 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -42 P1wld-P2wld= -42
+  07 chr 12/10 hp 39/48 y1=128 | P1 scr= 67 wld=129 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -45 P1wld-P2wld= -45
+  08 chr 12/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -49 P1wld-P2wld= -49
+  09 chr 12/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -49 P1wld-P2wld= -49
+  10 chr 12/10 hp 39/48 y1= 94 | P1 scr= 63 wld=125 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -49 P1wld-P2wld= -49
+  11 chr 12/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -49 P1wld-P2wld= -49
+  12 chr 12/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -49 P1wld-P2wld= -49
+  13 chr 12/10 hp 39/48 y1=128 | P1 scr=103 wld=165 | P2 scr=120 wld=182 | cam  62/ 62 | P1scr-P2scr= -17 P1wld-P2wld= -17
+  14 chr 12/10 hp 39/48 y1= 90 | P1 scr= 81 wld=143 | P2 scr=121 wld=183 | cam  62/ 62 | P1scr-P2scr= -40 P1wld-P2wld= -40
+  15 chr 12/10 hp 39/48 y1= 99 | P1 scr= 51 wld=113 | P2 scr=121 wld=183 | cam  62/ 62 | P1scr-P2scr= -70 P1wld-P2wld= -70
+  16 chr 12/10 hp 39/48 y1=128 | P1 scr= 16 wld= 87 | P2 scr=137 wld=208 | cam  71/ 71 | P1scr-P2scr=-121 P1wld-P2wld=-121
+  17 chr 12/10 hp 39/48 y1=128 | P1 scr= 22 wld= 84 | P2 scr=134 wld=196 | cam  62/ 62 | P1scr-P2scr=-112 P1wld-P2wld=-112
+  18 chr 12/10 hp 39/48 y1=128 | P1 scr= 59 wld=127 | P2 scr=128 wld=196 | cam  68/ 68 | P1scr-P2scr= -69 P1wld-P2wld= -69
+  19 chr 12/10 hp 39/48 y1=128 | P1 scr= 68 wld=136 | P2 scr=128 wld=196 | cam  68/ 68 | P1scr-P2scr= -60 P1wld-P2wld= -60
+  20 chr 12/10 hp 39/42 y1=128 | P1 scr= 87 wld=155 | P2 scr=132 wld=200 | cam  68/ 68 | P1scr-P2scr= -45 P1wld-P2wld= -45
+=== svc_c3_0.st
+  00 chr  9/10 hp 42/48 y1=128 | P1 scr= 32 wld= 94 | P2 scr= 90 wld=152 | cam  62/ 62 | P1scr-P2scr= -58 P1wld-P2wld= -58
+  01 chr  9/10 hp 42/48 y1=128 | P1 scr= 75 wld=137 | P2 scr= 93 wld=155 | cam  62/ 62 | P1scr-P2scr= -18 P1wld-P2wld= -18
+  02 chr  9/10 hp 42/48 y1=128 | P1 scr= 79 wld=141 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -17 P1wld-P2wld= -17
+  03 chr  9/10 hp 42/48 y1=128 | P1 scr= 74 wld=136 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -22 P1wld-P2wld= -22
+  04 chr  9/10 hp 40/48 y1=128 | P1 scr= 65 wld=127 | P2 scr= 96 wld=158 | cam  62/ 62 | P1scr-P2scr= -31 P1wld-P2wld= -31
+  05 chr  9/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=102 wld=164 | cam  62/ 62 | P1scr-P2scr= -39 P1wld-P2wld= -39
+  06 chr  9/10 hp 39/48 y1=128 | P1 scr= 70 wld=132 | P2 scr=113 wld=175 | cam  62/ 62 | P1scr-P2scr= -43 P1wld-P2wld= -43
+  07 chr  9/10 hp 39/48 y1=128 | P1 scr= 63 wld=125 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -49 P1wld-P2wld= -49
+  08 chr  9/10 hp 39/48 y1=128 | P1 scr= 60 wld=122 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -52 P1wld-P2wld= -52
+  09 chr  9/10 hp 39/48 y1=128 | P1 scr= 60 wld=122 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -52 P1wld-P2wld= -52
+  10 chr  9/10 hp 39/48 y1= 90 | P1 scr= 60 wld=122 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -52 P1wld-P2wld= -52
+  11 chr  9/10 hp 39/48 y1=128 | P1 scr= 60 wld=122 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -52 P1wld-P2wld= -52
+  12 chr  9/10 hp 39/48 y1=128 | P1 scr= 60 wld=122 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -52 P1wld-P2wld= -52
+  13 chr  9/10 hp 39/48 y1=128 | P1 scr=103 wld=165 | P2 scr=100 wld=162 | cam  62/ 62 | P1scr-P2scr=  +3 P1wld-P2wld=  +3
+  14 chr  9/10 hp 39/48 y1=128 | P1 scr=122 wld=184 | P2 scr= 90 wld=152 | cam  62/ 62 | P1scr-P2scr= +32 P1wld-P2wld= +32
+  15 chr  9/10 hp 33/48 y1=128 | P1 scr=128 wld=191 | P2 scr= 74 wld=137 | cam  63/ 63 | P1scr-P2scr= +54 P1wld-P2wld= +54
+  16 chr  9/10 hp 33/48 y1=128 | P1 scr= 88 wld=151 | P2 scr= 54 wld=117 | cam  63/ 63 | P1scr-P2scr= +34 P1wld-P2wld= +34
+  17 chr  9/10 hp 33/48 y1=128 | P1 scr= 85 wld=148 | P2 scr= 54 wld=117 | cam  63/ 63 | P1scr-P2scr= +31 P1wld-P2wld= +31
+  18 chr  9/10 hp 33/48 y1=128 | P1 scr=128 wld=191 | P2 scr= 54 wld=117 | cam  63/ 63 | P1scr-P2scr= +74 P1wld-P2wld= +74
+  19 chr  9/10 hp 33/48 y1=128 | P1 scr=128 wld=198 | P2 scr= 51 wld=121 | cam  70/ 70 | P1scr-P2scr= +77 P1wld-P2wld= +77
+  20 chr  9/10 hp 33/48 y1=128 | P1 scr=128 wld=198 | P2 scr= 51 wld=121 | cam  70/ 70 | P1scr-P2scr= +77 P1wld-P2wld= +77
+=== svc_c1_3.st
+  00 chr  8/10 hp 42/48 y1=128 | P1 scr= 32 wld= 94 | P2 scr= 90 wld=152 | cam  62/ 62 | P1scr-P2scr= -58 P1wld-P2wld= -58
+  01 chr  8/10 hp 42/48 y1=128 | P1 scr= 78 wld=140 | P2 scr= 95 wld=157 | cam  62/ 62 | P1scr-P2scr= -17 P1wld-P2wld= -17
+  02 chr  8/10 hp 42/48 y1=128 | P1 scr= 81 wld=143 | P2 scr= 99 wld=161 | cam  62/ 62 | P1scr-P2scr= -18 P1wld-P2wld= -18
+  03 chr  8/10 hp 42/48 y1=128 | P1 scr= 76 wld=138 | P2 scr= 99 wld=161 | cam  62/ 62 | P1scr-P2scr= -23 P1wld-P2wld= -23
+  04 chr  8/10 hp 40/48 y1=128 | P1 scr= 68 wld=130 | P2 scr= 99 wld=161 | cam  62/ 62 | P1scr-P2scr= -31 P1wld-P2wld= -31
+  05 chr  8/10 hp 39/48 y1=128 | P1 scr= 68 wld=130 | P2 scr=104 wld=166 | cam  62/ 62 | P1scr-P2scr= -36 P1wld-P2wld= -36
+  06 chr  8/10 hp 39/48 y1=128 | P1 scr= 99 wld=161 | P2 scr=116 wld=178 | cam  62/ 62 | P1scr-P2scr= -17 P1wld-P2wld= -17
+  07 chr  8/10 hp 39/38 y1=128 | P1 scr= 96 wld=159 | P2 scr=130 wld=193 | cam  63/ 63 | P1scr-P2scr= -34 P1wld-P2wld= -34
+  08 chr  8/10 hp 39/38 y1=128 | P1 scr= 79 wld=164 | P2 scr=130 wld=215 | cam  85/ 85 | P1scr-P2scr= -51 P1wld-P2wld= -51
+  09 chr  8/10 hp 39/32 y1=128 | P1 scr=109 wld=198 | P2 scr=130 wld=219 | cam  89/ 89 | P1scr-P2scr= -21 P1wld-P2wld= -21
+  10 chr  8/10 hp 39/32 y1=128 | P1 scr=131 wld=275 | P2 scr=106 wld=250 | cam 144/144 | P1scr-P2scr= +25 P1wld-P2wld= +25
+  11 chr  8/10 hp 39/32 y1=128 | P1 scr=128 wld=282 | P2 scr=111 wld=265 | cam 154/154 | P1scr-P2scr= +17 P1wld-P2wld= +17
+  12 chr  8/10 hp 39/32 y1=128 | P1 scr=128 wld=283 | P2 scr=110 wld=265 | cam 155/155 | P1scr-P2scr= +18 P1wld-P2wld= +18
+  13 chr  8/10 hp 39/32 y1=128 | P1 scr=128 wld=287 | P2 scr=106 wld=265 | cam 159/159 | P1scr-P2scr= +22 P1wld-P2wld= +22
+  14 chr  8/10 hp 39/32 y1=128 | P1 scr=144 wld=304 | P2 scr=105 wld=265 | cam 160/160 | P1scr-P2scr= +39 P1wld-P2wld= +39
+  15 chr  8/10 hp 38/32 y1=128 | P1 scr=143 wld=303 | P2 scr=105 wld=265 | cam 160/160 | P1scr-P2scr= +38 P1wld-P2wld= +38
+  16 chr  8/10 hp 38/23 y1=128 | P1 scr=124 wld=284 | P2 scr= 95 wld=255 | cam 160/160 | P1scr-P2scr= +29 P1wld-P2wld= +29
+  17 chr  8/10 hp 38/23 y1=128 | P1 scr=127 wld=287 | P2 scr= 78 wld=238 | cam 160/160 | P1scr-P2scr= +49 P1wld-P2wld= +49
+  18 chr  8/10 hp 38/23 y1=128 | P1 scr=144 wld=304 | P2 scr= 86 wld=246 | cam 160/160 | P1scr-P2scr= +58 P1wld-P2wld= +58
+  19 chr  8/10 hp 38/23 y1=128 | P1 scr=144 wld=304 | P2 scr= 86 wld=246 | cam 160/160 | P1scr-P2scr= +58 P1wld-P2wld= +58
+  20 chr  8/10 hp 38/23 y1=128 | P1 scr=144 wld=304 | P2 scr= 86 wld=246 | cam 160/160 | P1scr-P2scr= +58 P1wld-P2wld= +58
+=== svc_c2_5.st
+  00 chr 17/10 hp 42/48 y1=128 | P1 scr= 32 wld= 94 | P2 scr= 90 wld=152 | cam  62/ 62 | P1scr-P2scr= -58 P1wld-P2wld= -58
+  01 chr 17/10 hp 42/48 y1=128 | P1 scr= 75 wld=137 | P2 scr= 91 wld=153 | cam  62/ 62 | P1scr-P2scr= -16 P1wld-P2wld= -16
+  02 chr 17/10 hp 42/48 y1=128 | P1 scr= 77 wld=139 | P2 scr= 95 wld=157 | cam  62/ 62 | P1scr-P2scr= -18 P1wld-P2wld= -18
+  03 chr 17/10 hp 42/48 y1=128 | P1 scr= 72 wld=134 | P2 scr= 95 wld=157 | cam  62/ 62 | P1scr-P2scr= -23 P1wld-P2wld= -23
+  04 chr 17/10 hp 40/48 y1=128 | P1 scr= 63 wld=125 | P2 scr= 95 wld=157 | cam  62/ 62 | P1scr-P2scr= -32 P1wld-P2wld= -32
+  05 chr 17/10 hp 39/48 y1=128 | P1 scr= 61 wld=123 | P2 scr=101 wld=163 | cam  62/ 62 | P1scr-P2scr= -40 P1wld-P2wld= -40
+  06 chr 17/10 hp 39/48 y1=128 | P1 scr= 67 wld=129 | P2 scr=112 wld=174 | cam  62/ 62 | P1scr-P2scr= -45 P1wld-P2wld= -45
+  07 chr 17/10 hp 39/42 y1=128 | P1 scr= 67 wld=129 | P2 scr=128 wld=190 | cam  62/ 62 | P1scr-P2scr= -61 P1wld-P2wld= -61
+  08 chr 17/10 hp 39/42 y1=128 | P1 scr= 47 wld=129 | P2 scr=130 wld=212 | cam  82/ 82 | P1scr-P2scr= -83 P1wld-P2wld= -83
+  09 chr 17/10 hp 39/42 y1=128 | P1 scr= 45 wld=129 | P2 scr=128 wld=212 | cam  84/ 84 | P1scr-P2scr= -83 P1wld-P2wld= -83
+  10 chr 17/10 hp 39/42 y1=128 | P1 scr= 45 wld=129 | P2 scr=128 wld=212 | cam  84/ 84 | P1scr-P2scr= -83 P1wld-P2wld= -83
+  11 chr 17/10 hp 39/42 y1=128 | P1 scr= 34 wld=118 | P2 scr=128 wld=212 | cam  84/ 84 | P1scr-P2scr= -94 P1wld-P2wld= -94
+  12 chr 17/10 hp 39/42 y1=128 | P1 scr= 23 wld= 97 | P2 scr=134 wld=208 | cam  74/ 74 | P1scr-P2scr=-111 P1wld-P2wld=-111
+  13 chr 17/10 hp 39/42 y1=128 | P1 scr= 66 wld=142 | P2 scr=128 wld=204 | cam  76/ 76 | P1scr-P2scr= -62 P1wld-P2wld= -62
+  14 chr 17/10 hp 39/42 y1= 93 | P1 scr= 47 wld=123 | P2 scr=128 wld=204 | cam  76/ 76 | P1scr-P2scr= -81 P1wld-P2wld= -81
+  15 chr 17/10 hp 39/42 y1= 96 | P1 scr= 25 wld= 97 | P2 scr=132 wld=204 | cam  72/ 72 | P1scr-P2scr=-107 P1wld-P2wld=-107
+  16 chr 17/10 hp 39/42 y1=128 | P1 scr= 16 wld= 72 | P2 scr=144 wld=200 | cam  56/ 56 | P1scr-P2scr=-128 P1wld-P2wld=-128
+  17 chr 17/10 hp 39/42 y1=128 | P1 scr= 22 wld= 72 | P2 scr=135 wld=185 | cam  50/ 50 | P1scr-P2scr=-113 P1wld-P2wld=-113
+  18 chr 17/10 hp 39/42 y1=128 | P1 scr= 70 wld=114 | P2 scr= 85 wld=129 | cam  44/ 44 | P1scr-P2scr= -15 P1wld-P2wld= -15
+  19 chr 17/10 hp 39/42 y1=128 | P1 scr= 64 wld=108 | P2 scr= 81 wld=125 | cam  44/ 44 | P1scr-P2scr= -17 P1wld-P2wld= -17
+  20 chr 17/10 hp 39/42 y1=128 | P1 scr= 64 wld=108 | P2 scr= 81 wld=125 | cam  44/ 44 | P1scr-P2scr= -17 P1wld-P2wld= -17
+=== svc_f2.st
+  00 chr  0/10 hp 42/48 y1=128 | P1 scr= 32 wld= 94 | P2 scr= 78 wld=140 | cam  62/ 62 | P1scr-P2scr= -46 P1wld-P2wld= -46
+  01 chr  0/10 hp 39/48 y1=128 | P1 scr= 27 wld= 89 | P2 scr= 78 wld=140 | cam  62/ 62 | P1scr-P2scr= -51 P1wld-P2wld= -51
+  02 chr  0/10 hp 39/48 y1=128 | P1 scr= 34 wld= 96 | P2 scr= 78 wld=140 | cam  62/ 62 | P1scr-P2scr= -44 P1wld-P2wld= -44
+  03 chr  0/10 hp 39/48 y1=128 | P1 scr= 29 wld= 80 | P2 scr= 89 wld=140 | cam  51/ 51 | P1scr-P2scr= -60 P1wld-P2wld= -60
+  04 chr  0/10 hp 34/48 y1=128 | P1 scr= 32 wld= 70 | P2 scr=127 wld=165 | cam  38/ 38 | P1scr-P2scr= -95 P1wld-P2wld= -95
+  05 chr  0/10 hp 34/48 y1= 86 | P1 scr= 28 wld=108 | P2 scr=142 wld=222 | cam  80/ 80 | P1scr-P2scr=-114 P1wld-P2wld=-114
+  06 chr  0/10 hp 34/48 y1=128 | P1 scr= 45 wld=139 | P2 scr=123 wld=217 | cam  94/ 94 | P1scr-P2scr= -78 P1wld-P2wld= -78
+  07 chr  0/10 hp 34/48 y1=128 | P1 scr= 18 wld= 96 | P2 scr=139 wld=217 | cam  78/ 78 | P1scr-P2scr=-121 P1wld-P2wld=-121
+  08 chr  0/10 hp 34/48 y1=128 | P1 scr= 22 wld= 92 | P2 scr=139 wld=209 | cam  70/ 70 | P1scr-P2scr=-117 P1wld-P2wld=-117
+  09 chr  0/10 hp 34/48 y1=128 | P1 scr= 22 wld= 92 | P2 scr=139 wld=209 | cam  70/ 70 | P1scr-P2scr=-117 P1wld-P2wld=-117
+  10 chr  0/10 hp 34/48 y1= 86 | P1 scr= 22 wld= 92 | P2 scr=139 wld=209 | cam  70/ 70 | P1scr-P2scr=-117 P1wld-P2wld=-117
+  11 chr  0/10 hp 34/48 y1=128 | P1 scr= 22 wld= 92 | P2 scr=139 wld=209 | cam  70/ 70 | P1scr-P2scr=-117 P1wld-P2wld=-117
+  12 chr  0/10 hp 34/48 y1=128 | P1 scr= 22 wld= 92 | P2 scr=139 wld=209 | cam  70/ 70 | P1scr-P2scr=-117 P1wld-P2wld=-117
+  13 chr  0/10 hp 34/48 y1=128 | P1 scr= 58 wld=139 | P2 scr=128 wld=209 | cam  81/ 81 | P1scr-P2scr= -70 P1wld-P2wld= -70
+  14 chr  0/10 hp 34/48 y1= 90 | P1 scr= 39 wld=120 | P2 scr=128 wld=209 | cam  81/ 81 | P1scr-P2scr= -89 P1wld-P2wld= -89
+  15 chr  0/10 hp 34/48 y1= 94 | P1 scr= 20 wld= 93 | P2 scr=136 wld=209 | cam  73/ 73 | P1scr-P2scr=-116 P1wld-P2wld=-116
+  16 chr  0/10 hp 34/48 y1=128 | P1 scr= 16 wld= 81 | P2 scr=144 wld=209 | cam  65/ 65 | P1scr-P2scr=-128 P1wld-P2wld=-128
+  17 chr  0/10 hp 34/48 y1=128 | P1 scr= 16 wld= 81 | P2 scr=144 wld=209 | cam  65/ 65 | P1scr-P2scr=-128 P1wld-P2wld=-128
+  18 chr  0/10 hp 34/48 y1=128 | P1 scr= 40 wld=121 | P2 scr=128 wld=209 | cam  81/ 81 | P1scr-P2scr= -88 P1wld-P2wld= -88
+  19 chr  0/10 hp 34/48 y1=128 | P1 scr= 46 wld=127 | P2 scr=128 wld=209 | cam  81/ 81 | P1scr-P2scr= -82 P1wld-P2wld= -82
+  20 chr  0/10 hp 34/48 y1=128 | P1 scr= 54 wld=135 | P2 scr=128 wld=209 | cam  81/ 81 | P1scr-P2scr= -74 P1wld-P2wld= -74
+=== svc_fight.st
+  00 chr  0/10 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  01 chr  0/10 hp 48/48 y1=128 | P1 scr= 56 wld=136 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -64 P1wld-P2wld= -64
+  02 chr  0/10 hp 48/48 y1=128 | P1 scr= 63 wld=143 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -57 P1wld-P2wld= -57
+  03 chr  0/10 hp 48/48 y1=128 | P1 scr= 63 wld=143 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -57 P1wld-P2wld= -57
+  04 chr  0/10 hp 48/41 y1=128 | P1 scr= 67 wld=147 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -53 P1wld-P2wld= -53
+  05 chr  0/10 hp 48/41 y1=128 | P1 scr= 70 wld=167 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -58 P1wld-P2wld= -58
+  06 chr  0/10 hp 48/41 y1=128 | P1 scr= 77 wld=174 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -51 P1wld-P2wld= -51
+  07 chr  0/10 hp 48/41 y1=128 | P1 scr= 77 wld=174 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -51 P1wld-P2wld= -51
+  08 chr  0/10 hp 41/41 y1=128 | P1 scr= 52 wld=149 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -76 P1wld-P2wld= -76
+  09 chr  0/10 hp 41/41 y1=111 | P1 scr= 52 wld=149 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -76 P1wld-P2wld= -76
+  10 chr  0/10 hp 41/41 y1= 99 | P1 scr= 52 wld=149 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -76 P1wld-P2wld= -76
+  11 chr  0/10 hp 41/41 y1=128 | P1 scr= 52 wld=149 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -76 P1wld-P2wld= -76
+  12 chr  0/10 hp 41/41 y1=128 | P1 scr= 52 wld=149 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -76 P1wld-P2wld= -76
+  13 chr  0/10 hp 41/41 y1=128 | P1 scr= 98 wld=195 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -30 P1wld-P2wld= -30
+  14 chr  0/10 hp 41/41 y1=128 | P1 scr= 97 wld=194 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -31 P1wld-P2wld= -31
+  15 chr  0/10 hp 40/41 y1=128 | P1 scr= 88 wld=185 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -40 P1wld-P2wld= -40
+  16 chr  0/10 hp 38/41 y1=128 | P1 scr= 66 wld=163 | P2 scr=128 wld=225 | cam  97/ 97 | P1scr-P2scr= -62 P1wld-P2wld= -62
+  17 chr  0/10 hp 38/41 y1=128 | P1 scr= 63 wld=160 | P2 scr=116 wld=213 | cam  97/ 97 | P1scr-P2scr= -53 P1wld-P2wld= -53
+  18 chr  0/10 hp 35/41 y1=128 | P1 scr= 61 wld=158 | P2 scr=116 wld=213 | cam  97/ 97 | P1scr-P2scr= -55 P1wld-P2wld= -55
+  19 chr  0/10 hp 35/41 y1=128 | P1 scr= 68 wld=165 | P2 scr=116 wld=213 | cam  97/ 97 | P1scr-P2scr= -48 P1wld-P2wld= -48
+  20 chr  0/10 hp 35/35 y1=128 | P1 scr= 72 wld=169 | P2 scr=116 wld=213 | cam  97/ 97 | P1scr-P2scr= -44 P1wld-P2wld= -44
+=== svc_spar2.st
+  00 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  01 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  02 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  03 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  04 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  05 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  06 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  07 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  08 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  09 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  10 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  11 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  12 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  13 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  14 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  15 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  16 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  17 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  18 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  19 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  20 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+=== svc_spar3.st
+  00 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  01 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  02 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  03 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  04 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  05 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  06 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  07 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  08 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  09 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  10 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  11 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  12 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 40 wld=120 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -80 P1wld-P2wld= -80
+  13 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 86 wld=166 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -34 P1wld-P2wld= -34
+  14 chr  0/ 9 hp 48/48 y1= 90 | P1 scr= 67 wld=147 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -53 P1wld-P2wld= -53
+  15 chr  0/ 9 hp 48/48 y1= 99 | P1 scr= 36 wld=116 | P2 scr=120 wld=200 | cam  80/ 80 | P1scr-P2scr= -84 P1wld-P2wld= -84
+  16 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 27 wld= 94 | P2 scr=133 wld=200 | cam  67/ 67 | P1scr-P2scr=-106 P1wld-P2wld=-106
+  17 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 32 wld= 94 | P2 scr= 98 wld=160 | cam  62/ 62 | P1scr-P2scr= -66 P1wld-P2wld= -66
+  18 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 72 wld=134 | P2 scr= 52 wld=114 | cam  62/ 62 | P1scr-P2scr= +20 P1wld-P2wld= +20
+  19 chr  0/ 9 hp 48/48 y1=128 | P1 scr= 85 wld=141 | P2 scr= 28 wld= 84 | cam  56/ 56 | P1scr-P2scr= +57 P1wld-P2wld= +57
+  20 chr  0/ 9 hp 48/41 y1=128 | P1 scr= 85 wld=137 | P2 scr= 32 wld= 84 | cam  52/ 52 | P1scr-P2scr= +53 P1wld-P2wld= +53
+samples 210 cam mismatch 0 x1>x2 violations 0
+range of P1scr-P2scr: -128 77

@@ -1,0 +1,11 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+!lab idle
+60 -
+!lab walkR
+90 R
+!lab mid
+30 -
+!lab walkL
+120 L
+!lab end
+40 -

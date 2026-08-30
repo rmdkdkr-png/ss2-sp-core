@@ -1,0 +1,3 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+30 -
+!base

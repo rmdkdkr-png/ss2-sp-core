@@ -1,0 +1,20 @@
+!load /home/dudu/ss2/saves/svc/svc_psel.st
+30 -
+!p svc_psel_idle
+60 R
+!p svc_psel_R
+60 L
+!p svc_psel_L
+6 U R
+30 -
+!p svc_psel_J
+20 A
+!p svc_psel_A
+20 B
+!p svc_psel_B
+20 D
+!p svc_psel_D
+200 R
+!p svc_psel_RR
+200 L
+!p svc_psel_LL

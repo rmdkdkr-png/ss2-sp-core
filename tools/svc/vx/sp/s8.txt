@@ -1,0 +1,9 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+360 -
+!sp_a
+120 R
+!sp_R
+200 R
+!sp_RR
+260 L
+!sp_L

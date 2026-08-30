@@ -1,0 +1,32 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+30 -
+400 R
+20 -
+!J00
+4 U R
+4 R
+!J01
+4 R
+!J02
+4 R
+!J03
+4 R
+!J04
+4 R
+!J05
+4 R
+!J06
+4 R
+!J07
+4 R
+!J08
+4 R
+!J09
+4 R
+!J10
+4 R
+!J11
+4 R
+!J12
+40 -
+!J50

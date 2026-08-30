@@ -1,0 +1,52 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+40 -
+!O00
+4 U R
+!O01
+3 R
+!O02
+3 R
+!O03
+3 R
+!O04
+3 R
+!O05
+3 R
+!O06
+3 R
+!O07
+3 R
+!O08
+3 R
+!O09
+3 R
+!O10
+3 R
+!O11
+3 R
+!O12
+3 R
+!O13
+3 R
+!O14
+3 R
+!O15
+3 R
+!O16
+3 R
+!O17
+3 R
+!O18
+3 R
+!O19
+3 R
+!O20
+3 R
+!O21
+3 R
+!O22
+3 R
+!O23
+3 R
+!O24
+3 R

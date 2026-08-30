@@ -1,0 +1,69 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+20 -
+!w CTL_236A_pre
+3 D
+3 D R
+3 R
+3 R A
+4 -
+!w CTL_236A@4
+8 -
+!w CTL_236A@12
+10 -
+!w CTL_236A@22
+14 -
+!w CTL_236A@36
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+20 -
+3 D
+3 D L
+3 L
+3 L A
+4 -
+!w CTL_214A@4
+8 -
+!w CTL_214A@12
+10 -
+!w CTL_214A@22
+14 -
+!w CTL_214A@36
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+20 -
+!w XS_pre
+!XS_pre
+3 D
+3 D R
+3 R
+3 R A
+4 -
+!w XS_absR@4
+8 -
+!w XS_absR@12
+10 -
+!w XS_absR@22
+14 -
+!w XS_absR@36
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+20 -
+3 D
+3 D L
+3 L
+3 L A
+4 -
+!w XS_mirL@4
+8 -
+!w XS_mirL@12
+10 -
+!w XS_mirL@22
+14 -
+!w XS_mirL@36

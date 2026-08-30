@@ -1,0 +1,14 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+300 L
+60 -
+!p Q0
+!Q0
+40 -
+!p Q1
+!Q1
+40 -
+!p Q2
+!Q2
+40 -
+!p Q3
+!Q3

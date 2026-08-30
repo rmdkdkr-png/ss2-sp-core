@@ -1,0 +1,13 @@
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+!lab a
+30 -
+!F0
+!lab L
+150 L
+!F1
+!lab R
+200 R
+!F2
+!lab w
+200 -
+!F3

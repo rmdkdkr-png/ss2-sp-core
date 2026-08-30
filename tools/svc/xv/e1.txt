@@ -1,0 +1,15 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+20 -
+!a0
+30 R
+!a1
+30 R
+!a2
+30 R
+!a3
+60 L
+!a4
+60 L
+!a5
+60 L
+!a6

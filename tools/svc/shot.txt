@@ -1,0 +1,10 @@
+1 -
+!load /home/dudu/ss2/saves/ss2/gd7/f000.st
+180 -
+!shot_battle
+240 A
+120 -
+!shot_battle2
+8 D ST
+20 -
+!shot_menu

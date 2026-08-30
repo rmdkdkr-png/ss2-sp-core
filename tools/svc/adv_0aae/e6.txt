@@ -1,0 +1,30 @@
+!tag cross
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+4 R
+!X401
+16 R
+!X421
+10 R
+!X431
+!tag camA
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+21 -
+!camA0
+125 L
+!camA1

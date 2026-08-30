@@ -1,0 +1,8 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+60 -
+!Q0
+!poke 092E=90
+1 -
+!Q1
+30 -
+!Q2

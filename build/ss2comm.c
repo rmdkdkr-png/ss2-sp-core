@@ -58,15 +58,6 @@ void ss2comm_set_ram(void *p) { (void)p; }
    이 약한 무동작이 그대로 남아 링크 걱정이 없다. */
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((weak)) void ss2voice_say(const char *t, int p){ (void)t; (void)p; }
-/* 효과음 — 팩·엔진이 없는 빌드에서도 링크되게 약한 기본 정의를 둔다(ss2voice 와 같은 방식) */
-__attribute__((weak)) void ss2sfx_hit(int dmg){ (void)dmg; }
-
-/* 전투 이벤트 로그 — 소리 설계용 빈도 측정. SS2SFX_LOG=1 일 때만. */
-static int sfxlog_on(void){
-  static int v = -1;
-  if(v < 0){ const char *e = getenv("SS2SFX_LOG"); v = (e && *e == '1'); }
-  return v;
-}
 __attribute__((weak)) int  ss2voice_on(void){ return 0; }
 __attribute__((weak)) int  ss2voice_has_text(const char *t){ (void)t; return 0; }
 __attribute__((weak)) void ss2voice_say_parts(const char *a, const char *b, const char *c, int p){ (void)a;(void)b;(void)c;(void)p; }
@@ -1496,13 +1487,8 @@ const char *ss2comm_frame(void){
 
   hit2 = hp2 < p_hp2; hit1 = hp1 < p_hp1;
   /* 기둥 충격 — 맞은 쪽 일러가 쿵 흔들리고 큰 타격은 첫 프레임 하얗게 번쩍 */
-  /* 효과음은 **여기서** 낸다 — emit_ex 로 보내면 안 된다. 그쪽 첫 줄이 쿨다운
-     (cd[key] > cm_f)이라 해설용 억제에 걸려 연타가 씹힌다. 감지 원점이 맞는 자리다.
-     세기 구분은 기둥 흔들림이 쓰던 값을 그대로 넘긴다 — 화면과 소리가 같이 가야 한다. */
-  if(hit2){ int d = p_hp2-hp2; st_shk[1] = (unsigned char)(d >= 12 ? 12 : (d >= 4 ? 8 : 5)); ss2sfx_hit(d);
-            if(sfxlog_on()) fprintf(stderr, "[ev] %u HIT2 %d hp %d\n", (unsigned)cm_f, d, hp2); }
-  if(hit1){ int d = p_hp1-hp1; st_shk[0] = (unsigned char)(d >= 12 ? 12 : (d >= 4 ? 8 : 5)); ss2sfx_hit(d);
-            if(sfxlog_on()) fprintf(stderr, "[ev] %u HIT1 %d hp %d\n", (unsigned)cm_f, d, hp1); }
+  if(hit2){ int d = p_hp2-hp2; st_shk[1] = (unsigned char)(d >= 12 ? 12 : (d >= 4 ? 8 : 5)); }
+  if(hit1){ int d = p_hp1-hp1; st_shk[0] = (unsigned char)(d >= 12 ? 12 : (d >= 4 ? 8 : 5)); }
   /* v0.7 관전 기억 — 유효타만. pend_name 이 살아 있으면 그 기술로 친 것이다
      (아래 pend_take 가 가져가기 전에 세야 한다). */
   if(hit2 && (p_hp2-hp2)>=4) flow_hit(pend_name);

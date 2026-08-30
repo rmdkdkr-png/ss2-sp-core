@@ -1,0 +1,4 @@
+!tag walkL
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+20 -
+300 L

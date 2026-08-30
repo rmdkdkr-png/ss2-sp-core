@@ -1,0 +1,29 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+30 -
+150 L
+20 -
+!F00
+8 R
+!F01
+8 R
+!F02
+8 R
+!F03
+8 R
+!F04
+8 R
+!F05
+8 R
+!F06
+8 R
+!F07
+8 R
+!F08
+8 R
+!F09
+8 R
+!F10
+8 R
+!F11
+8 R
+!F12

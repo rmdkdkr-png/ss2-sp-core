@@ -1,0 +1,10 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+40 -
+!K0
+!poke 0934=232
+!poke 0935=0
+!K1
+2 -
+!K2
+10 -
+!K3

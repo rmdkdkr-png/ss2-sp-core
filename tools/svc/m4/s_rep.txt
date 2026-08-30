@@ -1,0 +1,10 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!w A60
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+20 -
+!w B40_20
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!w C60

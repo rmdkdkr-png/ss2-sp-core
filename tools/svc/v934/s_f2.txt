@@ -1,0 +1,11 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+90 -
+!Sf2_a
+120 R
+!Sf2_b
+120 R
+!Sf2_c
+200 L
+!Sf2_d
+200 L
+!Sf2_e

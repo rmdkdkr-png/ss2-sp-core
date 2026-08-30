@@ -1,0 +1,20 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+30 -
+!p svc_sparring_idle
+60 R
+!p svc_sparring_R
+60 L
+!p svc_sparring_L
+6 U R
+30 -
+!p svc_sparring_J
+20 A
+!p svc_sparring_A
+20 B
+!p svc_sparring_B
+20 D
+!p svc_sparring_D
+200 R
+!p svc_sparring_RR
+200 L
+!p svc_sparring_LL

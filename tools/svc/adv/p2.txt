@@ -1,0 +1,8 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!Q_base
+!poke 0934=180
+1 -
+!Q_x2a
+1 -
+!Q_x2b

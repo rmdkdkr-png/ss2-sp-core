@@ -1,0 +1,10 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+40 -
+!M0
+!poke 092E=152
+!poke 092F=0
+!M1
+2 -
+!M2
+10 -
+!M3

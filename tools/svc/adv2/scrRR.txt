@@ -1,0 +1,81 @@
+!load mid.st
+5 R
+!RR00
+5 R
+!RR01
+5 R
+!RR02
+5 R
+!RR03
+5 R
+!RR04
+5 R
+!RR05
+5 R
+!RR06
+5 R
+!RR07
+5 R
+!RR08
+5 R
+!RR09
+5 R
+!RR10
+5 R
+!RR11
+5 R
+!RR12
+5 R
+!RR13
+5 R
+!RR14
+5 R
+!RR15
+5 R
+!RR16
+5 R
+!RR17
+5 R
+!RR18
+5 R
+!RR19
+5 R
+!RR20
+5 R
+!RR21
+5 R
+!RR22
+5 R
+!RR23
+5 R
+!RR24
+5 R
+!RR25
+5 R
+!RR26
+5 R
+!RR27
+5 R
+!RR28
+5 R
+!RR29
+5 R
+!RR30
+5 R
+!RR31
+5 R
+!RR32
+5 R
+!RR33
+5 R
+!RR34
+5 R
+!RR35
+5 R
+!RR36
+5 R
+!RR37
+5 R
+!RR38
+5 R
+!RR39

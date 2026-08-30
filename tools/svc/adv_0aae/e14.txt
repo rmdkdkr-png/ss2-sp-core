@@ -1,0 +1,11 @@
+!tag k
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+4150 -
+!save k.st
+!load k.st
+14 -
+!KA
+!load k.st
+4 A
+10 -
+!KB

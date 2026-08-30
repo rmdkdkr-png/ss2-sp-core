@@ -1,0 +1,20 @@
+!load /home/dudu/ss2/saves/svc/svc_spar3.st
+30 -
+!p svc_spar3_idle
+60 R
+!p svc_spar3_R
+60 L
+!p svc_spar3_L
+6 U R
+30 -
+!p svc_spar3_J
+20 A
+!p svc_spar3_A
+20 B
+!p svc_spar3_B
+20 D
+!p svc_spar3_D
+200 R
+!p svc_spar3_RR
+200 L
+!p svc_spar3_LL

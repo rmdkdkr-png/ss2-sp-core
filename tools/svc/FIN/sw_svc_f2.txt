@@ -1,0 +1,20 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+30 -
+!p svc_f2_idle
+60 R
+!p svc_f2_R
+60 L
+!p svc_f2_L
+6 U R
+30 -
+!p svc_f2_J
+20 A
+!p svc_f2_A
+20 B
+!p svc_f2_B
+20 D
+!p svc_f2_D
+200 R
+!p svc_f2_RR
+200 L
+!p svc_f2_LL

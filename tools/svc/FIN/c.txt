@@ -1,0 +1,7 @@
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+40 -
+!p C0
+!C0
+2 -
+!p C1
+!C1

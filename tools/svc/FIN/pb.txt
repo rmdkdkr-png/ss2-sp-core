@@ -1,0 +1,4 @@
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+40 D
+!p PB
+!PB

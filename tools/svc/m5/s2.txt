@@ -1,0 +1,95 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+400 L
+!w pin
+!W000
+20 L
+!w pin
+!W020
+20 L
+!w pin
+!W040
+20 L
+!w pin
+!W060
+20 L
+!w pin
+!W080
+20 L
+!w pin
+!W100
+20 L
+!w pin
+!W120
+20 L
+!w pin
+!W140
+20 L
+!w pin
+!W160
+20 L
+!w pin
+!W180
+20 L
+!w pin
+!W200
+20 L
+!w pin
+!W220
+20 L
+!w pin
+!W240
+20 L
+!w pin
+!W260
+20 L
+!w pin
+!W280
+20 L
+!w pin
+!W300
+20 L
+!w pin
+!W320
+20 L
+!w pin
+!W340
+20 L
+!w pin
+!W360
+20 L
+!w pin
+!W380
+20 L
+!w pin
+!W400
+20 L
+!w pin
+!W420
+20 L
+!w pin
+!W440
+20 L
+!w pin
+!W460
+20 L
+!w pin
+!W480
+20 L
+!w pin
+!W500
+20 L
+!w pin
+!W520
+20 L
+!w pin
+!W540
+20 L
+!w pin
+!W560
+20 L
+!w pin
+!W580
+20 L
+!w pin
+!W600

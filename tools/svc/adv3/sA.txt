@@ -1,0 +1,28 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+30 -
+!w base
+!A00
+20 R
+!w r1
+!A01
+20 R
+!w r2
+!A02
+20 R
+!w r3
+!A03
+20 R
+!w r4
+!A04
+20 R
+!w r5
+!A05
+20 R
+!w r6
+!A06
+20 R
+!w r7
+!A07
+20 R
+!w r8
+!A08

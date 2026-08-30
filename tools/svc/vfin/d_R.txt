@@ -1,0 +1,7 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+60 -
+!dumpall R_f60.bin
+10 R
+!dumpall R_f70.bin
+30 R
+!dumpall R_f100.bin

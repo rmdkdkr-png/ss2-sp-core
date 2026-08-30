@@ -1,0 +1,15 @@
+!load corner.st
+!lab push2
+300 R
+!lab jmp
+6 U R
+!lab air
+80 -
+!lab jmp2
+6 U R
+!lab air2
+80 -
+!lab jmp3
+6 U R
+!lab air3
+120 -

@@ -1,0 +1,8 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!P_base
+!poke 092E=180
+1 -
+!P_x1a
+1 -
+!P_x1b

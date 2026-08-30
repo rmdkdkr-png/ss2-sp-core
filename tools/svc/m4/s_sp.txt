@@ -1,0 +1,90 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+320 -
+60 R
+6 -
+!SP_svc_sparring_R60
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+320 -
+150 R
+6 -
+!SP_svc_sparring_R150
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+320 -
+300 R
+6 -
+!SP_svc_sparring_R300
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+320 -
+60 L
+6 -
+!SP_svc_sparring_L60
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+320 -
+150 L
+6 -
+!SP_svc_sparring_L150
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+320 -
+300 L
+6 -
+!SP_svc_sparring_L300
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+320 -
+60 R
+6 -
+!SP_svc_f2_R60
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+320 -
+150 R
+6 -
+!SP_svc_f2_R150
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+320 -
+300 R
+6 -
+!SP_svc_f2_R300
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+320 -
+60 L
+6 -
+!SP_svc_f2_L60
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+320 -
+150 L
+6 -
+!SP_svc_f2_L150
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+320 -
+300 L
+6 -
+!SP_svc_f2_L300
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+320 -
+60 R
+6 -
+!SP_svc_fight_R60
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+320 -
+150 R
+6 -
+!SP_svc_fight_R150
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+320 -
+300 R
+6 -
+!SP_svc_fight_R300
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+320 -
+60 L
+6 -
+!SP_svc_fight_L60
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+320 -
+150 L
+6 -
+!SP_svc_fight_L150
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+320 -
+300 L
+6 -
+!SP_svc_fight_L300

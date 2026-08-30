@@ -1,0 +1,38 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+30 -
+!w c0
+!C0
+80 -
+!w c1
+!C1
+80 -
+!w c2
+!C2
+80 -
+!w c3
+!C3
+80 -
+!w c4
+!C4
+80 -
+!w c5
+!C5
+80 -
+!w c6
+!C6
+80 -
+!w c7
+!C7
+80 -
+!w c8
+!C8
+80 -
+!w c9
+!C9
+80 -
+!w c10
+!C10
+80 -
+!w c11
+!C11
+80 -

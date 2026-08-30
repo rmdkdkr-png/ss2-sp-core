@@ -1,0 +1,89 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+10 -
+!w L0
+!L0
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+20 L
+10 -
+!w L20
+!L20
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+40 L
+10 -
+!w L40
+!L40
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+60 L
+10 -
+!w L60
+!L60
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 L
+10 -
+!w L90
+!L90
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+120 L
+10 -
+!w L120
+!L120
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+180 L
+10 -
+!w L180
+!L180
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+240 L
+10 -
+!w L240
+!L240
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+20 R
+10 -
+!w R20
+!R20
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+40 R
+10 -
+!w R40
+!R40
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+60 R
+10 -
+!w R60
+!R60
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+10 -
+!w R90
+!R90
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+120 R
+10 -
+!w R120
+!R120
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+180 R
+10 -
+!w R180
+!R180
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+240 R
+10 -
+!w R240
+!R240

@@ -1,0 +1,36 @@
+!tag setup
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+50 R
+6 U R
+20 R
+160 R
+180 -
+!save st_r.st
+!tag PA_idle
+!load st_r.st
+12 -
+!PA_idle
+!tag PB_punch
+!load st_r.st
+4 A
+8 -
+!PB_punch
+!tag PC_kick
+!load st_r.st
+4 B
+8 -
+!PC_kick

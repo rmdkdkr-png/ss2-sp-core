@@ -1,0 +1,5 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+20 -
+!poke 92E=120
+1 -
+!pk120

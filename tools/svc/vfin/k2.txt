@@ -1,0 +1,6 @@
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+20 -
+!poke AB4=140
+!poke AAE=27
+1 -
+!K2

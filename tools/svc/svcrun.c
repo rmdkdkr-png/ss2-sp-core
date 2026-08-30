@@ -130,6 +130,15 @@ int main(int argc,char**argv){
           printf("  [%ld] poke %04X=%d\n",frame,off,val); }
         continue;
       }
+      if(k>=2 && !strcmp(cmd,"ws")){   /* SS2 관측 — 위의 w 는 SvC 오프셋이라 못 쓴다 */
+        static FILE *sc = NULL;
+        if(!sc){ const char*cp=getenv("SS2_CSV"); sc=fopen(cp?cp:"ss2probe.csv","w");
+          fprintf(sc,"tag,frame,mode,scr,hp1,hp2,act1,act2\n"); }
+        fprintf(sc,"%s,%ld,%d,%d,%d,%d,%d,%d\n", arg, frame,
+                ram[0x00A7], ram[0x01C0], ram[0x1A46], ram[0x1C46],
+                ram[0x0E3E]|(ram[0x0E3F]<<8), ram[0x0E7E]|(ram[0x0E7F]<<8));
+        fflush(sc); continue;
+      }
       if(k>=2 && !strcmp(cmd,"w")){
         static FILE *csv = NULL;
         if(!csv){ const char*cp=getenv("PROBE_CSV"); csv=fopen(cp?cp:"probe.csv","w");

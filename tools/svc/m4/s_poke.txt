@@ -1,0 +1,22 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!w base
+!pbase
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 092E=140
+2 -
+!w pk092E
+!ppk092E
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 0934=140
+2 -
+!w pk0934
+!ppk0934
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 0AB4=100
+2 -
+!w pk0AB4
+!ppk0AB4

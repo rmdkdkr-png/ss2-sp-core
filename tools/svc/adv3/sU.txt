@@ -1,0 +1,6 @@
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+40 -
+!w t0
+!U0
+!w t1
+!U1

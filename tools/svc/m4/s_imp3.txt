@@ -1,0 +1,42 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+50 -
+3 D
+3 D R
+3 R
+3 R A
+4 -
+!w XF_absR@4
+8 -
+!w XF_absR@12
+10 -
+!w XF_absR@22
+14 -
+!w XF_absR@36
+14 -
+!w XF_absR@50
+!XF_absR
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+50 -
+3 D
+3 D L
+3 L
+3 L A
+4 -
+!w XF_mirL@4
+8 -
+!w XF_mirL@12
+10 -
+!w XF_mirL@22
+14 -
+!w XF_mirL@36
+14 -
+!w XF_mirL@50
+!XF_mirL

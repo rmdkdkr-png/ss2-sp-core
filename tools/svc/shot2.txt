@@ -1,0 +1,6 @@
+1 -
+!load /home/dudu/ss2/saves/ss2/gd7/f000.st
+60 -
+8 D ST
+20 -
+!shot_menu

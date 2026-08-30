@@ -1,0 +1,216 @@
+!tag svc_c0_0_set
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+90 -
+!save tmp_svc_c0_0.st
+!tag svc_c0_0_A
+!load tmp_svc_c0_0.st
+14 -
+!svc_c0_0_A
+!tag svc_c0_0_B
+!load tmp_svc_c0_0.st
+4 A
+10 -
+!svc_c0_0_B
+!tag svc_c0_0_C
+!load tmp_svc_c0_0.st
+4 B
+10 -
+!svc_c0_0_C
+!tag svc_c0_3_set
+!load /home/dudu/ss2/saves/svc/svc_c0_3.st
+90 -
+!save tmp_svc_c0_3.st
+!tag svc_c0_3_A
+!load tmp_svc_c0_3.st
+14 -
+!svc_c0_3_A
+!tag svc_c0_3_B
+!load tmp_svc_c0_3.st
+4 A
+10 -
+!svc_c0_3_B
+!tag svc_c0_3_C
+!load tmp_svc_c0_3.st
+4 B
+10 -
+!svc_c0_3_C
+!tag svc_c1_0_set
+!load /home/dudu/ss2/saves/svc/svc_c1_0.st
+90 -
+!save tmp_svc_c1_0.st
+!tag svc_c1_0_A
+!load tmp_svc_c1_0.st
+14 -
+!svc_c1_0_A
+!tag svc_c1_0_B
+!load tmp_svc_c1_0.st
+4 A
+10 -
+!svc_c1_0_B
+!tag svc_c1_0_C
+!load tmp_svc_c1_0.st
+4 B
+10 -
+!svc_c1_0_C
+!tag svc_c1_4_set
+!load /home/dudu/ss2/saves/svc/svc_c1_4.st
+90 -
+!save tmp_svc_c1_4.st
+!tag svc_c1_4_A
+!load tmp_svc_c1_4.st
+14 -
+!svc_c1_4_A
+!tag svc_c1_4_B
+!load tmp_svc_c1_4.st
+4 A
+10 -
+!svc_c1_4_B
+!tag svc_c1_4_C
+!load tmp_svc_c1_4.st
+4 B
+10 -
+!svc_c1_4_C
+!tag svc_c2_0_set
+!load /home/dudu/ss2/saves/svc/svc_c2_0.st
+90 -
+!save tmp_svc_c2_0.st
+!tag svc_c2_0_A
+!load tmp_svc_c2_0.st
+14 -
+!svc_c2_0_A
+!tag svc_c2_0_B
+!load tmp_svc_c2_0.st
+4 A
+10 -
+!svc_c2_0_B
+!tag svc_c2_0_C
+!load tmp_svc_c2_0.st
+4 B
+10 -
+!svc_c2_0_C
+!tag svc_c2_5_set
+!load /home/dudu/ss2/saves/svc/svc_c2_5.st
+90 -
+!save tmp_svc_c2_5.st
+!tag svc_c2_5_A
+!load tmp_svc_c2_5.st
+14 -
+!svc_c2_5_A
+!tag svc_c2_5_B
+!load tmp_svc_c2_5.st
+4 A
+10 -
+!svc_c2_5_B
+!tag svc_c2_5_C
+!load tmp_svc_c2_5.st
+4 B
+10 -
+!svc_c2_5_C
+!tag svc_c3_0_set
+!load /home/dudu/ss2/saves/svc/svc_c3_0.st
+90 -
+!save tmp_svc_c3_0.st
+!tag svc_c3_0_A
+!load tmp_svc_c3_0.st
+14 -
+!svc_c3_0_A
+!tag svc_c3_0_B
+!load tmp_svc_c3_0.st
+4 A
+10 -
+!svc_c3_0_B
+!tag svc_c3_0_C
+!load tmp_svc_c3_0.st
+4 B
+10 -
+!svc_c3_0_C
+!tag svc_c3_2_set
+!load /home/dudu/ss2/saves/svc/svc_c3_2.st
+90 -
+!save tmp_svc_c3_2.st
+!tag svc_c3_2_A
+!load tmp_svc_c3_2.st
+14 -
+!svc_c3_2_A
+!tag svc_c3_2_B
+!load tmp_svc_c3_2.st
+4 A
+10 -
+!svc_c3_2_B
+!tag svc_c3_2_C
+!load tmp_svc_c3_2.st
+4 B
+10 -
+!svc_c3_2_C
+!tag svc_f2_set
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+90 -
+!save tmp_svc_f2.st
+!tag svc_f2_A
+!load tmp_svc_f2.st
+14 -
+!svc_f2_A
+!tag svc_f2_B
+!load tmp_svc_f2.st
+4 A
+10 -
+!svc_f2_B
+!tag svc_f2_C
+!load tmp_svc_f2.st
+4 B
+10 -
+!svc_f2_C
+!tag svc_fight_set
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+90 -
+!save tmp_svc_fight.st
+!tag svc_fight_A
+!load tmp_svc_fight.st
+14 -
+!svc_fight_A
+!tag svc_fight_B
+!load tmp_svc_fight.st
+4 A
+10 -
+!svc_fight_B
+!tag svc_fight_C
+!load tmp_svc_fight.st
+4 B
+10 -
+!svc_fight_C
+!tag svc_st0_set
+!load /home/dudu/ss2/saves/svc/svc_st0.st
+90 -
+!save tmp_svc_st0.st
+!tag svc_st0_A
+!load tmp_svc_st0.st
+14 -
+!svc_st0_A
+!tag svc_st0_B
+!load tmp_svc_st0.st
+4 A
+10 -
+!svc_st0_B
+!tag svc_st0_C
+!load tmp_svc_st0.st
+4 B
+10 -
+!svc_st0_C
+!tag svc_st2_set
+!load /home/dudu/ss2/saves/svc/svc_st2.st
+90 -
+!save tmp_svc_st2.st
+!tag svc_st2_A
+!load tmp_svc_st2.st
+14 -
+!svc_st2_A
+!tag svc_st2_B
+!load tmp_svc_st2.st
+4 A
+10 -
+!svc_st2_B
+!tag svc_st2_C
+!load tmp_svc_st2.st
+4 B
+10 -
+!svc_st2_C

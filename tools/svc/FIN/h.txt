@@ -1,0 +1,8 @@
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+40 -
+!poke 934=170
+!poke 935=0
+300 -
+!p H1
+300 R
+!p H2

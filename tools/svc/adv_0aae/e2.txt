@@ -1,0 +1,17 @@
+!tag A_ctl_walkL
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+30 -
+40 L
+!tag B_x1poke120_walkL
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+30 -
+!poke 092E=120
+40 L
+!tag C_x2poke20_idle
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+30 -
+!poke 0AAE=20
+40 -
+!tag D_ctl_idle
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+70 -

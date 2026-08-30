@@ -1,0 +1,7 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+60 -
+!dumpall ctrl_f60.bin
+10 -
+!dumpall ctrl_f70.bin
+30 -
+!dumpall ctrl_f100.bin

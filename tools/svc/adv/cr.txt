@@ -1,0 +1,17 @@
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+340 -
+!G0
+20 D
+!G1
+20 -
+!G2
+60 R
+!G3
+20 D
+!G4
+20 -
+!G5
+80 R
+!G6
+20 D
+!G7

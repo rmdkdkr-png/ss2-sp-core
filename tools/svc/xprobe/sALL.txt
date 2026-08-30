@@ -1,0 +1,108 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+30 -
+!S_c0_0
+!load /home/dudu/ss2/saves/svc/svc_c0_1.st
+30 -
+!S_c0_1
+!load /home/dudu/ss2/saves/svc/svc_c0_2.st
+30 -
+!S_c0_2
+!load /home/dudu/ss2/saves/svc/svc_c0_3.st
+30 -
+!S_c0_3
+!load /home/dudu/ss2/saves/svc/svc_c0_4.st
+30 -
+!S_c0_4
+!load /home/dudu/ss2/saves/svc/svc_c0_5.st
+30 -
+!S_c0_5
+!load /home/dudu/ss2/saves/svc/svc_c1_0.st
+30 -
+!S_c1_0
+!load /home/dudu/ss2/saves/svc/svc_c1_1.st
+30 -
+!S_c1_1
+!load /home/dudu/ss2/saves/svc/svc_c1_2.st
+30 -
+!S_c1_2
+!load /home/dudu/ss2/saves/svc/svc_c1_3.st
+30 -
+!S_c1_3
+!load /home/dudu/ss2/saves/svc/svc_c1_4.st
+30 -
+!S_c1_4
+!load /home/dudu/ss2/saves/svc/svc_c1_5.st
+30 -
+!S_c1_5
+!load /home/dudu/ss2/saves/svc/svc_c2_0.st
+30 -
+!S_c2_0
+!load /home/dudu/ss2/saves/svc/svc_c2_1.st
+30 -
+!S_c2_1
+!load /home/dudu/ss2/saves/svc/svc_c2_2.st
+30 -
+!S_c2_2
+!load /home/dudu/ss2/saves/svc/svc_c2_3.st
+30 -
+!S_c2_3
+!load /home/dudu/ss2/saves/svc/svc_c2_4.st
+30 -
+!S_c2_4
+!load /home/dudu/ss2/saves/svc/svc_c2_5.st
+30 -
+!S_c2_5
+!load /home/dudu/ss2/saves/svc/svc_c3_0.st
+30 -
+!S_c3_0
+!load /home/dudu/ss2/saves/svc/svc_c3_1.st
+30 -
+!S_c3_1
+!load /home/dudu/ss2/saves/svc/svc_c3_2.st
+30 -
+!S_c3_2
+!load /home/dudu/ss2/saves/svc/svc_c3_3.st
+30 -
+!S_c3_3
+!load /home/dudu/ss2/saves/svc/svc_c3_4.st
+30 -
+!S_c3_4
+!load /home/dudu/ss2/saves/svc/svc_c3_5.st
+30 -
+!S_c3_5
+!load /home/dudu/ss2/saves/svc/svc_cfg.st
+30 -
+!S_cfg
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+30 -
+!S_f2
+!load /home/dudu/ss2/saves/svc/svc_fight.st
+30 -
+!S_fight
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+30 -
+!S_flip
+!load /home/dudu/ss2/saves/svc/svc_hold.st
+30 -
+!S_hold
+!load /home/dudu/ss2/saves/svc/svc_psel.st
+30 -
+!S_psel
+!load /home/dudu/ss2/saves/svc/svc_spar2.st
+30 -
+!S_spar2
+!load /home/dudu/ss2/saves/svc/svc_spar3.st
+30 -
+!S_spar3
+!load /home/dudu/ss2/saves/svc/svc_spar4.st
+30 -
+!S_spar4
+!load /home/dudu/ss2/saves/svc/svc_sparring.st
+30 -
+!S_sparring
+!load /home/dudu/ss2/saves/svc/svc_st0.st
+30 -
+!S_st0
+!load /home/dudu/ss2/saves/svc/svc_st2.st
+30 -
+!S_st2

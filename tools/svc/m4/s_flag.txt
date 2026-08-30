@@ -1,0 +1,33 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 -
+30 -
+30 -
+120 -
+!w A_idle
+!A_idle
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+120 -
+!w B_cross
+!B_cross
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U
+30 -
+120 -
+!w C_jump
+!C_jump
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+40 -
+90 R
+30 U R
+30 R
+120 -
+60 R
+!w B2_cross_walk
+!B2_cross_walk

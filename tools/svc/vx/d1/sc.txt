@@ -1,0 +1,37 @@
+!load /home/dudu/ss2/saves/svc/svc_st2.st
+1 -
+!svc_st2__i
+20 R
+!svc_st2__r1
+20 R
+!svc_st2__r2
+20 R
+!svc_st2__r3
+20 R
+!svc_st2__r4
+20 L
+!svc_st2__l1
+20 L
+!svc_st2__l2
+20 L
+!svc_st2__l3
+20 L
+!svc_st2__l4
+10 U
+!svc_st2__jm
+10 U
+!svc_st2__jm2
+12 A
+!svc_st2__at
+12 B
+!svc_st2__at2
+40 -
+!svc_st2__wait
+40 -
+!svc_st2__wait2
+15 D
+!svc_st2__dn
+30 R
+!svc_st2__rr
+30 L
+!svc_st2__ll

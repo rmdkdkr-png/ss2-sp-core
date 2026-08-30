@@ -1,0 +1,17 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+60 -
+!J0
+8 U
+!J1
+8 U
+!J2
+8 U
+!J3
+8 -
+!J4
+8 -
+!J5
+16 -
+!J6
+30 -
+!J7

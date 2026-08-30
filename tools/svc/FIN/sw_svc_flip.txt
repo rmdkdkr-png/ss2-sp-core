@@ -1,0 +1,20 @@
+!load /home/dudu/ss2/saves/svc/svc_flip.st
+30 -
+!p svc_flip_idle
+60 R
+!p svc_flip_R
+60 L
+!p svc_flip_L
+6 U R
+30 -
+!p svc_flip_J
+20 A
+!p svc_flip_A
+20 B
+!p svc_flip_B
+20 D
+!p svc_flip_D
+200 R
+!p svc_flip_RR
+200 L
+!p svc_flip_LL

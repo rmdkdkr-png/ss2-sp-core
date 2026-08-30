@@ -1,0 +1,15 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+30 -
+!A0
+40 R
+!B_R40
+40 R
+!C_R80
+80 L
+!D_L80
+80 L
+!E_L160
+120 -
+!F_idle120
+120 -
+!G_idle240

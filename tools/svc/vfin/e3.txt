@@ -1,0 +1,10 @@
+!load /home/dudu/ss2/saves/svc/svc_f2.st
+!lab s
+90 -
+240 L
+420 -
+!lab push
+900 R
+!save corner.st
+!corner
+30 -

@@ -1,0 +1,38 @@
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!q_base
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 09F4=150
+1 -
+!q_09F4
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 0970=150
+1 -
+!q_0970
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 2836=150
+1 -
+!q_2836
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 282A=150
+1 -
+!q_282A
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 2832=150
+1 -
+!q_2832
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 0934=150
+1 -
+!q_0934
+!load /home/dudu/ss2/saves/svc/svc_c0_0.st
+60 -
+!poke 092E=150
+1 -
+!q_092E

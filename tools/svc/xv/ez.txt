@@ -1,0 +1,19 @@
+!load /home/dudu/ss2/saves/svc/svc_c2_5.st
+30 -
+!z0
+60 R
+!z1
+500 R
+!z2
+60 -
+!z3
+500 L
+!z4
+200 L
+!z5
+8 U
+!z6
+8 U R
+!z7
+10 -
+!z8

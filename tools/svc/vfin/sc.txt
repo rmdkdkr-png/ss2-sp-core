@@ -1,0 +1,3 @@
+!load /home/dudu/ss2/saves/svc/svc_st2.st
+2 -
+!dumpall sc/svc_st2.bin
