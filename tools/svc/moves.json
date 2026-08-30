@@ -48,7 +48,8 @@
      "kind": "special",
      "status": "확정",
      "notes": "아라가미 파생 — 단독 실측 불가 | 실측: 뱅크[0,22] | 실측 확정: 뱅크 156, 창 +2~36f, 236P 재입력",
-     "next": "외식 섬돌뚫기 (Migiri Ugachi)"
+     "next": "외식 섬돌뚫기 (Migiri Ugachi)",
+     "next_k": "125식 칠뢰 (Nanase)"
     },
     {
      "name": "127식 팔청 (Yano Sabi)",
@@ -57,7 +58,8 @@
      "kind": "special",
      "status": "확정",
      "notes": "파생기. 이후 P/K 마무리 | 실측: 뱅크[0,22]",
-     "next": "외식 섬돌뚫기 (Migiri Ugachi)"
+     "next": "외식 섬돌뚫기 (Migiri Ugachi)",
+     "next_k": "125식 칠뢰 (Nanase)"
     },
     {
      "name": "401식 죄읊기 (Tsumi Yomi)",
@@ -145,6 +147,14 @@
      "kind": "special",
      "status": "확정",
      "notes": "실측: 렛카 3타 — 구상 중 아무 버튼, 뱅크 158 | 구상 뒤 3타. 실측 뱅크 158, 앞+P"
+    },
+    {
+     "name": "125식 칠뢰 (Nanase)",
+     "command": "5",
+     "button": "K",
+     "kind": "special",
+     "status": "실측",
+     "notes": "구상·팔청 뒤 킥 갈래. 뱅크는 섬돌뚫기와 같은 158 이지만 K 카운터가 따로 리셋된다 — 다른 기술 (SVC_MEMO §31 ③)"
     },
     {
      "name": "개 추가타",

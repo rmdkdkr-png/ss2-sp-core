@@ -147,6 +147,14 @@ static const struct { unsigned char key; unsigned short cool; } EVCD[EV_N] = {
 
 /* ── 상태 ── */
 static int  cm_on = 1, cm_spk = 0;
+/* 이 롬이 SS2 인가. 해설·초상은 SS2 롬 주소표를 읽으므로 다른 롬에서 돌리면
+   엉뚱한 그래픽이 초상 자리에 뿌려진다(SVC 실측: 띠에 쓰레기 화소 5078). */
+static int  cm_rom_ss2 = 0;
+/* 기술명 전용 띠 — SVC 처럼 해설이 없는 롬에서 기술명을 화면 밖에 띄운다.
+   게임 그림 위에 겹치면 HP 바·연출과 부딪혀 읽기 어려웠다(스샷 확인). */
+static int  sp_band = 0;
+void ss2comm_sp_band(int on){ sp_band = on ? 1 : 0; }
+int  ss2comm_rom_is_ss2(void){ return cm_rom_ss2; }
 static unsigned cm_f = 0;                 /* 프레임 카운터 */
 static unsigned cd[CK_N];                 /* 쿨다운 만료 프레임 */
 static int p_mode=-1, p_scr=-1, p_hp1=-1, p_hp2=-1, p_a1=0, p_a2=0, p_surv=0, p_stage=0;
@@ -1631,7 +1639,10 @@ static void rom_fix(unsigned char *r, unsigned len){
 }
 
 void ss2comm_set_rom(const void *rom, unsigned len){
-  cm_rom = (const unsigned char *)rom; cm_romlen = len; face_built = 0;
+  const unsigned char *r = (const unsigned char *)rom;
+  cm_rom = r; cm_romlen = len; face_built = 0;
+  /* 롬 표식(0x24)으로 SS2 인지 가른다 — 아니면 해설·초상을 재운다 */
+  cm_rom_ss2 = (r && len > 0x30 && !memcmp(r + 0x24, "SAMURAI2", 8)) ? 1 : 0;
 }
 
 /* 유저가 롬을 직접 패치하기로 함 — 자동 적용은 끈다. 필요하면 이 함수만 다시 호출. */
@@ -2143,11 +2154,17 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
   }
 }
 
-int ss2comm_band_h(void){ return (cm_on && (cm_draw==1 || cm_draw==4)) ? SS2_BAND_H : 0; }
+int ss2comm_band_h(void){
+  if(cm_on && cm_rom_ss2 && (cm_draw==1 || cm_draw==4)) return SS2_BAND_H;
+  return sp_band ? SS2_BAND_H : 0;
+}
 int ss2comm_ref_h(void){ return 0; }  /* 심판은 이제 게임 화면 위 오버레이 — 제 자리를 차지하지 않는다 */
 int ss2comm_ref_overlay(void);        /* 아래에 — 이번 프레임에 오버레이가 실제로 그려졌으면 그 높이 */
-int ss2comm_band_top(void){ return (cm_on && cm_draw==4) ? 1 : 0; }
-int ss2comm_drawing(void){ return (cm_on && cm_draw) ? 1 : 0; }
+int ss2comm_band_top(void){
+  if(cm_on && cm_rom_ss2 && cm_draw==4) return 1;
+  return sp_band ? 1 : 0;          /* 기술명 띠는 항상 화면 위 */
+}
+int ss2comm_drawing(void){ return ((cm_on && cm_rom_ss2 && cm_draw) || sp_band) ? 1 : 0; }
 
 /* ── 작은 글씨(8×8) — 덧띠 전용 ── */
 static int line_w(const char *s, const char *end){
@@ -2377,7 +2394,15 @@ static void toast_render(uint16_t *fb, int pitch_px, int w, int h){
   if(tw <= 0 || tw > w) return;
   /* 위 띠 모드(4)면 게임 그림이 띠 높이만큼 내려가 있다 — 그 아래, HP 바 아래에 띄운다.
      (띠 안에 그리면 띠 지우기가 바로 덮는다 — 실측) */
-  band = (cm_on && cm_draw==4) ? SS2_BAND_H : 0;
+  if(sp_band && !(cm_on && cm_rom_ss2)){
+    /* 기술명 띠 안 — 세로 가운데. 반투명 처리 없이 검정 위에 바로 쓴다 */
+    y0 = (SS2_BAND_H - 11) / 2;
+    x0 = (w - tw)/2;
+    draw_line11(fb, pitch_px, 0, w, toast_txt, toast_txt + sizeof toast_txt,
+                y0, 0, SS2_BAND_H, 999, 0xFFFF, 0);
+    return;
+  }
+  band = (cm_on && cm_rom_ss2 && cm_draw==4) ? SS2_BAND_H : 0;
   y0 = band + 30;
   x0 = (w - tw)/2; x1 = x0 + tw;
   for(y=y0-2; y<y0+13 && y<h+band; y++)          /* 반투명 띠 (RGB565 절반 감광) */
@@ -2393,8 +2418,15 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
   int band, bandTop, small;
   uint16_t col;
   if(!fb) return;
+  if(sp_band && !(cm_on && cm_rom_ss2)){
+    /* 기술명 띠 — 띠를 지우고 그 **안에** 기술명을 그린다. 게임 그림은 이미 아래로 밀려 있다. */
+    for(y = 0; y < SS2_BAND_H; y++)
+      for(x = 0; x < w; x++) fb[y*pitch_px + x] = 0x0000;
+    toast_render(fb, pitch_px, w, h);
+    return;
+  }
   toast_render(fb, pitch_px, w, h);              /* 해설 온오프와 무관하게 그린다 */
-  if(!cm_on || !cm_draw) return;
+  if(!cm_on || !cm_rom_ss2 || !cm_draw) return;
   band    = (cm_draw==1 || cm_draw==4);
   bandTop = (cm_draw==4);
   line    = ss2comm_current(&age);
@@ -2613,7 +2645,21 @@ static const uint16_t *art_get(int side, int ch, int *fx_out){
 void ss2comm_side(uint16_t *fb, int pitch_px, int w, int h, int right){
   int x, y, ch, battle;
   const char *nm;
-  if(!fb || w <= 2 || h <= 0 || !cm_on) return;
+  if(!fb || w <= 2 || h <= 0) return;
+  if(!cm_on && !sp_band) return;
+  if(!cm_rom_ss2){
+    /* SS2 가 아니면 초상 자료가 없다 — 틀만 그린다. 억지로 읽으면 쓰레기가 나온다.
+       이 자리에 무엇을 넣을지는 아트웍 과제로 따로 판다. */
+    for(y = 0; y < h; y++)
+      for(x = 0; x < w; x++){
+        uint16_t v = 0x0841;
+        if(((x + y) & 15) == 7 || ((x - y) & 15) == 7) v = 0x18E3;
+        fb[y*pitch_px + x] = v;
+      }
+    { int gx = right ? 0 : w - 1, gx2 = right ? 1 : w - 2;
+      for(y = 0; y < h; y++){ fb[y*pitch_px+gx] = COL_GOLD; fb[y*pitch_px+gx2] = 0x4200; } }
+    return;
+  }
   if(!face_built) build_faces();
   battle = (st_myChar >= 0 || st_oppChar >= 0);   /* 마지막 대진을 계속 — 메뉴에서도 안 갈아치운다 */
   {

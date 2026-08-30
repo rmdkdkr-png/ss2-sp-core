@@ -412,7 +412,7 @@ static void svc_compile(const svc_move *m)
             n2 += snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "%s", arrows[ci]);
          snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "+%s%s",
                   (m->btn & PAD_A) ? "P" : "K",
-                  svc_compile_cancel ? " ìºì¬" : "");
+                  svc_compile_cancel ? " 캔슬" : "");
       }
       svcsp_disp_seq++;
    }
@@ -475,6 +475,7 @@ static const svc_move *svc_resolve(uint8_t held)
 /* held = 트리거(X/R)가 아직 눌려 있는가. 버튼 스텝에서 잡고 있으면
    프레임을 소비하지 않고 늘린다 → 게임이 홀드 = 강(독물기)으로 받는다. */
 static int svc_chain_idx(void);
+static int svc_chain_any(void);
 
 static uint8_t svc_step_out(int held)
 {
@@ -498,7 +499,7 @@ static uint8_t svc_step_out(int held)
          q_n = q_i = 0; q_left = 0;
          macro_end_at = frames;
          /* 파생이 있는 기술이면 재입력 창을 연다 (실측: 첫 기술 시작 +2~36f 수용) */
-         if (chain_mv && chain_tbl && svc_chain_idx() >= 0)
+         if (svc_chain_any())
             chain_left = 34;   /* 조건은 svc_chain_next 와 같은 규칙이어야 한다 —
                                   예전엔 여기만 next_hold 폴백을 빼먹어서, 홀드로 발동한
                                   next_hold=-1 기술(죄읊기·구상)은 창이 아예 안 열렸다 */
@@ -507,14 +508,29 @@ static uint8_t svc_step_out(int held)
    return out;                    /* 매크로 중 사용자 입력은 무시 */
 }
 
+/* 파생 창에서 물리 킥이 잡혀 있는가 — 프레임마다 svcsp_frame 이 갱신한다.
+   실측(§31 ③): 3타 자리에서 펀치면 외식 섬돌뚫기, 킥이면 125식 칠뢰다.
+   뱅크는 둘 다 158 이라 뱅크로는 못 가른다 — P/K 카운터가 따로 리셋되는 것으로 갈렸다. */
+static int chain_kick;
+
 /* 지금 이어질 파생의 표 인덱스 (없으면 -1) — 창 개방과 실제 선택이 같은 답을 쓰게 */
 static int svc_chain_idx(void)
 {
    int idx;
    if (!chain_mv || !chain_tbl) return -1;
+   if (chain_kick && chain_mv->next_k >= 0) return chain_mv->next_k;
    idx = svcsp_last_strong ? chain_mv->next_hold : chain_mv->next;
    if (idx < 0 && svcsp_last_strong) idx = chain_mv->next;   /* 홀드 전용이 없으면 약 파생 */
+   if (idx < 0) idx = chain_mv->next_k;                      /* P 갈래가 없으면 K 갈래라도 */
    return idx;
+}
+
+/* 갈래가 하나라도 있는가 — 창은 킥을 잡기 **전에** 열려야 하므로 따로 본다.
+   svc_chain_idx 로 창을 열면, 손을 늦게 대는 킥 갈래가 영영 안 열린다. */
+static int svc_chain_any(void)
+{
+   if (!chain_mv || !chain_tbl) return 0;
+   return chain_mv->next >= 0 || chain_mv->next_hold >= 0 || chain_mv->next_k >= 0;
 }
 
 /* 지금 파생 창에서 X 를 누르면 나갈 기술 (없으면 0) */
@@ -597,6 +613,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
    edge = (uint16_t)(trig & ~prev_trig);
    prev_trig = trig;
    frames++;
+   chain_kick = (ret & ((1u << 8) | (1u << 9))) ? 1 : 0;   /* 물리 약킥·강킥 */
    if (chain_left > 0) chain_left--;
    if (pad & PAD_DIR_MASK) { dir_latch = (uint8_t)(pad & PAD_DIR_MASK); dir_latch_at = frames; }
    if (edge & 1u) trig_len = 0;                       /* 새로 누를 때만 리셋 */

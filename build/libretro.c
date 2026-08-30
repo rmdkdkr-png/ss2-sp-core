@@ -417,6 +417,8 @@ extern const char *ss2comm_frame(void);
 extern void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h);
 extern void        ss2comm_draw_enable(int mode);
 extern int         ss2comm_band_h(void);
+extern void        ss2comm_sp_band(int on);
+extern int         ss2comm_rom_is_ss2(void);
 extern int         ss2comm_band_top(void);
 extern int         ss2comm_drawing(void);
 #define SS2COMM_BAND_MAX 32   /* = 엔진 SS2_BAND_H (30으로 어긋나 있던 것 정정) */
@@ -549,6 +551,23 @@ static void check_variables(void)
       ss2comm_draw_enable(mode);
       if ((ss2comm_band_h() | (ss2comm_band_top() << 8)) != prev)
          update_video = true;                        /* 화면 세로가 바뀌면 지오메트리 재통보 */
+   }
+
+   var.key   = "ngp_svcsp_band";
+   var.value = NULL;
+   {  /* 기술명 띠 — 게임 그림 위에 겹치지 않고 화면 밖 띠에 기술 이름을 띄운다.
+         해설이 없는 롬(SVC 등)용. SS2 는 해설 띠가 이미 그 자리를 쓴다.
+         기본 켬: 겹쳐 그리면 HP 바·연출과 부딪혀 읽기 어려웠다. */
+      int on = 1;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+         on = strcmp(var.value, "disabled") != 0;
+      if (!ss2comm_rom_is_ss2())
+      {
+         int prev = ss2comm_band_h();
+         ss2comm_sp_band(on);
+         if (ss2comm_band_h() != prev) ss2_set_geometry();
+      }
+      else ss2comm_sp_band(0);
    }
 
    var.key   = "ngp_ss2sp_sides";
