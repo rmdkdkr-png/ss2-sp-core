@@ -20,7 +20,7 @@ static const unsigned char mo_c0_11[] = {0x02,0x06,0x04};
 static const unsigned char mo_c0_12[] = {0x02,0x06,0x04,0x06,0x02,0x0A,0x08};
 static const unsigned char mo_c0_13[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c0_14[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
-static const unsigned char mo_c0_15[] = {0x00};
+static const unsigned char mo_c0_15[] = {0x08};   /* 우가치는 앞+P (제보) */
 static const unsigned char mo_c0_16[] = {0x00};
 static const svc_move mv_c0[] = {
   {"외식 나락 떨구기 (Naraku Otoshi)", mo_c0_2, 1, 0x10, 4, -1, -1},
