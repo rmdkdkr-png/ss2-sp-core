@@ -102,6 +102,26 @@ def emit(chars):
                 for i2, n2 in enumerate(names):
                     if want == n2 or want in n2 or n2 in want: idx = i2; break
             slots.append(idx)
+        # 초필 후순위: 슬롯에 초필이 지정됐는데 아직 안 쓴 일반 필살기가 남아 있으면 그것을 먼저.
+        # 게이지가 없으면 초필은 안 나가서 그 방향이 죽은 슬롯이 된다 (제보).
+        # 대체할 일반기가 없으면 그대로 둔다 — 빼면 슬롯이 비어 손해다.
+        derived_names = set()
+        for m2 in moves:
+            for ni in (5, 6):                      # next / next_hold — 이 시점엔 **이름 문자열**
+                if m2[ni]: derived_names.add(m2[ni])
+        def is_derived(nm):
+            return any(nm == dn or nm in dn or dn in nm for dn in derived_names)
+        for si in range(7):
+            if slots[si] < 0 or not (moves[slots[si]][4] & 32): continue   # 32 = 초필
+            for i2, m2 in enumerate(moves):
+                if i2 in slots or is_derived(m2[0]): continue
+                if m2[5] or m2[6]: continue                                # 파생을 갖는 기술 = 시동기·파생계열,
+                                                                           # 단독 배치는 위험 (실측: 팔청을 쏘면 게임이 구상으로 받는다)
+                if m2[4] & 32: continue                                    # 초필끼리 교체는 무의미
+                if si == 6 and not (m2[4] & 4): continue                   # AIR 은 공중기만
+                if si != 6 and (m2[4] & 4): continue                       # 지상 슬롯에 공중기 금지
+                slots[si] = i2; break
+
         # AIR 슬롯 자동 보정: 지정 없으면 첫 공중기
         if slots[6] < 0:
             for i2, m2 in enumerate(moves):

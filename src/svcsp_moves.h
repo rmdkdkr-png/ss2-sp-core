@@ -20,7 +20,7 @@ static const unsigned char mo_c0_11[] = {0x02,0x06,0x04};
 static const unsigned char mo_c0_12[] = {0x02,0x06,0x04,0x06,0x02,0x0A,0x08};
 static const unsigned char mo_c0_13[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c0_14[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
-static const unsigned char mo_c0_15[] = {0x08};   /* 우가치는 앞+P (제보) */
+static const unsigned char mo_c0_15[] = {0x08};
 static const unsigned char mo_c0_16[] = {0x00};
 static const svc_move mv_c0[] = {
   {"외식 나락 떨구기 (Naraku Otoshi)", mo_c0_2, 1, 0x10, 4, -1, -1},
@@ -30,13 +30,13 @@ static const svc_move mv_c0[] = {
   {"401식 죄읊기 (Tsumi Yomi)", mo_c0_6, 5, 0x10, 0, 13, -1},
   {"100식 귀신태우기 (Oniyaki)", mo_c0_7, 3, 0x10, 0, -1, -1},
   {"R.E.D. 킥", mo_c0_8, 3, 0x20, 0, -1, -1},
-  {"75식 개", mo_c0_9, 3, 0x20, 0, 14, -1},
+  {"75식 개", mo_c0_9, 3, 0x20, 0, 14, 14},
   {"212식 금월양 (Kototsuki You)", mo_c0_10, 5, 0x20, 0, -1, -1},
   {"910식 누에잡기 (Nue Tsumi)", mo_c0_11, 3, 0x10, 0, -1, -1},
   {"이면 108식 대사치 (Orochinagi)", mo_c0_12, 7, 0x10, 32, -1, -1},
   {"최종결전오의 무식", mo_c0_13, 6, 0x10, 32, -1, -1},
   {"182식", mo_c0_14, 6, 0x20, 32, -1, -1},
-  {"구상 추가타", mo_c0_15, 1, 0x10, 0, -1, -1},
+  {"외식 우가치 (Migiri Ugachi)", mo_c0_15, 1, 0x10, 0, -1, -1},
   {"개 추가타", mo_c0_16, 1, 0x20, 0, -1, -1},
 };
 static const unsigned char mo_c1_2[] = {0x02,0x0A,0x08};
@@ -356,18 +356,18 @@ static const svc_move mv_c17[] = {
 typedef struct { const svc_move *mv; unsigned char n; const char *name; unsigned char cancel_dud; signed char slots[7]; } svc_chartab;
 #define SVC_CHAR_COUNT 18
 static const svc_chartab svc_chars[SVC_CHAR_COUNT] = {
-  { mv_c0, 15, "쿄", 1, {1,11,1,5,6,8,0} },
-  { mv_c1, 8, "테리", 0, {0,6,3,1,4,2,-1} },
+  { mv_c0, 15, "쿄", 1, {1,9,1,5,6,8,0} },
+  { mv_c1, 8, "테리", 0, {0,5,3,1,4,2,-1} },
   { mv_c2, 8, "료", 0, {0,6,4,2,3,5,1} },
   { mv_c3, 10, "마이", 0, {1,4,3,2,5,4,6} },
   { mv_c4, 10, "레오나", 0, {0,8,5,2,3,1,4} },
   { mv_c5, 10, "아테나", 0, {1,7,6,2,4,5,0} },
-  { mv_c6, 10, "이오리", 0, {1,7,3,2,5,4,0} },
-  { mv_c7, 5, "하오마루", 0, {0,3,0,1,-1,4,-1} },
+  { mv_c6, 10, "이오리", 0, {1,6,3,2,5,4,0} },
+  { mv_c7, 5, "하오마루", 0, {0,2,0,1,-1,4,-1} },
   { mv_c8, 8, "나코루루", 0, {4,3,4,2,3,5,0} },
   { mv_c9, 7, "류", 0, {0,4,5,2,3,1,-1} },
   { mv_c10, 9, "춘리", 0, {1,5,-1,2,4,3,0} },
-  { mv_c11, 12, "장기에프", 0, {5,9,6,3,10,4,0} },
+  { mv_c11, 12, "장기에프", 0, {5,7,6,3,8,4,0} },
   { mv_c12, 7, "켄", 0, {1,4,0,2,5,3,-1} },
   { mv_c13, 7, "단", 0, {0,3,2,1,4,5,-1} },
   { mv_c14, 8, "사쿠라", 0, {0,4,2,1,5,3,-1} },

@@ -48,7 +48,7 @@
      "kind": "special",
      "status": "확정",
      "notes": "아라가미 파생 — 단독 실측 불가 | 실측: 뱅크[0,22] | 실측 확정: 뱅크 156, 창 +2~36f, 236P 재입력",
-     "next": "구상 추가타"
+     "next": "외식 우가치 (Migiri Ugachi)"
     },
     {
      "name": "127식 팔청 (Yano Sabi)",
@@ -56,7 +56,8 @@
      "button": "P",
      "kind": "special",
      "status": "확정",
-     "notes": "파생기. 이후 P/K 마무리 | 실측: 뱅크[0,22]"
+     "notes": "파생기. 이후 P/K 마무리 | 실측: 뱅크[0,22]",
+     "next": "외식 우가치 (Migiri Ugachi)"
     },
     {
      "name": "401식 죄읊기 (Tsumi Yomi)",
@@ -64,7 +65,8 @@
      "button": "P",
      "kind": "special",
      "status": "확정",
-     "notes": "도쿠가미 파생. 이후 6+P(벌읊기) | 실측: 뱅크[0,22] | 실측 확정: 뱅크 168, 독물기 중 hcb+P, 피해 1→5. 벌읊기(6P)는 이 판본 미구현 추정"
+     "notes": "도쿠가미 파생. 이후 6+P(벌읊기) | 실측: 뱅크[0,22] | 실측 확정: 뱅크 168, 독물기 중 hcb+P, 피해 1→5. 벌읊기(6P)는 이 판본 미구현 추정",
+     "next": "외식 우가치 (Migiri Ugachi)"
     },
     {
      "name": "100식 귀신태우기 (Oniyaki)",
@@ -90,7 +92,8 @@
      "kind": "special",
      "status": "확정",
      "notes": "K 추가입력 2타(띄우기) | 실측: 뱅크[0,22] | 실측 확정: K 재입력 2타 뱅크 144",
-     "next": "개 추가타"
+     "next": "개 추가타",
+     "next_hold": "개 추가타"
     },
     {
      "name": "212식 금월양 (Kototsuki You)",
@@ -136,8 +139,8 @@
      "notes": "올림픽 해금 + POW Lv2(MAX) 전용. 홀드 지연 | 실발동 확정(게이지 소모)"
     },
     {
-     "name": "구상 추가타",
-     "command": "5",
+     "name": "외식 우가치 (Migiri Ugachi)",
+     "command": "6",
      "button": "P",
      "kind": "special",
      "status": "확정",
