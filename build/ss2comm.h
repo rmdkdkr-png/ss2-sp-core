@@ -39,6 +39,8 @@ void        ss2comm_notify(const char *text);/* 해설 자리에 안내 한 줄 
 const char *ss2comm_frame(void);             /* 매 프레임 1회. 새 대사면 문자열, 아니면 NULL */
 const char *ss2comm_current(int *age_frames);/* 현재 표시 중인 대사(자체 렌더용) */
 void        ss2comm_draw_enable(int mode);   /* 0 끔 1 확장띠 2 상단겹침 3 하단겹침 */
+void        ss2comm_sp_band(int on);         /* 기술명 전용 띠 (해설 없는 롬용) */
+int         ss2comm_rom_is_ss2(void);        /* 해설·초상을 돌려도 되는 롬인가 */
 int         ss2comm_band_h(void);            /* 화면 **위** 해설 띠 높이 */
 int         ss2comm_ref_h(void);             /* 항상 0 — 심판은 게임 화면 위 오버레이라 제 자리가 없다 */
 int         ss2comm_ref_overlay(void);       /* (구) 게임-위 오버레이 조회 — 심판이 해설창으로 올라와 항상 0 */

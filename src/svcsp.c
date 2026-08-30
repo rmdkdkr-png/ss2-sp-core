@@ -37,11 +37,13 @@ extern uint8_t CPUExRAM[16384];
 #define OFF_TIMER   0x08EE   /* 라운드 타이머 (10진). 메뉴=0, GO 연출=60 */
 #define OFF_FACE    0x092C   /* ★ P1 속성 — 비트 7(0x80) 이 좌우 반전 플래그다.
                                 왼쪽에 서면 16, 상대를 넘어 오른쪽에 서면 144.
-                                실측: 스파링 정지 더미를 앞점프로 넘었다 되넘어왔다 반복하며
-                                램 5판을 떠서 왼(3판)/오른(2판)이 정확히 갈리는 바이트만 남긴 것.
-                                세이브 36개 전수 검증 36/36. 좌표 비교는 6개에서 오판했다 —
-                                적 좌표는 스테이지·상황에 따라 기준이 흔들려 쓸 수 없다. */
-#define OFF_X1      0x0934   /* P1 X (16비트). 거리 판정용 — 좌우는 OFF_FACE 로 본다 */
+                                실측: 스파링 「적 동작=정지」로 더미를 세우고 앞점프로 넘었다
+                                되넘어왔다 반복하며 램 5판을 떠서, 왼(3판)/오른(2판)이 정확히
+                                갈리는 바이트만 남긴 것. 세이브 36개 전수 36/36.
+                                좌표 비교는 6개에서 오판했다 — 적 좌표는 스테이지·상황에 따라
+                                기준이 흔들려 쓸 수 없다. 옛 OFF_X1(0x092E)은 카메라 쪽이라
+                                상대를 넘어가도 128 에서 멈춰 좌우가 영영 안 뒤집혔다. */
+#define OFF_X1      0x0934   /* P1 X (16비트) — 거리 판정용 */
 #define OFF_Y1      0x0930   /* P1 Y. 지상=128, 점프 정점=86 */
 #define OFF_BANK    0x09AD   /* P1 애니 뱅크. 대기·평타=255, 필살기는 기술별 값(0 포함!) */
 #define OFF_ANIM    0x0C7E   /* P1 애니 카운터. 대기·걷기·앉기=127, 동작 중=카운트업 */
@@ -64,15 +66,12 @@ static int svc_tail_frames(void){ static int v=-1; if(v<0){const char*e=getenv("
    실측 §30: 홀드 6f 이하 = 약, 8f 이상 = 강 — 12f 주입으로 여유.
    원버튼 모션 엔진은 기본 꺼짐: 순정 ABLE(アバレ) 모드가 그 역할을 대신한다(§29). */
 #define SVC_HOLD_STRONG 12
+#define SVC_TAP_MAX     5       /* 트리거를 이 이하로 누르면 약 갈래. 넘으면 엔진이 강까지 채운다 */
 static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴에서만 켠다 */
+static int svc_native_basics;                   /* 앱 모드 — 기본기는 순정 통과(탭 약/홀드 강) */
 static int svc_engine_now(void)
 {
-   if (svc_engine < 0)
-   {  /* 기본 켬 — ABLE(순정 간이입력)은 세이브 해금 롬에만 있어서 평범한 롬에는 없다.
-        SVCSP_FORCE=0 으로 끌 수 있다 (대조군 시험용). */
-      const char *e = getenv("SVCSP_FORCE");
-      svc_engine = e ? (*e == '1') : 1;
-   }
+   if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
    return svc_engine;
 }
 void svcsp_set_engine(int on) { svc_engine = !!on; }
@@ -100,6 +99,7 @@ static int svc_in_battle(void);   /* 아래에 정의 — cur_char 가 먼저 �
 /* ── 런타임 슬롯 — 오버레이 메뉴에서 바꿀 수 있게 표를 복사해 둔다 ── */
 static signed char svc_slot_run[SVC_CHAR_COUNT][7];
 static int svc_slot_ready;
+static int svc_slots_dirty;        /* 편집됨 — 프론트가 파일로 흘려보낸다 */
 static void svc_slots_ensure(void)
 {
    int c, k;
@@ -170,8 +170,64 @@ void svcsp_set_slot(int c, int k, int mv)
    if (c < 0 || c >= SVC_CHAR_COUNT || k < 0 || k >= 7) return;
    if (mv >= svc_chars[c].n || mv < 0) mv = -1;
    svc_slot_run[c][k] = (signed char)mv;
+   svc_slots_dirty = 1;
 }
-void svcsp_reset_slots(void) { svc_slot_ready = 0; svc_slots_ensure(); }
+void svcsp_reset_slots(void) { svc_slot_ready = 0; svc_slots_ensure(); svc_slots_dirty = 1; }
+
+/* ── 러시 마무리 픽커 — 대표 초필(flags 32)과, 게이지 불발 시 낼 필살기 ── */
+static const svc_move *svc_pick_super(int chr)
+{
+   int i;
+   if (chr < 0 || chr >= SVC_CHAR_COUNT || !svc_chars[chr].mv) return 0;
+   for (i = 0; i < svc_chars[chr].n; i++)
+   {
+      const svc_move *m = &svc_chars[chr].mv[i];
+      if ((m->flags & 32) && !(m->flags & (4 | 8))) return m;
+   }
+   return 0;
+}
+static const svc_move *svc_pick_fallback(int chr)
+{
+   int mi, i;
+   if (chr < 0 || chr >= SVC_CHAR_COUNT || !svc_chars[chr].mv) return 0;
+   svc_slots_ensure();
+   mi = svc_slot_run[chr][SL_N];
+   if (mi >= 0 && mi < svc_chars[chr].n && !(svc_chars[chr].mv[mi].flags & (4 | 32)))
+      return &svc_chars[chr].mv[mi];
+   for (i = 0; i < svc_chars[chr].n; i++)
+   {
+      const svc_move *m = &svc_chars[chr].mv[i];
+      if (!(m->flags & (1 | 4 | 8 | 32))) return m;
+   }
+   return 0;
+}
+
+/* ── 슬롯 배치 내보내기/들여오기 — <system>/ngpsvc_slots.bin (파일 IO 는 프론트) ── */
+int svcsp_slots_dirty(void) { int d = svc_slots_dirty; svc_slots_dirty = 0; return d; }
+int svcsp_slots_export(unsigned char *buf, int cap)
+{
+   int c, k, n = 0;
+   if (!buf || cap < 4 + SVC_CHAR_COUNT * 7) return 0;
+   svc_slots_ensure();
+   buf[n++] = 'N'; buf[n++] = 'S'; buf[n++] = 'V'; buf[n++] = '1';
+   for (c = 0; c < SVC_CHAR_COUNT; c++)
+      for (k = 0; k < 7; k++) buf[n++] = (unsigned char)svc_slot_run[c][k];
+   return n;
+}
+void svcsp_slots_import(const unsigned char *buf, int len)
+{
+   int c, k, n = 4;
+   if (!buf || len < 4 + SVC_CHAR_COUNT * 7) return;
+   if (buf[0] != 'N' || buf[1] != 'S' || buf[2] != 'V' || buf[3] != '1') return;
+   svc_slots_ensure();
+   for (c = 0; c < SVC_CHAR_COUNT; c++)
+      for (k = 0; k < 7; k++)
+      {
+         signed char v = (signed char)buf[n++];
+         if (v < -1 || v >= (signed char)svc_chars[c].n) v = -1;   /* 표가 줄었을 때 방어 */
+         svc_slot_run[c][k] = v;
+      }
+}
 
 /* 기술표가 없는 캐릭터 → 그냥 펀치 */
 static const unsigned char mo_basic[] = {0x00};
@@ -185,7 +241,7 @@ static uint16_t  prev_trig;
 static uint16_t  prev_pad_dir;
 static const svc_move *pending;
 static int       pending_left;
-static int       pending_kind;     /* 0 일반 1 캔슬 선입력 2 파생(히트 확인) 3 창닫힘 후 재시전 */
+static int       pending_kind;     /* 0 일반(착지·회복 대기) 1 캔슬 선입력(히트 순간 발사) 2 파생 4 캔슬창 회피(dud) */
 static int       warm;             /* 전투 게이트 연속 프레임 */
 static int       verify_left;
 static int       svc_is_rom;       /* 헤더 판별 결과 */
@@ -205,10 +261,21 @@ static int       compile_no_retry; /* 파생 등 재시도 금지 컴파일 표�
 static uint8_t   bank_at_compile;  /* 컴파일 시점 뱅크 — 재시도 성공 판정은 뱅크 변화로
                                       (씹힌 평타도 카운터는 리셋해서 카운터만으론 속는다) */
 static uint8_t   prev_pad_btn;
+static int       trig_len;         /* 트리거를 이번에 몇 프레임 눌렀나 (강약 판정용) */
 static uint8_t   dir_latch;        /* 마지막으로 잡았던 방향 */
 static uint32_t  dir_latch_at;     /* 그 프레임 */
 static int       attack_was_kick;  /* 마지막 자기 노멀이 킥(B)이었나 — 쿄 dud 는 킥 캔슬만 */
 static uint8_t   prev_hp2v;
+/* ── 모던 자동 콤보 상태 (러시/어시스트/기술키 판별) ── */
+static uint16_t  prev_ret;         /* 물리 비트 이전 프레임 — 기본기 엣지 검출 */
+static uint32_t  bas_last_at;      /* 마지막 기본기 눌림 (연타 창 판정) */
+static int       rush_n;           /* 연타 단계. 0=없음 */
+static uint8_t   rush_prev_btn;    /* 직전 연타 계열 (0x10 P / 0x20 K) — 교대용 */
+static uint32_t  rush_hit0;        /* 러시 시작 시점의 hit_at — 이후 히트 여부 */
+static const svc_move *rush_fb;    /* 마무리 초필 불발 시 갈아탈 필살기 */
+static uint8_t   rush_conv;        /* 3타째 치환 버튼 (물리 버튼 잡는 동안 유지) */
+static uint16_t  rush_conv_src;    /* 치환 대상 물리 비트 */
+
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
 int  svcsp_disp_seq;       /* 새 발동마다 +1. 프론트가 엣지 검출 */
 const char *svcsp_last_name = 0;
@@ -260,8 +327,10 @@ static int svc_actable(void)
 
 static int svc_airborne(void) { return CPUExRAM[OFF_Y1] != 128; }
 
+static unsigned svc_x16(unsigned off)
+{ return (unsigned)CPUExRAM[off] | ((unsigned)CPUExRAM[off + 1] << 8); }
 static int svc_facing_left(void)   /* P1 이 오른쪽에 있으면 왼쪽을 본다 */
-{  return (CPUExRAM[OFF_FACE] & 0x80u) ? 1 : 0; }
+{ return (CPUExRAM[OFF_FACE] & 0x80u) ? 1 : 0; }
 
 static uint8_t svc_mirror(uint8_t pad)
 {
@@ -343,7 +412,7 @@ static void svc_compile(const svc_move *m)
             n2 += snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "%s", arrows[ci]);
          snprintf(svcsp_last_disp + n2, sizeof svcsp_last_disp - n2, "+%s%s",
                   (m->btn & PAD_A) ? "P" : "K",
-                  svc_compile_cancel ? " ìºì¬" : "");
+                  svc_compile_cancel ? " 캔슬" : "");
       }
       svcsp_disp_seq++;
    }
@@ -405,13 +474,22 @@ static const svc_move *svc_resolve(uint8_t held)
 
 /* held = 트리거(X/R)가 아직 눌려 있는가. 버튼 스텝에서 잡고 있으면
    프레임을 소비하지 않고 늘린다 → 게임이 홀드 = 강(독물기)으로 받는다. */
+static int svc_chain_idx(void);
+static int svc_chain_any(void);
+
 static uint8_t svc_step_out(int held)
 {
    uint8_t out = q[q_i].pad;
-   if (q[q_i].sustain && held && hold_elapsed < MAX_HOLD)
-   {
-      if (++hold_elapsed >= 9) svcsp_last_strong = 1;
-      return out;
+   if (q[q_i].sustain && hold_elapsed < MAX_HOLD)
+   {  /* 사용자가 아직 잡고 있으면 그대로 늘리고, 이미 뗐어도 **누른 길이가 문턱 이상이면**
+         엔진이 강에 필요한 만큼(9f) 대신 채운다. 방향 스텝 6f 를 다 쓴 뒤에야 버튼 구간이
+         시작되므로, 안 그러면 사용자가 20프레임을 계속 눌러야 강이 된다 (실측). */
+      int fill = (!held && trig_len >= SVC_TAP_MAX && hold_elapsed < 9);
+      if (held || fill)
+      {
+         if (++hold_elapsed >= 9) svcsp_last_strong = 1;
+         return out;
+      }
    }
    if (--q_left <= 0)
    {
@@ -421,23 +499,82 @@ static uint8_t svc_step_out(int held)
          q_n = q_i = 0; q_left = 0;
          macro_end_at = frames;
          /* 파생이 있는 기술이면 재입력 창을 연다 (실측: 첫 기술 시작 +2~36f 수용) */
-         if (chain_mv && chain_tbl &&
-             ((svcsp_last_strong ? chain_mv->next_hold : chain_mv->next) >= 0))
-            chain_left = 34;
+         if (svc_chain_any())
+            chain_left = 34;   /* 조건은 svc_chain_next 와 같은 규칙이어야 한다 —
+                                  예전엔 여기만 next_hold 폴백을 빼먹어서, 홀드로 발동한
+                                  next_hold=-1 기술(죄읊기·구상)은 창이 아예 안 열렸다 */
       }
    }
    return out;                    /* 매크로 중 사용자 입력은 무시 */
 }
 
+/* 파생 창에서 물리 킥이 잡혀 있는가 — 프레임마다 svcsp_frame 이 갱신한다.
+   실측(§31 ③): 3타 자리에서 펀치면 외식 섬돌뚫기, 킥이면 125식 칠뢰다.
+   뱅크는 둘 다 158 이라 뱅크로는 못 가른다 — P/K 카운터가 따로 리셋되는 것으로 갈렸다. */
+static int chain_kick;
+
+/* 지금 이어질 파생의 표 인덱스 (없으면 -1) — 창 개방과 실제 선택이 같은 답을 쓰게 */
+static int svc_chain_idx(void)
+{
+   int idx;
+   if (!chain_mv || !chain_tbl) return -1;
+   if (chain_kick && chain_mv->next_k >= 0) return chain_mv->next_k;
+   idx = svcsp_last_strong ? chain_mv->next_hold : chain_mv->next;
+   if (idx < 0 && svcsp_last_strong) idx = chain_mv->next;   /* 홀드 전용이 없으면 약 파생 */
+   if (idx < 0) idx = chain_mv->next_k;                      /* P 갈래가 없으면 K 갈래라도 */
+   return idx;
+}
+
+/* 갈래가 하나라도 있는가 — 창은 킥을 잡기 **전에** 열려야 하므로 따로 본다.
+   svc_chain_idx 로 창을 열면, 손을 늦게 대는 킥 갈래가 영영 안 열린다. */
+static int svc_chain_any(void)
+{
+   if (!chain_mv || !chain_tbl) return 0;
+   return chain_mv->next >= 0 || chain_mv->next_hold >= 0 || chain_mv->next_k >= 0;
+}
+
 /* 지금 파생 창에서 X 를 누르면 나갈 기술 (없으면 0) */
 static const svc_move *svc_chain_next(void)
 {
-   int idx;
-   if (!chain_mv || !chain_tbl) return 0;
-   idx = svcsp_last_strong ? chain_mv->next_hold : chain_mv->next;
-   if (idx < 0 && svcsp_last_strong) idx = chain_mv->next;   /* 홀드 전용이 없으면 약 파생 */
+   int idx = svc_chain_idx();
    if (idx < 0) return 0;
    return &chain_tbl[idx];
+}
+
+/* R(기술키) 한 번 = 기술 발동 하나. 상황별 경로(즉시/보류/캔슬)는 실측 규칙 그대로 */
+static void svc_fire_sp(uint8_t held)
+{
+   const svc_move *m = svc_resolve(held);
+   if (svc_dbg()) fprintf(stderr, "[svcsp] edge chr=%d air=%d anim=%d -> %s\n",
+                          CPUExRAM[OFF_CHAR1], svc_airborne(), CPUExRAM[OFF_ANIM],
+                          m ? m->name : "(null)");
+   if (m)
+   {
+      int need_ground = !(m->flags & 4);
+      /* 킬캔슬: 자기 평타 직후(24f)의 기술키는 회복을 기다리지 않는다 —
+         캔슬창이 히트 후 0~8f 라서 기다리면 놓친다 (실측 §19).
+         히트가 아니면 게임이 그냥 먹는다 (가드·헛침 캔슬 불가 실측). */
+      /* 노멀 캔슬: 창 안의 모션+버튼은 게임이 캐릭터별 지정기로 낸다 (실측 §24·§25).
+         류·켄 등은 지정기가 공격기라 손맛 그대로 콤보 — 캔슬을 살린다.
+         쿄는 지정기가 누에잡기(비공격 카운터, dud) — 창을 회피해 깨끗하게 낸다. */
+      int chr2 = CPUExRAM[OFF_CHAR1];
+      int dud  = ((chr2 < SVC_CHAR_COUNT) ? svc_chars[chr2].cancel_dud : 0)
+                 && attack_was_kick;   /* 쿄 실측: 킥 캔슬=누에(꽝), 펀치 캔슬=물기(콤보) */
+      int own_atk = (frames - my_attack_at) <= (dud ? 40 : 24) && !svc_airborne();
+      int kill_cancel = own_atk && !dud && (frames - hit_at) <= 14;
+      if (need_ground && svc_airborne())
+         { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
+      else if (kill_cancel)
+         { svc_compile_cancel = 1; svc_compile(m); svc_compile_cancel = 0; }
+      else if (own_atk && dud)
+         { pending = m; pending_left = PENDING_FRAMES; pending_kind = 4; }
+      else if (own_atk)
+         { pending = m; pending_left = 30; pending_kind = 1; }   /* 선입력 — 히트 순간 발사 */
+      else if (!svc_actable())
+         { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
+      else
+         svc_compile(m);
+   }
 }
 
 uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본 비트 */
@@ -448,10 +585,12 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       if (off < 0) { const char *e = getenv("SVCSP_OFF"); off = (e && *e == '1'); }
       if (off) { prev_trig = 0; return pad; }
    }
-   if (!svc_engine_now())
-   {  /* 기본 레이아웃: A·B=약 고정, Y=강펀치(C) X=강킥(D), L·R=A+B.
+   if (!svc_native_basics)
+   {  /* 기본 레이아웃(양 모드 공통): A·B=약 고정, Y=강펀치(C) X=강킥(D), L=A+B.
          약 고정 = 물리 버튼을 6f(실측 약 상한)에서 강제 해제 — 꾹 눌러도 강이 안 된다.
-         메뉴에서는 그냥 짧은 A 누름과 같아 부작용 없음. */
+         메뉴에서는 그냥 짧은 A 누름과 같아 부작용 없음.
+         모던(엔진 켬)에서도 기본기 여섯 자리는 그대로다 — 「기본기는 콤보,
+         기술키는 SP」(제보). 기술키는 R 하나만 넘어간다. 끔이면 R 도 A+B. */
       static int hold_p, hold_k, wk_p, wk_k;
       wk_p = (ret & (1u << 0)) ? wk_p + 1 : 0;            /* 물리 B버튼 = NGP A */
       wk_k = (ret & (1u << 8)) ? wk_k + 1 : 0;            /* 물리 A버튼 = NGP B */
@@ -462,17 +601,71 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       if (ret & (1u << 9)) hold_k = SVC_HOLD_STRONG; else if (hold_k) hold_k--;
       if (hold_p) pad |= 0x10;                            /* NGP A 지속 = 강펀치 */
       if (hold_k) pad |= 0x20;                            /* NGP B 지속 = 강킥 */
-      if (ret & ((1u << 10) | (1u << 11))) pad |= 0x30;   /* L·R = A+B(백플립) */
+      if (ret & (1u << 10)) pad |= 0x30;                  /* L = A+B(백플립) */
+   }
+   if (!svc_engine_now())
+   {
+      if (!svc_native_basics && (ret & (1u << 11))) pad |= 0x30;   /* 엔진 끔: R 도 A+B */
       prev_trig = 0;
       return pad;
    }
-   trig = (ret & ((1u << 9) | (1u << 11))) ? 1u : 0u;     /* 엔진 켬: X·R = 트리거 */
-   if (ret & ((1u << 1) | (1u << 10))) pad |= 0x30;       /*          Y·L = A+B  */
+   trig = (ret & (1u << 11)) ? 1u : 0u;                   /* 엔진 켬: R = 기술키 */
    edge = (uint16_t)(trig & ~prev_trig);
    prev_trig = trig;
    frames++;
+   chain_kick = (ret & ((1u << 8) | (1u << 9))) ? 1 : 0;   /* 물리 약킥·강킥 */
    if (chain_left > 0) chain_left--;
    if (pad & PAD_DIR_MASK) { dir_latch = (uint8_t)(pad & PAD_DIR_MASK); dir_latch_at = frames; }
+   if (edge & 1u) trig_len = 0;                       /* 새로 누를 때만 리셋 */
+   if (trig & 1u) { if (trig_len < 60) trig_len++; }  /* 떼도 값은 남긴다 — sustain 은 나중에 온다 */
+   /* ── 모던 자동 콤보: 「기본기는 콤보, 기술키는 SP」 ──────────────
+      · 러시: 기본기 연타(24f 창). 3타째는 P/K 를 교대로 갈아 끼우고,
+        히트가 확인된 4타째를 마무리(대표 초필)로 바꾼다. 초필이 게이지
+        부족으로 불발이면 재시도 훅이 필살기로 갈아탄다.
+      · 어시스트: R(기술키)을 잡은 채 기본기 연타 — 같은 사다리.
+        R 엣지 쪽은 3f 판별 대기(sp_defer)로 N슬롯 오발을 막는다. */
+   if (rush_conv)
+   {  /* 3타째 교대 치환 — 물리 버튼을 잡고 있는 동안 유지 */
+      if ((ret & rush_conv_src) && !svc_active())
+         pad = (uint8_t)((pad & (uint8_t)~0x30) | rush_conv);
+      else rush_conv = 0;
+   }
+   if (svc_in_battle() && !svc_active())
+   {
+      uint16_t bnew  = (uint16_t)(ret & (uint16_t)~prev_ret);
+      /* 약 기본기만 센다 — 강 연타는 ABLE 수동 콤보의 몫이라 건드리면 안 된다
+         (제보: 「ABLE 강펀치 독물기 콤보가 안 나간다」 — 3타째 치환이 범인이었다) */
+      uint16_t bmask = (uint16_t)((1u << 0) | (1u << 8));
+      if (bnew & bmask)
+      {
+         int in_window = (frames - bas_last_at) <= 24;
+         if (in_window || (trig & 1u)) rush_n++; else rush_n = 1;
+         bas_last_at = frames;
+         if (rush_n == 1) rush_hit0 = hit_at;
+         if (rush_n >= 4 && hit_at > rush_hit0 && (frames - hit_at) <= 40)
+         {  /* 마무리 = 필살기 (제보: 「약펀치 콤보는 필살기로」 — 초필은 게이지·연출이
+               무거워 연타 마무리로는 안 어울린다. 초필은 방향+기술키로 직접). */
+            const svc_move *fin = svc_pick_fallback(CPUExRAM[OFF_CHAR1]);
+            if (fin)
+            {
+               pending = 0; pending_kind = 0;
+               svc_compile(fin);
+            }
+            rush_n = 0; rush_conv = 0;
+         }
+         else if (rush_n == 3)
+         {
+            uint8_t want = (rush_prev_btn == 0x10) ? 0x20 : 0x10;
+            rush_conv = want; rush_conv_src = (uint16_t)(bnew & bmask);
+            pad = (uint8_t)((pad & (uint8_t)~0x30) | want);
+            rush_prev_btn = want;
+         }
+         else
+            rush_prev_btn = (uint8_t)((pad & 0x10) ? 0x10 : ((pad & 0x20) ? 0x20 : rush_prev_btn));
+      }
+      else if (rush_n && (frames - bas_last_at) > 40) { rush_n = 0; rush_conv = 0; }
+   }
+   prev_ret = ret;
    /* 유저가 직접 누른 평타 감지 — 매크로 중이 아닐 때의 A/B 새 눌림 */
    if (!svc_active())
    {
@@ -509,10 +702,16 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       {
          uint8_t bnow = CPUExRAM[OFF_BANK];
          if (retry_mv && bnow != bank_at_compile && bnow != 255)
-            retry_mv = 0;                      /* 뱅크 변화 = 진짜 발동 */
+            { retry_mv = 0; rush_fb = 0; }     /* 뱅크 변화 = 진짜 발동 */
          if (retry_mv && !svc_active() && !pending && frames - macro_end_at >= 12)
          {
-            if (retry_cnt >= 3) retry_mv = 0;
+            if (rush_fb)
+            {  /* 러시 마무리 초필 불발(뱅크 그대로) = 게이지 부족 — 필살기로 갈아탄다 */
+               const svc_move *fb = rush_fb;
+               rush_fb = 0;
+               svc_compile(fb);
+            }
+            else if (retry_cnt >= 3) retry_mv = 0;
             else if (!retry_at) retry_at = frames + 2;
             else if (frames >= retry_at)
             {
@@ -575,57 +774,46 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       fprintf(stderr, "[svcsp] gate-fail chr=%d chr2=%d style=%d timer=%d y=%d\n",
               CPUExRAM[OFF_CHAR1], CPUExRAM[OFF_CHAR2], CPUExRAM[OFF_STYLE],
               CPUExRAM[OFF_TIMER], CPUExRAM[OFF_Y1]);
-   if ((edge & 1u) && svc_in_battle() && chain_left > 0)
-   {
+   if ((trig & 1u) && svc_in_battle() && chain_left > 0 && !pending)
+   {  /* 엣지가 아니라 **유지**로도 파생을 낸다 — 잡고 있으면 창이 열리는 프레임에
+         엔진이 대신 쏜다. 사람이 34프레임 창을 맞추려고 손가락을 떼었다 누르는
+         왕복이 오히려 창을 넘기던 것(제보: 「안 이어진다」).
+         엣지든 유지든 같은 자리에서 처리하므로 탭으로 치던 방식도 그대로 산다. */
       const svc_move *nx = svc_chain_next();
-      if (nx)
+      if (nx && nx != chain_mv)          /* 자기 자신으로 되돌지 않게 */
       {
          compile_no_retry = 1; svc_compile(nx); compile_no_retry = 0;
+         chain_left = 0;                 /* 이 창은 소비했다 — 다음 창은 새 매크로가 연다 */
          if (svc_active()) return svc_step_out(trig & 1u);
       }
    }
    if ((edge & 1u) && svc_in_battle())
-   {
-      /* 방향과 기술키는 1~2프레임 어긋나기 쉽다(터치·패드 공통) — 엣지에 방향이
-         비면 직전 4프레임의 방향을 이어받는다 (「기술키 누르면 좌우를 못 알아듣는다」 제보) */
+   {  /* 터치는 방향과 기술키가 1~2프레임 어긋나기 쉽다 — 엣지에 방향이 비면
+         직전 4프레임의 방향을 이어받는다 (「기술키 누르면 좌우를 못 알아듣는다」 제보). */
       uint8_t held = pad;
-      const svc_move *m;
-      if (!(held & PAD_DIR_MASK) && frames - dir_latch_at <= 4) held |= dir_latch;
-      m = svc_resolve(held);
-      if (svc_dbg()) fprintf(stderr, "[svcsp] edge chr=%d air=%d anim=%d -> %s\n",
-                             CPUExRAM[OFF_CHAR1], svc_airborne(), CPUExRAM[OFF_ANIM],
-                             m ? m->name : "(null)");
-      if (m)
-      {
-         int need_ground = !(m->flags & 4);
-         /* 킬캔슬: 자기 평타 직후(24f)의 X 는 회복을 기다리지 않는다 —
-            캔슬창이 히트 후 0~8f 라서 기다리면 놓친다 (실측 §19).
-            히트가 아니면 게임이 그냥 먹는다 (가드·헛침 캔슬 불가 실측). */
-         /* 노멀 캔슬: 창 안의 모션+버튼은 게임이 캐릭터별 지정기로 낸다 (실측 §24·§25).
-            류·켄 등은 지정기가 공격기라 손맛 그대로 콤보 — 캔슬을 살린다.
-            쿄는 지정기가 누에잡기(비공격 카운터, dud) — 창을 회피해 깨끗하게 낸다. */
-         int chr2 = CPUExRAM[OFF_CHAR1];
-         int dud  = ((chr2 < SVC_CHAR_COUNT) ? svc_chars[chr2].cancel_dud : 0)
-                    && attack_was_kick;   /* 쿄 실측: 킥 캔슬=누에(꽝), 펀치 캔슬=물기(콤보) */
-         int own_atk = (frames - my_attack_at) <= (dud ? 40 : 24) && !svc_airborne();
-         int kill_cancel = own_atk && !dud && (frames - hit_at) <= 14;
-         if (need_ground && svc_airborne())
-            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
-         else if (kill_cancel)
-            { svc_compile_cancel = 1; svc_compile(m); svc_compile_cancel = 0; }
-         else if (own_atk && dud)
-            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 4; }
-         else if (own_atk)
-            { pending = m; pending_left = 30; pending_kind = 1; }   /* 선입력 — 히트 순간 발사 */
-         else if (!svc_actable())
-            { pending = m; pending_left = PENDING_FRAMES; pending_kind = 0; }
-         else
-            svc_compile(m);
-      }
+      if (!(held & PAD_DIR_MASK) && frames - dir_latch_at <= 4)
+         held |= dir_latch;
+      svc_fire_sp(held);  /* 즉시 발동 — 미루면 방향-모션 인접이 깨져 판정이 달라진다(실측) */
    }
 
    if (svc_active()) return svc_step_out(trig & 1u);   /* 트리거 프레임에도 첫 스텝이 나간다 */
    return pad;
+}
+
+/* ── 앱(NGP.emu) 어댑터 — 레트로패드가 없는 프론트용 ────────────────
+   기본기 A/B 는 순정 그대로(탭=약/홀드=강 — 강 전용 버튼이 없는 프론트),
+   기술키는 trig bit0 하나(앱의 SP 키). 러시/어시스트/초필 폴백은 그대로 돈다. */
+uint8_t svcsp_frame_app(uint8_t pad, uint16_t trig)
+{
+   uint16_t ret = 0;
+   uint8_t out;
+   if (pad & 0x10) ret |= (1u << 0);    /* NGP A(펀치) → 약P 엣지 자리 */
+   if (pad & 0x20) ret |= (1u << 8);    /* NGP B(킥)  → 약K 엣지 자리 */
+   if (trig & 1u)  ret |= (1u << 11);   /* SP 키 → 기술키 */
+   svc_native_basics = 1;
+   out = svcsp_frame(pad, ret);
+   svc_native_basics = 0;
+   return out;
 }
 
 void svcsp_reset(void)
@@ -641,4 +829,7 @@ void svcsp_reset(void)
    chain_mv = 0; chain_tbl = 0; chain_left = 0;
    svcsp_last_ok = -1; svcsp_last_name = 0;
    dir_latch = 0; dir_latch_at = 0;
+   trig_len = 0;
+   prev_ret = 0; bas_last_at = 0; rush_n = 0; rush_prev_btn = 0; rush_hit0 = 0;
+   rush_fb = 0; rush_conv = 0; rush_conv_src = 0;
 }

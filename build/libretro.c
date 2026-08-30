@@ -389,6 +389,13 @@ extern void    ss2sp_set_layout(int sp);
 extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 extern void    ss2voice_init(const char *dir);
 extern void    ss2voice_mix(int16_t *buf, int frames);
+extern void    ss2sfx_init(const char *pak_path);
+extern int     ss2sfx_on(void);
+extern int     ss2sfx_count(void);
+extern void    ss2sfx_set_enabled(int on);
+extern void    ss2sfx_set_volume(int pct);
+extern void    ss2sfx_reset(void);
+extern void    ss2sfx_mix(int16_t *buf, int frames);
 extern int     ss2voice_on(void);
 extern void    svcsp_set_engine(int on);
 extern int     svcsp_engine_on(void);
@@ -401,6 +408,8 @@ static bool    svcsp_toast_on = true;
 static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
 static unsigned char ov_vol = 10, ov_vol_p = 10;     /* 해설 볼륨 노브(x10%) */
 static unsigned char ov_dub = 1, ov_dub_p = 1;       /* 더빙 온오프(오버레이) */
+static unsigned char ov_sfx = 1, ov_sfx_p = 1;       /* 효과음 온오프(오버레이) */
+static unsigned char ov_sfxv = 5, ov_sfxv_p = 5;     /* 효과음 크기 노브(x10%) — 기본 50% */
 extern void ss2voice_set_dub(int on);
 static bool cv_booted = false;   /* check_variables 런타임 재호출 — 화면 설정류는 부팅 때만
                                     (제보: 해설 바꿀 때마다 기둥아트가 옵션 파일값으로 롤백) */
@@ -423,6 +432,8 @@ extern const char *ss2comm_frame(void);
 extern void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h);
 extern void        ss2comm_draw_enable(int mode);
 extern int         ss2comm_band_h(void);
+extern void        ss2comm_sp_band(int on);
+extern int         ss2comm_rom_is_ss2(void);
 extern int         ss2comm_band_top(void);
 extern int         ss2comm_drawing(void);
 #define SS2COMM_BAND_MAX 32   /* = 엔진 SS2_BAND_H (30으로 어긋나 있던 것 정정) */
@@ -462,6 +473,8 @@ static void ss2_overlay_apply(void)
    if (ov_spk   != ov_spk_p)   { ss2comm_set_speaker(ov_spk);  ov_spk_p   = ov_spk; }
    if (ov_vol   != ov_vol_p)   { ss2voice_set_volume(ov_vol * 10); ov_vol_p = ov_vol; }
    if (ov_dub   != ov_dub_p)   { ss2voice_set_dub(ov_dub);         ov_dub_p = ov_dub; }
+   if (ov_sfx   != ov_sfx_p)   { ss2sfx_set_enabled(ov_sfx);       ov_sfx_p = ov_sfx; }
+   if (ov_sfxv  != ov_sfxv_p)  { ss2sfx_set_volume(ov_sfxv * 10);  ov_sfxv_p = ov_sfxv; }
    if (ov_chat  != ov_chat_p)  { ss2comm_set_enabled(ov_chat); ov_chat_p  = ov_chat; }
    if (ov_ref   != ov_ref_p)   { ss2comm_set_ref(ov_ref);      ov_ref_p   = ov_ref; }
    if (ov_sp    != ov_sp_p)
@@ -558,6 +571,22 @@ static void check_variables(void)
          update_video = true;                        /* 화면 세로가 바뀌면 지오메트리 재통보 */
    }
 
+   var.key   = "ngp_svcsp_band";
+   var.value = NULL;
+   {  /* 기술명 띠 — 게임 그림 위에 겹치지 않고 화면 밖 띠에 기술 이름을 띄운다.
+         해설이 없는 롬(SVC 등)용. SS2 는 해설 띠가 이미 그 자리를 쓴다. */
+      int on = 1;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+         on = strcmp(var.value, "disabled") != 0;
+      if (!ss2comm_rom_is_ss2())
+      {
+         int prev = ss2comm_band_h();
+         ss2comm_sp_band(on);
+         if (ss2comm_band_h() != prev) ss2_set_geometry();
+      }
+      else ss2comm_sp_band(0);
+   }
+
    var.key   = "ngp_ss2sp_sides";
    var.value = NULL;
    if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -577,6 +606,24 @@ static void check_variables(void)
       int on = strcmp(var.value, "disabled") != 0;
       ss2voice_set_dub(on);
       ov_dub = ov_dub_p = (unsigned char)on;
+   }
+
+   var.key   = "ngp_ss2sfx";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      int on = strcmp(var.value, "disabled") != 0;
+      ss2sfx_set_enabled(on);
+      ov_sfx = ov_sfx_p = (unsigned char)on;      /* 오버레이 그림자값을 옵션과 맞춘다 */
+   }
+
+   var.key   = "ngp_ss2sfx_vol";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      int pct = atoi(var.value);
+      ss2sfx_set_volume(pct);
+      ov_sfxv = ov_sfxv_p = (unsigned char)((pct + 5) / 10);
    }
 
    var.key   = "ngp_ss2sp_comm_vol";
@@ -599,6 +646,12 @@ void retro_init(void)
 {
    struct retro_log_callback log;
    char *dir = NULL;
+
+   {  /* 링크 케이블 — 여기서 잡아 둔다. 한 프로세스에 코어 두 벌을 올리는 하네스가
+         인스턴스마다 다른 파이프를 주려면, 각자 초기화하는 그 순간의 환경변수를 봐야 한다. */
+      extern void ngplink_init(void);
+      ngplink_init();
+   }
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log))
       log_cb = log.log;
@@ -655,6 +708,8 @@ void retro_reset(void)
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
       ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
       ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
+      ss2comm_overlay_bind_extra("효과음", &ov_sfx);
+      ss2comm_overlay_bind_knob("효과음 크기", &ov_sfxv, 15);
    }
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
@@ -731,6 +786,8 @@ bool retro_load_game(const struct retro_game_info *info)
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
       ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
       ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
+      ss2comm_overlay_bind_extra("효과음", &ov_sfx);
+      ss2comm_overlay_bind_knob("효과음 크기", &ov_sfxv, 15);
    }
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
@@ -739,16 +796,45 @@ bool retro_load_game(const struct retro_game_info *info)
       ss2comm_toast(ver_toast, 180);
    }
    ss2comm_reset();
-   {  /* 음성 팩 — <시스템 폴더>/ngpvoice (없으면 조용히 비활성) */
+   {  /* 해설 음성 팩 — <시스템 폴더>/ss2_voice_<언어>.pak
+         해설 **텍스트표와 음성팩은 한 덩이**다. 재생 키가 문장 해시(fnv1a)라서
+         표와 팩의 판이 어긋나면 조회가 전부 빗나가 그냥 조용해진다. 그래서 언어를
+         파일 이름에 박아 섞이지 않게 한다. 옛 이름(ngpvoice.pak)도 계속 받는다. */
       const char *sd = NULL;
       static char vdir[560];
       if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sd) && sd && *sd)
       {
-         snprintf(vdir, sizeof vdir, "%s/ngpvoice", sd);
+         {  /* 언어는 여기서 직접 읽는다 — check_variables 가 언제 도는지에 기대지 않게 */
+            struct retro_variable lv;
+            lv.key = "ngp_ss2sp_comm_lang"; lv.value = NULL;
+            if (!(environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &lv) && lv.value && *lv.value))
+               lv.value = "ko";
+            snprintf(vdir, sizeof vdir, "%s/ss2_voice_%s", sd, lv.value);
+         }
          ss2voice_init(vdir);
+         if (!ss2voice_on())                    /* 옛 배포본 하위호환 */
+         {
+            snprintf(vdir, sizeof vdir, "%s/ngpvoice", sd);
+            ss2voice_init(vdir);
+         }
       }
       else
          ss2voice_init(NULL);   /* SS2VOICE_DIR 환경변수는 init 안에서 우선 적용 */
+      {  /* 효과음 팩 — <시스템폴더>/ss2_sfx.pak. 없으면 조용히 비활성. */
+         const char *sd2 = NULL;
+         static char sdir[560];
+         if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sd2) && sd2 && *sd2)
+            snprintf(sdir, sizeof sdir, "%s/ss2_sfx.pak", sd2);
+         else
+            sdir[0] = 0;
+         ss2sfx_init(sdir);
+         if (ss2sfx_on())
+         {
+            static char st[32];
+            snprintf(st, sizeof st, "SFX %d", ss2sfx_count());
+            ss2comm_toast(st, 150);
+         }
+      }
       if (ss2voice_on())
       {  /* 어느 팩이 실렸는지 육안 확인 — 클립 수가 곧 팩 버전이다 */
          extern int ss2voice_count(void);
@@ -1030,6 +1116,7 @@ void retro_run(void)
    }
 
    ss2voice_mix(sound_buf, spec.SoundBufSize);   /* 해설 음성 — 게임 소리 위에 */
+   ss2sfx_mix(sound_buf, spec.SoundBufSize);     /* 효과음 — 해설과 서로 모른 채 각자 가산 */
    for (total = 0; total < spec.SoundBufSize; )
       total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
 

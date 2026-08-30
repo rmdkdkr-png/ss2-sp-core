@@ -28,13 +28,13 @@ extern "C" {
 /*! Reads a byte from the other system. If no data is available or no
 	high-level communications have been established, then return FALSE.
 	If buffer is NULL, then no data is read, only status is returned */
-bool system_comms_read(uint8_t* buffer);
+int  system_comms_read(uint8_t* buffer);   /* buffer==NULL 이면 **받은 개수** */
 
 
 /*! Peeks at any data from the other system. If no data is available or
 	no high-level communications have been established, then return FALSE.
 	If buffer is NULL, then no data is read, only status is returned */
-bool system_comms_poll(uint8_t* buffer);
+int  system_comms_poll(uint8_t* buffer);
 
 
 /*! Writes a byte from the other system. This function should block until
