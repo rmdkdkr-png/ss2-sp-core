@@ -22,12 +22,13 @@ static const unsigned char mo_c0_13[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c0_14[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c0_15[] = {0x08};
 static const unsigned char mo_c0_16[] = {0x00};
+static const unsigned char mo_c0_17[] = {0x08};
 static const svc_move mv_c0[] = {
   {"외식 나락 떨구기 (Naraku Otoshi)", mo_c0_2, 1, 0x10, 4, -1, -1},
   {"114식 황물기 (Aragami)", mo_c0_3, 3, 0x10, 0, 2, 4},
   {"128식 구상 (Kono Kizu)", mo_c0_4, 3, 0x10, 0, 13, -1},
   {"127식 팔청 (Yano Sabi)", mo_c0_5, 5, 0x10, 0, 13, -1},
-  {"401식 죄읊기 (Tsumi Yomi)", mo_c0_6, 5, 0x10, 0, 13, -1},
+  {"401식 죄읊기 (Tsumi Yomi)", mo_c0_6, 5, 0x10, 0, 15, -1},
   {"100식 귀신태우기 (Oniyaki)", mo_c0_7, 3, 0x10, 0, -1, -1},
   {"R.E.D. 킥", mo_c0_8, 3, 0x20, 0, -1, -1},
   {"75식 개", mo_c0_9, 3, 0x20, 0, 14, 14},
@@ -36,8 +37,9 @@ static const svc_move mv_c0[] = {
   {"이면 108식 대사치 (Orochinagi)", mo_c0_12, 7, 0x10, 32, -1, -1},
   {"최종결전오의 무식", mo_c0_13, 6, 0x10, 32, -1, -1},
   {"182식", mo_c0_14, 6, 0x20, 32, -1, -1},
-  {"외식 우가치 (Migiri Ugachi)", mo_c0_15, 1, 0x10, 0, -1, -1},
+  {"외식 섬돌뚫기 (Migiri Ugachi)", mo_c0_15, 1, 0x10, 0, -1, -1},
   {"개 추가타", mo_c0_16, 1, 0x20, 0, -1, -1},
+  {"벌읊기 (Batsu Yomi)", mo_c0_17, 1, 0x10, 0, -1, -1},
 };
 static const unsigned char mo_c1_2[] = {0x02,0x0A,0x08};
 static const unsigned char mo_c1_3[] = {0x02,0x01};
@@ -356,7 +358,7 @@ static const svc_move mv_c17[] = {
 typedef struct { const svc_move *mv; unsigned char n; const char *name; unsigned char cancel_dud; signed char slots[7]; } svc_chartab;
 #define SVC_CHAR_COUNT 18
 static const svc_chartab svc_chars[SVC_CHAR_COUNT] = {
-  { mv_c0, 15, "쿄", 1, {1,9,1,5,6,8,0} },
+  { mv_c0, 16, "쿄", 1, {1,9,7,5,6,8,0} },
   { mv_c1, 8, "테리", 0, {0,5,3,1,4,2,-1} },
   { mv_c2, 8, "료", 0, {0,6,4,2,3,5,1} },
   { mv_c3, 10, "마이", 0, {1,4,3,2,5,4,6} },

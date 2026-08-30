@@ -23,15 +23,15 @@ def probe(tag, prelines):
     return sc
 
 CASES=[
- ('중립X',   ['1 R1'],            lambda b,a,hp: 22 in b),
- ('아래X',   ['2 D','1 D R1'],    lambda b,a,hp: 23 in b),
- ('뒤X',     ['2 L','1 L R1'],    lambda b,a,hp: any(x==0 for x in b) and min(a)<=12),
- ('앞X',     ['2 R','1 R R1'],    lambda b,a,hp: min(a)<=12),
- ('공중X',   ['2 U','14 -','1 R1'], lambda b,a,hp: 4 in b),
- ('경직X',   ['3 B','4 -','1 R1'], lambda b,a,hp: 22 in b),
- ('걷기40X', ['40 R','1 R1'],     lambda b,a,hp: 21 in b or 22 in b or 32 in b),  # 방향 래치: 걷던 방향이 4f 이어짐. 32 = 누에잡기(초필 후순위로 F슬롯 교체)
- ('걷기100X',['100 R','1 R1'],    lambda b,a,hp: 21 in b or 22 in b or 32 in b),
- ('밀착뒤X', ['170 R','2 L','1 L R1'], lambda b,a,hp: hp>0 or min(a)<=12),  # 밀착 팔청 → 피해 기대
+ ('중립X',   ['1 R1'],            lambda b,a,hp,k: 22 in b),
+ ('아래X',   ['2 D','1 D R1'],    lambda b,a,hp,k: 23 in b),
+ ('뒤X',     ['2 L','1 L R1'],    lambda b,a,hp,k: min(k)<=12 or (any(x==0 for x in b) and min(a)<=12)),  # 뒤=75식 개(K) — 뱅크·P카운터로는 안 보인다
+ ('앞X',     ['2 R','1 R R1'],    lambda b,a,hp,k: min(a)<=12),
+ ('공중X',   ['2 U','14 -','1 R1'], lambda b,a,hp,k: 4 in b),
+ ('경직X',   ['3 B','4 -','1 R1'], lambda b,a,hp,k: 22 in b),
+ ('걷기40X', ['40 R','1 R1'],     lambda b,a,hp,k: 21 in b or 22 in b or 32 in b),  # 방향 래치: 걷던 방향이 4f 이어짐. 32 = 누에잡기(초필 후순위로 F슬롯 교체)
+ ('걷기100X',['100 R','1 R1'],    lambda b,a,hp,k: 21 in b or 22 in b or 32 in b),
+ ('밀착뒤X', ['170 R','2 L','1 L R1'], lambda b,a,hp,k: hp>0 or min(k)<=12 or min(a)<=12),  # 뒤=75식 개(K)
 ]
 sc=['1 -']
 for tag,pre,_ in CASES: sc+=probe(tag,pre)
@@ -45,8 +45,9 @@ for tag,_,chk in CASES:
     d=rows.get(tag,{})
     b=[int(d[s]['bank']) for s in SAM if s in d]
     a=[int(d[s]['anim']) for s in SAM if s in d]
+    k=[int(d[s]['kanim']) for s in SAM if s in d]   # K 동작 카운터 — 킥 기술 판정용
     hp=48-min(int(d[s]['hp2']) for s in SAM if s in d)
-    ok=chk(b,a,hp)
+    ok=chk(b,a,hp,k)
     npass+=ok
     print('%-10s %-32s %4d %s'%(tag,','.join(map(str,b)),hp,'PASS' if ok else 'FAIL'))
 
