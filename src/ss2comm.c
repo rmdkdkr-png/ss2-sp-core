@@ -441,8 +441,11 @@ int ss2comm_get_speaker(void){ return cm_spk; }
 void ss2comm_set_duo(int on){ (void)on; }
 /* 다음 해설자로 넘기고 그 사람 번호를 돌려준다. 인사 한마디는 프런트엔드가 띄운다. */
 int ss2comm_next_speaker(int step){
-  int n = SS2COMM_SPK_N;
-  cm_spk = ((cm_spk + (step?step:1)) % n + n) % n;
+  int n = SS2COMM_SPK_N, guard = 0;
+  /* v4 로스터 11인 — 재캐스팅에서 빠진 화자는 순환에서 건너뛴다(대사표는 남겨둔다) */
+  do {
+    cm_spk = ((cm_spk + (step?step:1)) % n + n) % n;
+  } while((cm_spk==7 || cm_spk==10 || cm_spk==13 || cm_spk==14) && ++guard < n);
   speaker_switched();
   return cm_spk;
 }
@@ -1066,6 +1069,15 @@ static int opp_read(void){
    기술표는 코어에 내장이라 롬 버전과 무관하다. */
 extern const char *ss2sp_last_name;
 extern int ss2sp_last_ok;
+#include "ss2comm_major.h"
+/* 주요 기술만 호명한다 — 잡기술 이름까지 부르면 시끄럽고, 조각 녹음량도 는다(제보). */
+static int move_is_major(const char *nm){
+  unsigned i;
+  if(!nm) return 0;
+  for(i = 0; i < MOVES_MAJOR_N; i++)
+    if(!strcmp(nm, MOVES_MAJOR[i])) return 1;
+  return 0;
+}
 
 static const char *pend_take(int *sup){
   const char *n = pend_name;
@@ -1428,7 +1440,8 @@ const char *ss2comm_frame(void){
   if(hp1>=100 && hp2>=100) st_ko=0;   /* 라운드 재개 = KO 표식 해제 */
   { int live = (hp1>0 && hp2>0 && !st_ko);
   if(live && a1>=0x180 && p_a1<0x180){            /* 내 필살기 발동 → 결합창 열기 */
-    pend_name = (ss2sp_last_name && ss2sp_last_ok!=0) ? ss2sp_last_name : 0;
+    pend_name = (ss2sp_last_name && ss2sp_last_ok!=0
+                 && move_is_major(ss2sp_last_name)) ? ss2sp_last_name : 0;
     pend_sup  = (pend_name && !strcmp(pend_name,"비오의"));
     pend_left = 27;
     /* 비오의는 **나가는 순간 바로** 호들갑을 떤다. 결합창을 기다리면 적중 멘트에 먹힌다. */
