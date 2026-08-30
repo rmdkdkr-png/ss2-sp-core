@@ -129,8 +129,8 @@ static const struct { unsigned char key; unsigned short cool; } EVCD[EV_N] = {
   [EV_MATCHPOINT ] = { CK_ROUNDCTX, 150 },
   [EV_DOUBLELOW  ] = { CK_LOW2X, 480 },
   [EV_LONGFIGHT  ] = { CK_LONG, 3600 },
-  [EV_HIT        ] = { CK_HIT, 48 },
-  [EV_TAKEN      ] = { CK_TK, 54 },
+  [EV_HIT        ] = { CK_HIT, 150 },
+  [EV_TAKEN      ] = { CK_TK, 160 },
   [EV_DOWN       ] = { CK_DN, 120 },
   [EV_DOWNED     ] = { CK_DN2, 120 },
   [EV_OPPSP      ] = { CK_OSP, 132 },
@@ -287,6 +287,8 @@ static unsigned char ref_flash;   /* 반짝이 — 「승부!」「한 판!」 �
 static int ref_ttl;               /* 이 줄의 수명 — 구령은 짧게 */
 static unsigned char intro_pending;    /* 인트로 진입 때 상대 미탑재 — 인트로 동안 재확인한다
                                           (제보: 첫 대전(스토리)에서 쿠로코 구령·자막이 통째로 실종) */
+static unsigned char beat_pend;        /* refok=0 인 채 지나간 구령 비트(1=정정당당히 2=N회전 4=승부)
+                                          — 2·3회전 인트로는 비트가 진입 +18f 라 승격보다 빠르다(제보: 2회전 실종) */
 static unsigned char intro_nw;         /* 그 인트로가 새 매치였나 — 지각 대진 콜용 */
 static unsigned char intro_beat1_done; /* 「자아 — 정정당당히!」 (연출 카운터 시동값 15) */
 static unsigned char intro_beat2_done; /* 「N회전!」 (시동값 33 — 2·3회전 인트로는 이것만 온다) */
@@ -466,7 +468,7 @@ void ss2comm_reset(void){
   st_shk[0]=st_shk[1]=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
-  ref_next=0; intro_pending=0; intro_nw=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
+  ref_next=0; intro_pending=0; intro_nw=0; beat_pend=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
   curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk;
@@ -776,6 +778,7 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
         }
       }
     }
+    if(ss2voice_on() && !nvd) return 0;   /* 팩 모드: 무성 대사는 내보내지 않는다(제보) */
     { const char *const *cs0 = nvd ? vd : cand; int cn0 = nvd ? nvd : n;
       /* 이번 판에 이미 쓴 문형은 걸러서 뽑는다 — 변형이 6개라도 복원추출이면
          서너 번 만에 절반이 겹친다(시뮬 실증). 변형을 다 썼으면 그때는 허용. */
@@ -787,7 +790,7 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
         for(i=0;i<cn0;i++) cs[cn++]=cs0[i];
       }
       for(i=0;i<cn;i++) if(strstr(cs[i],"%s")) nm[nn++]=cs[i];
-      if(nn && nn<cn && (rnd()%10u)<4) fmt = nm[rnd()%(unsigned)nn];
+      if(nn && nn<cn && (rnd()%10u)<2) fmt = nm[rnd()%(unsigned)nn];   /* 호격 남발 완화(제보) */
       else                             fmt = cs[rnd()%(unsigned)cn];
     }
   }
@@ -1150,6 +1153,16 @@ const char *ss2comm_frame(void){
           snprintf(t, sizeof t, "%s 대 %s!", CHARFULL[mel], CHARFULL[opl]);
           ref_say3(t, 1, 0, 180);
         }
+        if(intro_refok && beat_pend){              /* 놓친 구령 소급 — 채널 큐가 순서대로 잇는다 */
+          if(beat_pend & 1) ref_say3("자아 — 정정당당히!", 1, 0, 120);
+          if(beat_pend & 2){
+            char t2[32];
+            snprintf(t2, sizeof t2, "%d회전!", intro_roundN);
+            ref_say3(t2, 1, 0, 120);
+          }
+          if(beat_pend & 4) ref_shout("승부!");
+          beat_pend = 0;
+        }
         if(dbgseq()) fprintf(stderr, "[INTRO+ f=%u] late op=%d refok=%d\n", cm_f, opl, intro_refok);
       }
     }
@@ -1158,21 +1171,25 @@ const char *ss2comm_frame(void){
        15 = 「자아」, 30 = 「정정당당히」(자아와 한 박자로 묶는다), 33 = 「N회전」.
        라운드1 실측 +322(15)/+354(30)/+422(33), 2회전 인트로는 +18(33)뿐. */
     { int seqv = rd(OFF_SEQTXT);
-      if(p_seqtxt == 0 && seqv >= 10 && intro_refok){
+      if(p_seqtxt == 0 && seqv >= 10){
         if(seqv == 15 && !intro_beat1_done){
           intro_beat1_done = 1;
-          ref_say3("자아 — 정정당당히!", 1, 0, 120);
+          if(intro_refok) ref_say3("자아 — 정정당당히!", 1, 0, 120);
+          else beat_pend |= 1;
         }else if(seqv == 33 && !intro_beat2_done){
           intro_beat2_done = 1;
-          char t[32];
-          snprintf(t, sizeof t, "%d회전!", intro_roundN);
-          ref_say3(t, 1, 0, 120);
+          if(intro_refok){
+            char t[32];
+            snprintf(t, sizeof t, "%d회전!", intro_roundN);
+            ref_say3(t, 1, 0, 120);
+          } else beat_pend |= 2;
         }
       } }
     /* 징글 2 = 게임 「승부!」 글이 서는 그 프레임 — F1 보다 24프레임 빠르다 */
     if(!intro_shout_done && rd(OFF_JING)==2 && p_jing!=2){
       intro_shout_done = 1;
       if(intro_refok) ref_shout("승부!");
+      else beat_pend |= 4;
     }
   }
   /* 팻말 2연타: 「카자마 카즈키…!」 → 「훌륭하오!」 (제보: 각각 대사로 이어서) */
@@ -1206,7 +1223,7 @@ const char *ss2comm_frame(void){
        통째로 죽고 ②op2 != st_oppChar 가 참이 되어 새 매치로 오판(1회전! 재발화)까지
        겹쳤다. 이어받기는 「방금까지 싸우던 판」(10초 내)에만 — 셀렉트를 거친 새 매치는
        lastFightF 가 오래돼 타지 않는다. */
-    { int fresh = st_lastFightF && cm_f - st_lastFightF <= 600;
+    { int fresh = st_lastFightF && cm_f - st_lastFightF <= 1200;
       if(op2 < 0 && fresh && st_oppChar >= 0) op2 = st_oppChar;
       if(me2 < 0 && fresh && st_myChar  >= 0) me2 = st_myChar; }
     /* 새 매치 = 격투를 오래 안 봤거나 **상대가 바뀌었거나** — 무한 대전은 75프레임 만에
@@ -1229,6 +1246,7 @@ const char *ss2comm_frame(void){
     /* 다음 구호들은 시계가 아니라 게임 마커에 맞춘다 — 위 집행부 참조 */
     intro_beat1_done = intro_beat2_done = 0;
     intro_shout_done = 0;
+    beat_pend = 0;
   }
 
   /* ── 전투측 화면 전환: 승패 결과 이름 화면 · 스토리 사담 ── */
@@ -1281,7 +1299,7 @@ const char *ss2comm_frame(void){
     /* 상대 개체가 아직/잠시 안 실렸으면 직전 판 값을 이어받는다 — 인트로(2·3회전 콜)와
        같은 병: -1 을 「상대 바뀜」으로 읽으면 매 라운드가 새 매치가 되어
        정산·관계대사가 재발화한다(시뮬 검수에서 실증). 이어받기는 10초 내 재개에만. */
-    if(opx < 0 && st_lastFightF && cm_f - st_lastFightF <= 600 && st_oppChar >= 0)
+    if(opx < 0 && st_lastFightF && cm_f - st_lastFightF <= 1200 && st_oppChar >= 0)
       opx = st_oppChar;
     if(!st_lastFightF || cm_f-st_lastFightF > 180 || opx != st_oppChar
        || st_myR >= 2 || st_opR >= 2){   /* 새 매치 — 시간·상대 교체·직전 매치 결판 */
@@ -1696,9 +1714,10 @@ out:
     if(dbgseq()) fprintf(stderr, "[AIR f=%u ev=%d spk=%d] %s\n", cm_f, cur_ev, cur_spk, curline);
     if(cur_ev == EV_REL || cur_ev == EV_LORE || cur_ev == EV_STORYCHAT || cur_ev == EV_QUOTE)
       lore_at = cm_f;               /* 서사(회상 모드) 발화 시각 — 호격 완충용 */
-    if(chosen.vkn[0]) ss2voice_say_parts(chosen.vkh[0] ? chosen.vkh : 0,
-                                          chosen.vkn, chosen.vks, 0);      /* 이어붙이기 */
-    else              ss2voice_say(curline, 0);  /* 온에어 = 음성도 이 순간 */
+    { int vprio = (ev_prio(cur_ev) >= 2) ? 0 : -1;   /* 잡담·잔반응은 겹치지도, 밀치지도 않는다(제보) */
+      if(chosen.vkn[0]) ss2voice_say_parts(chosen.vkh[0] ? chosen.vkh : 0,
+                                            chosen.vkn, chosen.vks, vprio); /* 이어붙이기 */
+      else              ss2voice_say(curline, vprio); }  /* 온에어 = 음성도 이 순간 */
     /* 공방 중에는 넓게 벌린다. 말할 기회가 드물어야 아무 말이나 안 하게 된다.
        결과 계열(승패 화면·한마디 더·전적)은 한 박자 더. */
     { unsigned g = ((cur_ev==EV_WINSCR||cur_ev==EV_LOSESCR||cur_ev==EV_WINTALK||

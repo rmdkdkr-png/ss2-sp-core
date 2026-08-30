@@ -35,7 +35,7 @@ static unsigned cache_tick;
    빈 버퍼 채널로 흘러 겹쳐 나온다(제보: 「밀리면 버퍼채널 유동적으로 — 호명에도」) */
 #define VCN 3
 static struct { short *pcm; int len, pos, prio; short *own; } vch[VCN];
-#define VCH_OF(prio) ((prio) >= 1 ? 0 : 1)
+#define VCH_OF(prio) ((prio) >= 1 ? 0 : 1)   /* prio<0(잡담)도 해설 채널 — 단 바쁘면 버려진다 */
 #define VQD 2                        /* 채널당 대기 칸 — 씹힘 방지 버퍼(제보) */
 static struct { short *own; int len; int prio; unsigned at; } vnq[VCN][VQD];
 static int vnq_n[VCN];
@@ -264,6 +264,7 @@ static int vch_idle(int c){ return !(vch[c].pcm && vch[c].pos < vch[c].len); }
 /* 채널이 바쁠 때의 정책 — 1 이면 처리 끝(대기열/오버플로로 갔다) */
 static int vch_busy_enqueue(int c, const short *pcm, int s0, int s1, int prio){
   if(vch_idle(c) && !vnq_n[c]) return 0;     /* 한가하고 밀린 것도 없다 — 바로 재생 */
+  if(prio < 0) return 1;                     /* 잡담 — 바쁘면 버린다(교체·겹침 금지, 제보: 타이틀 연타 스팸) */
   if(c == 0){
     /* 심판이 겹치면(구령 중 호명 등) 빈 오버플로로 흘려 같이 낸다 — 순간을 놓치지 않는다 */
     if(vch_idle(2) && !vnq_n[2]){
