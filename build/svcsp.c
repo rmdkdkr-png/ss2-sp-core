@@ -66,6 +66,7 @@ static int svc_tail_frames(void){ static int v=-1; if(v<0){const char*e=getenv("
    실측 §30: 홀드 6f 이하 = 약, 8f 이상 = 강 — 12f 주입으로 여유.
    원버튼 모션 엔진은 기본 꺼짐: 순정 ABLE(アバレ) 모드가 그 역할을 대신한다(§29). */
 #define SVC_HOLD_STRONG 12
+#define SVC_TAP_MAX     5       /* 트리거를 이 이하로 누르면 약 갈래. 넘으면 엔진이 강까지 채운다 */
 static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴에서만 켠다 */
 static int svc_native_basics;                   /* 앱 모드 — 기본기는 순정 통과(탭 약/홀드 강) */
 static int svc_engine_now(void)
@@ -260,6 +261,7 @@ static int       compile_no_retry; /* 파생 등 재시도 금지 컴파일 표�
 static uint8_t   bank_at_compile;  /* 컴파일 시점 뱅크 — 재시도 성공 판정은 뱅크 변화로
                                       (씹힌 평타도 카운터는 리셋해서 카운터만으론 속는다) */
 static uint8_t   prev_pad_btn;
+static int       trig_len;         /* 트리거를 이번에 몇 프레임 눌렀나 (강약 판정용) */
 static uint8_t   dir_latch;        /* 마지막으로 잡았던 방향 */
 static uint32_t  dir_latch_at;     /* 그 프레임 */
 static int       attack_was_kick;  /* 마지막 자기 노멀이 킥(B)이었나 — 쿄 dud 는 킥 캔슬만 */
@@ -477,10 +479,16 @@ static int svc_chain_idx(void);
 static uint8_t svc_step_out(int held)
 {
    uint8_t out = q[q_i].pad;
-   if (q[q_i].sustain && held && hold_elapsed < MAX_HOLD)
-   {
-      if (++hold_elapsed >= 9) svcsp_last_strong = 1;
-      return out;
+   if (q[q_i].sustain && hold_elapsed < MAX_HOLD)
+   {  /* 사용자가 아직 잡고 있으면 그대로 늘리고, 이미 뗐어도 **누른 길이가 문턱 이상이면**
+         엔진이 강에 필요한 만큼(9f) 대신 채운다. 방향 스텝 6f 를 다 쓴 뒤에야 버튼 구간이
+         시작되므로, 안 그러면 사용자가 20프레임을 계속 눌러야 강이 된다 (실측). */
+      int fill = (!held && trig_len >= SVC_TAP_MAX && hold_elapsed < 9);
+      if (held || fill)
+      {
+         if (++hold_elapsed >= 9) svcsp_last_strong = 1;
+         return out;
+      }
    }
    if (--q_left <= 0)
    {
@@ -591,6 +599,8 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
    frames++;
    if (chain_left > 0) chain_left--;
    if (pad & PAD_DIR_MASK) { dir_latch = (uint8_t)(pad & PAD_DIR_MASK); dir_latch_at = frames; }
+   if (edge & 1u) trig_len = 0;                       /* 새로 누를 때만 리셋 */
+   if (trig & 1u) { if (trig_len < 60) trig_len++; }  /* 떼도 값은 남긴다 — sustain 은 나중에 온다 */
    /* ── 모던 자동 콤보: 「기본기는 콤보, 기술키는 SP」 ──────────────
       · 러시: 기본기 연타(24f 창). 3타째는 P/K 를 교대로 갈아 끼우고,
         히트가 확인된 4타째를 마무리(대표 초필)로 바꾼다. 초필이 게이지
@@ -802,6 +812,7 @@ void svcsp_reset(void)
    chain_mv = 0; chain_tbl = 0; chain_left = 0;
    svcsp_last_ok = -1; svcsp_last_name = 0;
    dir_latch = 0; dir_latch_at = 0;
+   trig_len = 0;
    prev_ret = 0; bas_last_at = 0; rush_n = 0; rush_prev_btn = 0; rush_hit0 = 0;
    rush_fb = 0; rush_conv = 0; rush_conv_src = 0;
 }
