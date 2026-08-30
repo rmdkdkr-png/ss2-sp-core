@@ -200,6 +200,12 @@ got:
      해설은 예전처럼 교체하되, 끝물(0.4초 미만)이면 끊지 않고 잇는다. */
 
 static unsigned vc_clock;   /* 믹스한 샘플 시계 — 대기 스테일(1.2초) 판정용 */
+static int vc_vol = 100;    /* 해설 볼륨 % (0~150) — 게임 소리는 건드리지 않는다 */
+void ss2voice_set_volume(int pct){
+  if(pct < 0) pct = 0;
+  if(pct > 150) pct = 150;
+  vc_vol = pct;
+}
 
 static int has_clip(unsigned h){
   int i;
@@ -362,6 +368,7 @@ void ss2voice_mix(int16_t *buf, int frames){
       v += vc2;
       if(vch[c].pos >= vch[c].len) vq_pop(c);        /* 에너지 끝 — 같은 프레임에 잇는다 */
     }
+    v = v * vc_vol / 100;   /* 해설 볼륨(오버레이 노브) */
     l += v; r += v;   /* 게임 소리는 그대로, 음성만 가산 (제보: 「볼륨 줄이지 말기」) */
     if(l > 32767) l = 32767; if(l < -32768) l = -32768;
     if(r > 32767) r = 32767; if(r < -32768) r = -32768;

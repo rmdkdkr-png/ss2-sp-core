@@ -399,6 +399,10 @@ extern char    svcsp_last_disp[64];
 extern int     svcsp_disp_seq;
 static bool    svcsp_toast_on = true;
 static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
+static unsigned char ov_vol = 10, ov_vol_p = 10;     /* 해설 볼륨 노브(x10%) */
+static bool cv_booted = false;   /* check_variables 런타임 재호출 — 화면 설정류는 부팅 때만
+                                    (제보: 해설 바꿀 때마다 기둥아트가 옵션 파일값으로 롤백) */
+extern void ss2voice_set_volume(int pct);
 extern const char *ss2sp_last_name;
 /* ── SS2 캐릭터 해설 엔진 (ss2comm.c) ── */
 extern void        ss2comm_set_ram(void *p);
@@ -454,6 +458,7 @@ static void ss2_set_geometry(void)
 static void ss2_overlay_apply(void)
 {
    if (ov_spk   != ov_spk_p)   { ss2comm_set_speaker(ov_spk);  ov_spk_p   = ov_spk; }
+   if (ov_vol   != ov_vol_p)   { ss2voice_set_volume(ov_vol * 10); ov_vol_p = ov_vol; }
    if (ov_chat  != ov_chat_p)  { ss2comm_set_enabled(ov_chat); ov_chat_p  = ov_chat; }
    if (ov_ref   != ov_ref_p)   { ss2comm_set_ref(ov_ref);      ov_ref_p   = ov_ref; }
    if (ov_sp    != ov_sp_p)
@@ -478,7 +483,7 @@ static void check_variables(void)
    var.key   = "ngp_language";
    var.value = NULL;
 
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       /* user must manually restart core for change to happen */
       if (!strcmp(var.value, "japanese"))
@@ -489,13 +494,13 @@ static void check_variables(void)
 
    var.key   = "ngp_ss2sp";
    var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       ss2sp_enable = strcmp(var.value, "disabled") ? true : false;
 
    /* 해설 옵션 */
    var.key   = "ngp_ss2sp_comm";
    var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       ss2comm_set_enabled(strcmp(var.value, "disabled") != 0);
       ov_chat = ov_chat_p = (strcmp(var.value, "disabled") != 0) ? 1 : 0;
@@ -520,7 +525,7 @@ static void check_variables(void)
 
    var.key   = "ngp_ss2sp_comm_duo";
    var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       ss2comm_set_duo(!strcmp(var.value, "enabled"));
 
    var.key   = "ngp_svcsp_toast";
@@ -531,7 +536,7 @@ static void check_variables(void)
 
    var.key   = "ngp_ss2sp_comm_draw";
    var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       int prev = ss2comm_band_h() | (ss2comm_band_top() << 8);
       int mode = 4;                                  /* 기본: 화면 밖 **위** 띠 (아래는 어색하다는 제보) */
@@ -546,7 +551,7 @@ static void check_variables(void)
 
    var.key   = "ngp_ss2sp_sides";
    var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       bool on = strcmp(var.value, "disabled") != 0;
       if (on != ss2_sides)
@@ -555,6 +560,16 @@ static void check_variables(void)
          ss2_set_geometry();
       }
    }
+
+   var.key   = "ngp_ss2sp_comm_vol";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      int pct = atoi(var.value);
+      ss2voice_set_volume(pct);
+      ov_vol = ov_vol_p = (unsigned char)((pct + 5) / 10);
+   }
+   cv_booted = true;
 
    /* 오버레이 그림자값을 방금 적용한 옵션과 맞춘다 */
    ov_sp    = ov_sp_p    = svcsp_rom_ok() ? (svcsp_engine_on() ? 1 : 0)
@@ -614,6 +629,7 @@ void retro_reset(void)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
@@ -685,6 +701,7 @@ bool retro_load_game(const struct retro_game_info *info)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else

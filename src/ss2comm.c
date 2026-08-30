@@ -2234,6 +2234,12 @@ static int ov_sp_rows(void){ return 3 + ss2sp_slot_count(); }  /* 캐릭터 + �
 #endif
 void ss2comm_overlay_spmode(int svc){ ov_svc = !!svc; }
 /* 페이지 0 에 토글 항목 하나를 덧붙인다 (SvC 기술명 표시 등) */
+void ss2comm_overlay_bind_knob(const char *name, unsigned char *v, int max){
+  if(ov_n >= 8 || !v) return;
+  ov_it[ov_n].name = name; ov_it[ov_n].v = v;
+  ov_it[ov_n].max = (unsigned char)max; ov_it[ov_n].kind = 2;
+  ov_n++;
+}
 void ss2comm_overlay_bind_extra(const char *name, unsigned char *v){
   if(ov_n >= 8 || !v) return;
   ov_it[ov_n].name = name; ov_it[ov_n].v = v; ov_it[ov_n].max = 1; ov_it[ov_n].kind = 0;
