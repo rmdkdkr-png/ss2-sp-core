@@ -641,15 +641,15 @@ void retro_reset(void)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("더빙", &ov_dub);
-      ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
+      ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
+      ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("더빙", &ov_dub);
-      ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
+      ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
+      ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
       static char ver_toast[48];
@@ -717,15 +717,15 @@ bool retro_load_game(const struct retro_game_info *info)
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("더빙", &ov_dub);
-      ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
+      ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
+      ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
       ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
    }
    else
       ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("더빙", &ov_dub);
-      ss2comm_overlay_bind_knob("해설 볼륨", &ov_vol, 15);
+      ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
+      ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
       static char ver_toast[48];

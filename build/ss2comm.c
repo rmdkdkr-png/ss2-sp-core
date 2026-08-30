@@ -2265,7 +2265,7 @@ void ss2comm_overlay_spmode(int svc){ ov_svc = !!svc; }
 void ss2comm_overlay_bind_knob(const char *name, unsigned char *v, int max){
   if(ov_n >= 10 || !v) return;
   ov_it[ov_n].name = name; ov_it[ov_n].v = v;
-  ov_it[ov_n].max = (unsigned char)max; ov_it[ov_n].kind = 2;
+  ov_it[ov_n].max = (unsigned char)max; ov_it[ov_n].kind = 3;   /* 3 = 숫자 노브(x10%) */
   ov_n++;
 }
 void ss2comm_overlay_bind_extra(const char *name, unsigned char *v){
@@ -2426,6 +2426,11 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
     ss2ovitem *it = &ov_it[i];
     if(it->kind == 1)      vs = ss2comm_speaker_name(*it->v);
     else if(it->kind == 2) vs = ov_bgname(*it->v);
+    else if(it->kind == 3){
+      static char knb[8];
+      snprintf(knb, sizeof knb, "%d0%%", *it->v);   /* 0~15 -> 0%~150% */
+      vs = knb;
+    }
     else                   vs = *it->v ? "켬" : "끔";
     snprintf(buf, sizeof buf, "%s : %s", it->name, vs);
     draw_line11(fb, pitch_px, bx, bx+bw, buf, buf+strlen(buf), by+17+i*13, 0, h, 99,
