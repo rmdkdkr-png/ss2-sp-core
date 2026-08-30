@@ -287,6 +287,9 @@ static unsigned char ref_flash;   /* 반짝이 — 「승부!」「한 판!」 �
 static int ref_ttl;               /* 이 줄의 수명 — 구령은 짧게 */
 static unsigned char intro_pending;    /* 인트로 진입 때 상대 미탑재 — 인트로 동안 재확인한다
                                           (제보: 첫 대전(스토리)에서 쿠로코 구령·자막이 통째로 실종) */
+static unsigned char intro_entered;    /* 이번 인트로를 처리했나 — 에지가 아니라 래치.
+                                          실기는 라운드 전환 때 체력이 0에서 차오르는 동안 진입
+                                          프레임이 hp 조건에 걸려 에지를 통째로 놓쳤다(제보: 2회전 실종). */
 static unsigned char beat_pend;        /* refok=0 인 채 지나간 구령 비트(1=정정당당히 2=N회전 4=승부)
                                           — 2·3회전 인트로는 비트가 진입 +18f 라 승격보다 빠르다(제보: 2회전 실종) */
 static unsigned char intro_nw;         /* 그 인트로가 새 매치였나 — 지각 대진 콜용 */
@@ -468,7 +471,7 @@ void ss2comm_reset(void){
   st_shk[0]=st_shk[1]=0;
   memset(anec_at,0,sizeof anec_at); memset(weap_at,0,sizeof weap_at);
   memset(anecv_used, 0, sizeof anecv_used);
-  ref_next=0; intro_pending=0; intro_nw=0; beat_pend=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
+  ref_next=0; intro_pending=0; intro_nw=0; beat_pend=0; intro_entered=0; intro_beat1_done=intro_beat2_done=0; intro_shout_done=0; plate_at=0; plate2_at=0; plate_char=-1; ref_flash=0; ref_ttl=180; st_lastFightF=0; ref_thump_pend=0;
   st_lastStage=-1; st_roundStart=st_offAt=st_actAt=st_menuAt=st_selChatAt=st_hitAt=0;
   st_selChatN=0; st_myChar=st_oppChar=-1;
   curline[0]=0; cur_f=0; cur_ev=-1; cur_spk=cm_spk;
@@ -778,7 +781,6 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
         }
       }
     }
-    if(ss2voice_on() && !nvd) return 0;   /* 팩 모드: 무성 대사는 내보내지 않는다(제보) */
     { const char *const *cs0 = nvd ? vd : cand; int cn0 = nvd ? nvd : n;
       /* 이번 판에 이미 쓴 문형은 걸러서 뽑는다 — 변형이 6개라도 복원추출이면
          서너 번 만에 절반이 겹친다(시뮬 실증). 변형을 다 썼으면 그때는 허용. */
@@ -797,6 +799,9 @@ static int emit_ex(int ev, int vsel, int n1, int n2, const char *who){
 picked:
   fmt_one(fmt, who, n1, n2, outbuf, sizeof(outbuf));
   if(said_recently(outbuf)) return 0;      /* 최근에 한 말은 다시 안 한다 */
+  /* 팩 모드: 목소리 없는 해설은 자막도 내보내지 않는다 — 고정 변형(전적류)까지 전 경로
+     (제보: 「대사가 나와도 더빙이 안 붙는다」). 조각 결합이 성사된 줄은 통과. */
+  if(ss2voice_on() && !spl_on && !ss2voice_has_text(outbuf)) return 0;
   if(ev == EV_REL || ev == EV_LORE){
     if(lore_said_match(outbuf)) return 0;  /* 같은 썰은 같은 매치에서 한 번만 */
     lore_mark_match(outbuf);
@@ -1216,8 +1221,10 @@ const char *ss2comm_frame(void){
   /* ── 라운드 인트로 진입: mode F0 + scr 8 — 선수들이 서고 「자아…승부!」가 도는 구간 ──
      여기서는 BLK 가 이미 유효하다(코어 추적으로 확인). 문구·스토리 화면(F1/scr0)은
      BLK 가 낡아서 「카즈키 대 카즈키」 같은 헛호명이 났다 — 호명은 이제 여기서만. */
-  if(mode==MD_MENU && scr>=8 && hp1>0 && hp2>0 && !(p_mode==MD_MENU && p_scr>=8)){
+  if(!(mode==MD_MENU && scr>=8)) intro_entered = 0;   /* 인트로를 벗어나면 래치 해제 */
+  if(mode==MD_MENU && scr>=8 && hp1>0 && hp2>0 && !intro_entered){
     int me2 = blk_char(rd(OFF_BLK1)), op2 = opp_read();
+    intro_entered = 1;
     /* 2·3회전 인트로(114f)는 짧아서 상대 개체가 아직 안 실릴 때가 있다 — 직전 라운드
        값을 이어받는다 — 2·3회전 콜 실종의 진범: op2=-1 이면 ①refok=0 으로 구령이
        통째로 죽고 ②op2 != st_oppChar 가 참이 되어 새 매치로 오판(1회전! 재발화)까지
