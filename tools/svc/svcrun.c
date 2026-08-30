@@ -134,13 +134,13 @@ int main(int argc,char**argv){
         static FILE *csv = NULL;
         if(!csv){ const char*cp=getenv("PROBE_CSV"); csv=fopen(cp?cp:"probe.csv","w");
           fprintf(csv,"tag,frame,bank,hp2,p1x,p2x,anim,chr,style,p1y,kanim,pow1,pow2,face\n"); }
-        { int x1 = ram[0x092E] | (ram[0x092F]<<8);      /* ★16비트 — 하위만 보면 256px 경계에서 뒤집힌다 (실측 §27) */
-          int x2 = ram[0x0934] | (ram[0x0935]<<8);
+        { int x1 = ram[0x0934] | (ram[0x0935]<<8);      /* P1 X — 16비트 */
+          int x2 = ram[0x0954];                          /* P2 X — 8비트(0x0955 는 33 고정, 좌표 아님) */
           fprintf(csv,"%s,%ld,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", arg, frame,
                 ram[0x09AD], ram[0x08CF], x1, x2,
                 ram[0x0C7E], ram[0x08A0], ram[0x08BE], ram[0x0930],
                 ram[0x0C7F], ram[0x0963], ram[0x0AE3],
-                x1 > x2 ? 1 : 0);                            /* face 1 = P1 이 왼쪽을 본다 (svc_facing_left 와 같은 식) */
+                (ram[0x092C] & 0x80) ? 1 : 0);               /* face 1 = P1 이 왼쪽을 본다 — 게임의 방향 플래그 */
         }
         fflush(csv); continue;
       }

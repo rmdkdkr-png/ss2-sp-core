@@ -35,9 +35,13 @@ extern uint8_t CPUExRAM[16384];
 #define OFF_HP1     0x08B3   /* P1 체력 (피격 이벤트 때 0x08AF 와 동시 갱신) */
 #define OFF_HP2     0x08CF   /* P2 체력 (표시 사본 — 읽기엔 충분) */
 #define OFF_TIMER   0x08EE   /* 라운드 타이머 (10진). 메뉴=0, GO 연출=60 */
-#define OFF_X1      0x092E   /* P1 X — ★16비트 (하위 0x092E, 상위 0x092F). 하위만 비교하면
-                                256px 경계에서 좌우 판정이 뒤집힌다 — 누에 오발의 진범 (실측 §27) */
-#define OFF_X2      0x0934   /* P2 X — 16비트 (0x0934/0x0935) */
+#define OFF_FACE    0x092C   /* ★ P1 속성 — 비트 7(0x80) 이 좌우 반전 플래그다.
+                                왼쪽에 서면 16, 상대를 넘어 오른쪽에 서면 144.
+                                실측: 스파링 정지 더미를 앞점프로 넘었다 되넘어왔다 반복하며
+                                램 5판을 떠서 왼(3판)/오른(2판)이 정확히 갈리는 바이트만 남긴 것.
+                                세이브 36개 전수 검증 36/36. 좌표 비교는 6개에서 오판했다 —
+                                적 좌표는 스테이지·상황에 따라 기준이 흔들려 쓸 수 없다. */
+#define OFF_X1      0x0934   /* P1 X (16비트). 거리 판정용 — 좌우는 OFF_FACE 로 본다 */
 #define OFF_Y1      0x0930   /* P1 Y. 지상=128, 점프 정점=86 */
 #define OFF_BANK    0x09AD   /* P1 애니 뱅크. 대기·평타=255, 필살기는 기술별 값(0 포함!) */
 #define OFF_ANIM    0x0C7E   /* P1 애니 카운터. 대기·걷기·앉기=127, 동작 중=카운트업 */
@@ -256,10 +260,8 @@ static int svc_actable(void)
 
 static int svc_airborne(void) { return CPUExRAM[OFF_Y1] != 128; }
 
-static unsigned svc_x16(unsigned off)
-{ return (unsigned)CPUExRAM[off] | ((unsigned)CPUExRAM[off + 1] << 8); }
 static int svc_facing_left(void)   /* P1 이 오른쪽에 있으면 왼쪽을 본다 */
-{ return svc_x16(OFF_X1) > svc_x16(OFF_X2); }
+{  return (CPUExRAM[OFF_FACE] & 0x80u) ? 1 : 0; }
 
 static uint8_t svc_mirror(uint8_t pad)
 {
