@@ -747,12 +747,16 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       fprintf(stderr, "[svcsp] gate-fail chr=%d chr2=%d style=%d timer=%d y=%d\n",
               CPUExRAM[OFF_CHAR1], CPUExRAM[OFF_CHAR2], CPUExRAM[OFF_STYLE],
               CPUExRAM[OFF_TIMER], CPUExRAM[OFF_Y1]);
-   if ((edge & 1u) && svc_in_battle() && chain_left > 0)
-   {
+   if ((trig & 1u) && svc_in_battle() && chain_left > 0 && !pending)
+   {  /* 엣지가 아니라 **유지**로도 파생을 낸다 — 잡고 있으면 창이 열리는 프레임에
+         엔진이 대신 쏜다. 사람이 34프레임 창을 맞추려고 손가락을 떼었다 누르는
+         왕복이 오히려 창을 넘기던 것(제보: 「안 이어진다」).
+         엣지든 유지든 같은 자리에서 처리하므로 탭으로 치던 방식도 그대로 산다. */
       const svc_move *nx = svc_chain_next();
-      if (nx)
+      if (nx && nx != chain_mv)          /* 자기 자신으로 되돌지 않게 */
       {
          compile_no_retry = 1; svc_compile(nx); compile_no_retry = 0;
+         chain_left = 0;                 /* 이 창은 소비했다 — 다음 창은 새 매크로가 연다 */
          if (svc_active()) return svc_step_out(trig & 1u);
       }
    }
