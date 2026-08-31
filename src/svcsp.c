@@ -276,6 +276,12 @@ static const svc_move *rush_fb;    /* 마무리 초필 불발 시 갈아탈 필�
 static uint8_t   rush_conv;        /* 3타째 치환 버튼 (물리 버튼 잡는 동안 유지) */
 static uint16_t  rush_conv_src;    /* 치환 대상 물리 비트 */
 
+/* 러시(자동콤보) 스위치 — 유저 지시로 **끈다**.
+   켜져 있으면 약 기본기 연타를 사다리로 받아 3타째에 버튼을 P↔K 로 갈아치우고
+   4타째에 필살기를 대신 쏜다. 손으로 치는 콤보를 엔진이 덮어써 버려서
+   「내가 누른 대로 안 나간다」가 된다. 되살리려면 이 값을 1 로. */
+static int       svc_rush_on = 0;
+
 char svcsp_last_disp[64];  /* "황물기 \xe2\x86\x93\xe2\x86\x98\xe2\x86\x92+P" — 토스트용 */
 int  svcsp_disp_seq;       /* 새 발동마다 +1. 프론트가 엣지 검출 */
 const char *svcsp_last_name = 0;
@@ -624,13 +630,13 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
         부족으로 불발이면 재시도 훅이 필살기로 갈아탄다.
       · 어시스트: R(기술키)을 잡은 채 기본기 연타 — 같은 사다리.
         R 엣지 쪽은 3f 판별 대기(sp_defer)로 N슬롯 오발을 막는다. */
-   if (rush_conv)
+   if (rush_conv && svc_rush_on)
    {  /* 3타째 교대 치환 — 물리 버튼을 잡고 있는 동안 유지 */
       if ((ret & rush_conv_src) && !svc_active())
          pad = (uint8_t)((pad & (uint8_t)~0x30) | rush_conv);
       else rush_conv = 0;
    }
-   if (svc_in_battle() && !svc_active())
+   if (svc_rush_on && svc_in_battle() && !svc_active())
    {
       uint16_t bnew  = (uint16_t)(ret & (uint16_t)~prev_ret);
       /* 약 기본기만 센다 — 강 연타는 ABLE 수동 콤보의 몫이라 건드리면 안 된다
