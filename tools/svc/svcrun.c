@@ -142,17 +142,20 @@ int main(int argc,char**argv){
       if(k>=2 && !strcmp(cmd,"w")){
         static FILE *csv = NULL;
         if(!csv){ const char*cp=getenv("PROBE_CSV"); csv=fopen(cp?cp:"probe.csv","w");
-          fprintf(csv,"tag,frame,bank,hp2,p1x,p2x,anim,chr,style,p1y,kanim,pow1,pow2,face,combo,hp1,p2y\n"); }
+          fprintf(csv,"tag,frame,bank,hp2,p1x,p2x,anim,chr,style,p1y,kanim,pow1,pow2,face,combo,hp1,p2y,p2react\n"); }
         { int x1 = ram[0x0934] | (ram[0x0935]<<8);      /* P1 X — 16비트 */
           int x2 = ram[0x0954];                          /* P2 X — 8비트(0x0955 는 33 고정, 좌표 아님) */
-          fprintf(csv,"%s,%ld,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", arg, frame,
+          fprintf(csv,"%s,%ld,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", arg, frame,
                 ram[0x09AD], ram[0x08CF], x1, x2,
                 ram[0x0C7E], ram[0x08A0], ram[0x08BE], ram[0x0930],
                 ram[0x0C7F], ram[0x0963], ram[0x0AE3],
                 (ram[0x092C] & 0x80) ? 1 : 0,                /* face 1 = P1 이 왼쪽을 본다 — 게임의 방향 플래그 */
                 ram[0x0B17],                                  /* ★ 콤보 카운터 (§12: 24 poke -> 화면 "24HITS!") */
                 ram[0x08B3],                                  /* P1 체력 — 내가 맞았는지 */
-                ram[0x0AB0]);                                 /* P2 Y (§11) — 상대가 떠 있는지 */
+                ram[0x0AB0],                                  /* P2 Y (§11) — 상대가 떠 있는지 */
+                ram[0x0AC4]);   /* P2 반응 상태 — 0x0B17 이 「표시용 타이머일 뿐」이라는
+                                   의심이 나와서 대조하려고 넣었다. 맞고 경직에 들어갔는지를
+                                   화면 표시와 **따로** 볼 수 있어야 판정을 못 박는다. */
         }
         fflush(csv); continue;
       }
