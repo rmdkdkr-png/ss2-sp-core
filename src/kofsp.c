@@ -39,6 +39,40 @@
 #define OFF_VX    0x0D5A
 #define OFF_VY    0x0D5C
 
+/* ── 확정 (2026-09-02, 스파링 정지 무대·쿄) ─────────────────────
+   전부 tools/kof/kof_hunt.py 로 잡았다. 요령은 **조건 길이를 똑같이 맞추는 것**이다 —
+   길이가 다르면 애니메이션이 통째로 달라져 469바이트가 「갈린다」로 나온다.
+   길이를 60프레임으로 통일하고 술어 하나를 걸면 328 → 1 개가 된다. */
+
+/* 버튼 쥠 카운터 — 2프레임에 1씩 오르고 **놓으면 리셋**.
+   술어: 무입력 == 놓음 < 늦게쥠 < 계속쥠. 펀치·킥이 이웃이다(SVC 의 0x0C76/77 배치와 같다). */
+#define OFF_HOLDCNT_P 0x100C
+#define OFF_HOLDCNT_K 0x100D
+
+/* 강약 문턱 — **독립 두 방법이 일치**한다.
+   ① poke 로 카운터를 고정하고 탭만 넣으면 **2 일 때만** 강이 나온다.
+      (poke 는 매 프레임 core_run 앞에 덮으므로 게임은 늘 V 를 읽고 V+1 을 쓴다.
+       그러니 비교가 `>=` 가 아니라 **`==`** 이고, 문턱은 3 이다.)
+   ② poke 없이 홀드 길이를 훑으면 6프레임부터 강. 그때 카운터가 정확히 3이다.
+   ⚠ SVC 는 12/5 였다. **재사용하면 사람의 탭 6~11프레임이 전부 약으로 죽는다.**
+   ⚠ 5프레임은 **위상에 따라 갈린다** — 엔진이 쓰면 안 되는 값이다. */
+#define KOFSP_HOLD_STRONG 6   /* 이 길이 이상 쥐면 강 (카운터 3) */
+#define KOFSP_TAP_MAX     4   /* 이 길이 이하는 두 위상 모두 약 */
+
+/* 동작 카운터 — 2프레임에 1씩 오르다 **127 에서 포화**. 동작이 시작되면 리셋된다.
+   P/K 로 갈린다(펀치를 치면 P 만 리셋). 0x101C/0x101D 에 **같은 값의 짝**이 하나 더 있다.
+   ⚠ **성공/실패 신호로 쓰지 마라.** SVC 에서 이 카운터는 **발동 없이도 리셋됐고**
+     (킥 진행·히트 등) 착지 사이클·공중 소비 감지가 둘 다 그걸로 오탐했다.
+     새 동작 판정은 **act 변화**로 한다. 이건 「행동 가능」 근사에만 쓴다. */
+#define OFF_ANIM_P 0x1014
+#define OFF_ANIM_K 0x1015
+
+/* 입력 이력 만료 — 찌꺼기 모션이 **다음 입력과 이어 붙는다**(막는 게 아니라).
+   623 모션 뒤 236+B 를 넣으면 간격 11프레임까지 623 이 나가거나 엉뚱한 게 나간다.
+   **12프레임부터 두 위상 모두 깨끗하다.**
+   → 매크로를 쏘기 전에 이만큼 조용한 창을 보장하거나, 이력을 덮어써야 한다. */
+#define KOFSP_HIST_CLEAR 12
+
 /* 미측정 — 이 값들이 채워져야 엔진이 돈다. 목록 자체가 사냥 목록이다. */
 static const int OFF_CHAR1     = KOFSP_UNMEASURED;   /* 전투중 판별 4종 */
 static const int OFF_CHAR2     = KOFSP_UNMEASURED;
@@ -46,9 +80,6 @@ static const int OFF_STYLE     = KOFSP_UNMEASURED;
 static const int OFF_TIMER     = KOFSP_UNMEASURED;
 static const int OFF_FACE      = KOFSP_UNMEASURED;   /* 좌우 반전. ⚠ 좌표 비교 금지 */
 static const int OFF_Y1        = KOFSP_UNMEASURED;   /* 공중 판정 */
-static const int OFF_ANIM      = KOFSP_UNMEASURED;   /* 행동가능 근사 */
-static const int OFF_HOLDCNT_P = KOFSP_UNMEASURED;   /* 강약 주입 */
-static const int OFF_HOLDCNT_K = KOFSP_UNMEASURED;
 static const int OFF_DIRHIST   = KOFSP_UNMEASURED;   /* 링 주입 */
 static const int OFF_RING_TOP  = KOFSP_UNMEASURED;
 static const int OFF_REACT     = KOFSP_UNMEASURED;   /* 검증 전용 */
@@ -57,8 +88,7 @@ static const int OFF_COMBO     = KOFSP_UNMEASURED;
 int kofsp_unmeasured_count(void)
 {
    const int *v[] = { &OFF_CHAR1, &OFF_CHAR2, &OFF_STYLE, &OFF_TIMER, &OFF_FACE,
-                      &OFF_Y1, &OFF_ANIM, &OFF_HOLDCNT_P, &OFF_HOLDCNT_K,
-                      &OFF_DIRHIST, &OFF_RING_TOP, &OFF_REACT, &OFF_COMBO };
+                      &OFF_Y1, &OFF_DIRHIST, &OFF_RING_TOP, &OFF_REACT, &OFF_COMBO };
    int i, n = 0;
    for (i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
       if (*v[i] == KOFSP_UNMEASURED) n++;
