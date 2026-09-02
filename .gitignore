@@ -1,3 +1,4 @@
 *.o
 *.ngc
 *.ngp
+tools/kof/ngprun
