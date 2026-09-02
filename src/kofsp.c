@@ -22,7 +22,25 @@
  */
 #include "kofsp.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+/* ── 램 접근 — ss2sp.c · svcsp.c 와 같은 이중 경로 ───────────────── */
+#ifdef SS2SP_RAM_POINTER
+static uint8_t *kof_ram_ptr;
+void kofsp_set_ram(void *p) { kof_ram_ptr = (uint8_t *)p; }
+#define CPUExRAM kof_ram_ptr
+#else
+extern uint8_t CPUExRAM[16384];
+#endif
+
+static int kof_dbg(void)
+{
+   static int d = -1;
+   if (d < 0) { const char *e = getenv("KOFSP_DEBUG"); d = (e && *e == '1'); }
+   return d;
+}
 
 /* ── 게임 상수 ───────────────────────────────────────────────────
    램 오프셋은 CPUExRAM 기준(= CPU 주소 - 0x4000).
@@ -185,18 +203,32 @@ int kofsp_rom_ok(void) { return kof_is_rom; }
    기본 꺼짐. 켜도 M1 에서는 하는 일이 없다 — 배관을 먼저 증명하고 얹는다. */
 static int kof_engine_on;
 
+/* 매크로 진행 상태 — 리셋·스테이트 로드 때 버려야 한다.
+   SS2 는 스테이트 로드 뒤 남은 매크로 잔여가 유령 발동을 냈다. */
+static int mac_step = -1;   /* -1 = 쉬는 중 */
+static int mac_left;
+static int mac_fwd;         /* 시작할 때 굳힌 「앞」 비트 */
+static int trig_prev;
+
 void kofsp_set_engine(int on) { kof_engine_on = on ? 1 : 0; }
-int  kofsp_engine_on(void)    { return kof_engine_on; }
+
+/* 기본은 꺼짐. 다만 **`KOFSP_ON=1` 환경변수로도 켠다** —
+   이렇게 두면 M2 검증에 `build/libretro.c` 를 손대지 않아도 된다
+   (코어 옵션 `ngp_kofsp_engine` 은 배포 단계에서 붙인다).
+   공유 트리를 만지는 구간이 짧을수록 동승 사고가 줄어든다. */
+int kofsp_engine_on(void)
+{
+   static int env = -1;
+   if (env < 0) { const char *e = getenv("KOFSP_ON"); env = (e && *e == '1'); }
+   return kof_engine_on || env;
+}
 
 void kofsp_reset(void)
 {
-   /* 진행 중이던 커맨드가 아직 없다. 상태가 생기면 여기서 버린다. */
+   mac_step = -1;
+   mac_left = 0;
+   trig_prev = 0;
 }
-
-#ifdef SS2SP_RAM_POINTER
-static void *kof_ram;
-void kofsp_set_ram(void *ram) { kof_ram = ram; (void)kof_ram; }
-#endif
 
 /* ── 매 프레임 ───────────────────────────────────────────────────
    M1: **순정 롬 폴드와 똑같이** 접는다. libretro.c 의 else 가지에 있던 것을
@@ -214,14 +246,69 @@ void kofsp_set_ram(void *ram) { kof_ram = ram; (void)kof_ram; }
 #define RP_L 10
 #define RP_R 11
 
+/* 방향 비트 — build/libretro.c 의 원시 지도 순서 그대로다
+   (map[] = UP, DOWN, LEFT, RIGHT, B, A, START → 비트 0..6). */
+#define NGP_U 0x01
+#define NGP_D 0x02
+#define NGP_L 0x04
+#define NGP_R 0x08
+
+/* ── M2: 하드코딩 매크로 하나 (쿄 236+P) ─────────────────────────
+   손으로 넣어 발동을 확인한 그 시퀀스를 그대로 옮긴다: `4 D` → `4 D+앞` → `2 앞+A`.
+   ★ 앞에 **조용한 12프레임**을 붙인다 — R1 실측에서 찌꺼기가 다음 입력과 이어 붙고
+     12프레임이라야 두 위상 모두 깨끗했다. SVC 처럼 이력 링에 써 넣는 길은
+     **이 게임엔 링이 없어서** 못 쓴다. 그래서 기다리는 쪽이 유일한 방법이다.
+   ★ 「앞」은 반전에 따라 좌우가 바뀐다. 슬롯은 앞/뒤, 패드는 좌/우다 —
+     안 뒤집으면 반전 무대에서 전부 오발로 찍힌다(SVC 에서 75건 허위 전과). */
+static const struct { unsigned char n, bits; } MACRO_QCF_P[] = {
+   { KOFSP_HIST_CLEAR, 0 },        /* 찌꺼기가 만료될 때까지 아무것도 안 넣는다 */
+   { 4, NGP_D },
+   { 4, (unsigned char)(NGP_D | 0x80) },   /* 0x80 = 「앞」 자리표시. 아래에서 푼다 */
+   { 2, (unsigned char)(0x80 | NGP_A) },
+};
+
+static int kof_forward_bit(void)
+{
+   /* 반전은 P1 의 것만 믿는다 — 「うごかない」 더미는 플래그가 갱신되지 않는다. */
+   if (!CPUExRAM) return NGP_R;
+   return (CPUExRAM[OFF_FACE] & KOFSP_FACE_BIT) ? NGP_L : NGP_R;
+}
+
 uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
 {
+   int trig = (ret & (1u << RP_R)) ? 1 : 0;
+
+   /* 순정 폴드 — 트리거로 돌린 R 은 빼고 그대로 둔다.
+      M1 에서 「출력 비트 동일」을 지키던 그 접기다. L 은 계속 A+B. */
    if (ret & (1u << RP_Y)) pad |= NGP_A;
    if (ret & (1u << RP_X)) pad |= NGP_B;
-   if ((ret & (1u << RP_L)) || (ret & (1u << RP_R)))
-      pad |= (uint8_t)(NGP_A | NGP_B);
+   if (ret & (1u << RP_L)) pad |= (uint8_t)(NGP_A | NGP_B);
 
-   /* 엔진 본체가 들어올 자리. 지금은 아무것도 안 한다 —
-      오프셋이 하나도 안 측정됐고, 안 잰 것에 기대는 코드를 만들지 않는 것이 규칙이다. */
+   if (!kofsp_engine_on() || !kof_is_rom) { trig_prev = trig; return pad; }
+
+   if (trig && !trig_prev && mac_step < 0)
+   {  /* 엣지에서만 시작한다. 누르고 있는 동안 되풀이 발동하면 누출이 된다. */
+      mac_step = 0;
+      mac_left = MACRO_QCF_P[0].n;
+      mac_fwd  = kof_forward_bit();
+      if (kof_dbg()) fprintf(stderr, "[kofsp] 매크로 시작 (앞=%s)\n",
+                             mac_fwd == NGP_R ? "R" : "L");
+   }
+   trig_prev = trig;
+
+   if (mac_step >= 0)
+   {
+      unsigned char b = MACRO_QCF_P[mac_step].bits;
+      /* 매크로가 도는 동안 사람 입력은 버린다 — 섞으면 커맨드가 오염된다 */
+      pad = (uint8_t)((b & 0x7F) | ((b & 0x80) ? mac_fwd : 0));
+      if (--mac_left <= 0)
+      {
+         mac_step++;
+         if (mac_step >= (int)(sizeof(MACRO_QCF_P) / sizeof(MACRO_QCF_P[0])))
+            mac_step = -1;
+         else
+            mac_left = MACRO_QCF_P[mac_step].n;
+      }
+   }
    return pad;
 }

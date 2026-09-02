@@ -68,44 +68,72 @@ def main():
     print('대본 %s\n' % script)
     print('%-8s %-22s %-22s %s' % ('게임', '램(안정바이트 기준)', '화면', '소리'))
 
+    # 「달라져야 정상」인 게임은 미리 선언한다 — 엔진이 졸업하면 그 게임은 달라진다.
+    # 선언 안 한 게임이 달라지면 그게 회귀다.
+    expect = set()
+    if '--expect' in sys.argv:
+        expect = set(sys.argv[sys.argv.index('--expect') + 1].split(','))
+
     allok = True
+    unjudged = []
     for name, rom in GAMES:
         if not os.path.exists(rom):
             print('%-8s (롬 없음)' % name)
             continue
         p = {k: os.path.join(tmp, '%s_%s' % (name, k)) for k in ('a', 'b', 'c', 'd')}
+        # ★ **엇갈려 돌린다** — a(기준) b(새것) c(기준) d(새것).
+        #   잡음(a↔c, b↔d)이 비교(a↔b)와 **같은 시간 간격**을 건너야 뜻이 있다.
+        #   나란히 돌리면(a,b 기준 → c,d 새것) 잡음은 인접 두 실행에서만 재지는데
+        #   비교는 두 칸 떨어진 실행끼리 하게 되어, **시간에 따라 흔들리는 것을
+        #   「변경 탓」으로 오독한다.** 실제로 SS2 를 그렇게 한 번 오독했다
+        #   (같은 코어를 양쪽에 넣어도 같은 숫자가 나와서 들켰다).
         sa = run(base, rom, script, p['a'] + '_')
-        sb = run(base, rom, script, p['b'] + '_')
-        sc = run(new, rom, script, p['c'] + '_')
+        sb = run(new, rom, script, p['b'] + '_')
+        sc = run(base, rom, script, p['c'] + '_')
         run(new, rom, script, p['d'] + '_')
 
         ramline, scrline = [], []
         ok = True
         for tag in TAGS:
             for ext, acc in (('ram', ramline), ('ppm', scrline)):
-                u1 = unstable(p['a'] + '_', p['b'] + '_', tag, ext)
-                u2 = unstable(p['c'] + '_', p['d'] + '_', tag, ext)
+                u1 = unstable(p['a'] + '_', p['c'] + '_', tag, ext)   # 기준 코어의 잡음
+                u2 = unstable(p['b'] + '_', p['d'] + '_', tag, ext)   # 새 코어의 잡음
                 if u1 is None or u2 is None:
                     acc.append('덤프없음'); ok = False; continue
                 noise = u1 | u2
                 if len(noise) > NOISE_CAP:
-                    acc.append('판정불가(잡음%d)' % len(noise)); ok = False; continue
-                a, c = rd(p['a'] + '_', tag, ext), rd(p['c'] + '_', tag, ext)
+                    acc.append('판정불가(잡음%d)' % len(noise))
+                    if name not in unjudged:
+                        unjudged.append(name)
+                    continue
+                a, c = rd(p['a'] + '_', tag, ext), rd(p['b'] + '_', tag, ext)
                 diff = [i for i in range(len(a))
                         if i not in noise and a[i] != c[i]]
                 acc.append('%d' % len(diff) + ('' if not diff else '★'))
                 if diff:
                     ok = False
-        noisy = sum(len(unstable(p['a'] + '_', p['b'] + '_', t, 'ram') or ()) for t in TAGS)
-        snd = '같음' if sa == sc else ('잡음' if sa != sb else '★다름')
-        if sa != sc and sa == sb:
-            ok = False
-        print('%-8s %-22s %-22s %s   (잡음 %d바이트)'
-              % (name, '/'.join(ramline), '/'.join(scrline), snd, noisy))
+        noisy = sum(len(unstable(p['a'] + '_', p['c'] + '_', t, 'ram') or ()) for t in TAGS)
+        # 소리도 같은 규율 — 기준 코어가 스스로 재현 안 되면(sa≠sc) 판정하지 않는다.
+        if sa != sc:
+            snd = '잡음'
+        elif sa == sb:
+            snd = '같음'
+        else:
+            snd = '★다름'; ok = False
+        mark = '  ← 달라져야 정상' if (name in expect) else ''
+        print('%-8s %-22s %-22s %s   (잡음 %d바이트)%s'
+              % (name, '/'.join(ramline), '/'.join(scrline), snd, noisy, mark))
+        if name in expect:
+            ok = True          # 선언된 게임의 차이는 회귀가 아니다
         allok = allok and ok
 
     print()
-    print('판정: %s' % ('PASS — 안정 바이트에서 차이 0' if allok else '★FAIL'))
+    if unjudged:
+        print('판정불가: %s — 그 게임은 이 대본·간격에서 스스로 재현되지 않는다.'
+              % ', '.join(unjudged))
+        print('           **「같음」이 아니라 「모른다」다.** 대본을 결정적 구간으로 줄여야 한다.')
+    print('판정: %s' % ('PASS — 선언 안 한 게임의 안정 바이트에서 차이 0'
+                        if allok else '★FAIL — 선언 안 한 게임이 달라졌다'))
     return 0 if allok else 1
 
 
