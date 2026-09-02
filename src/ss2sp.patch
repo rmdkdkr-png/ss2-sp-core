@@ -1,8 +1,8 @@
 diff --git a/Makefile.common b/Makefile.common
-index b61e812..05ec58b 100644
+index b61e812..87fad1b 100644
 --- a/Makefile.common
 +++ b/Makefile.common
-@@ -82,7 +82,10 @@ SOURCES_CXX += \
+@@ -82,7 +82,11 @@ SOURCES_CXX += \
  
  SOURCES_C   += \
  	$(MEDNAFEN_DIR)/state.c \
@@ -10,12 +10,13 @@ index b61e812..05ec58b 100644
 +	$(CORE_DIR)/libretro.c \
 +	$(CORE_DIR)/ss2sp.c \
 +	$(CORE_DIR)/svcsp.c \
++	$(CORE_DIR)/kofsp.c \
 +	$(CORE_DIR)/ss2comm.c
  
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..aa446a9 100644
+index ef01e22..e0547ba 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -32,7 +33,7 @@ index ef01e22..aa446a9 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,115 @@ static void check_color_depth(void)
+@@ -377,6 +379,124 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -54,6 +55,15 @@ index ef01e22..aa446a9 100644
 +extern int     svcsp_rom_ok(void);
 +extern char    svcsp_last_disp[64];
 +extern int     svcsp_disp_seq;
++/* ── KOF R-2 원버튼 엔진 (kofsp.c) — 롬 헤더 0x24 "KOF R2" 로 자동 판별 ──
++   ★ 지금은 M1(배관만)이다. kofsp_frame 은 순정 롬 폴드와 **똑같이** 동작하므로
++     이 가지가 들어와도 KOF 의 조작은 한 비트도 안 바뀐다. 엔진은 오프셋을 재고 나서 얹는다. */
++extern uint8_t kofsp_frame(uint8_t pad, uint16_t ret);
++extern void    kofsp_set_engine(int on);
++extern int     kofsp_engine_on(void);
++extern void    kofsp_reset(void);
++extern void    kofsp_set_rom(const void *rom, unsigned len);
++extern int     kofsp_rom_ok(void);
 +static bool    svcsp_toast_on = true;
 +static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
 +static unsigned char ov_band = 1, ov_band_p = 1;     /* 기술명 띠(화면 밖) 온오프 */
@@ -148,7 +158,7 @@ index ef01e22..aa446a9 100644
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +503,103 @@ static void check_variables(void)
+@@ -392,6 +512,103 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -252,15 +262,17 @@ index ef01e22..aa446a9 100644
  }
  
  void retro_init(void)
-@@ -436,6 +644,28 @@ void retro_init(void)
+@@ -436,6 +653,30 @@ void retro_init(void)
  
  void retro_reset(void)
  {
 +   ss2sp_reset();
 +   svcsp_reset();
++   kofsp_reset();
 +   ss2comm_set_ram(&CPUExRAM[0]);
 +   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
++   kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   ss2comm_overlay_spmode(svcsp_rom_ok());
 +   if (svcsp_rom_ok())
 +   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
@@ -281,7 +293,7 @@ index ef01e22..aa446a9 100644
     neopop_reset();
  }
  
-@@ -448,6 +678,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +689,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -289,7 +301,7 @@ index ef01e22..aa446a9 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +689,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +700,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -303,7 +315,7 @@ index ef01e22..aa446a9 100644
  
        { 0 },
     };
-@@ -479,6 +717,45 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +728,46 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -311,6 +323,7 @@ index ef01e22..aa446a9 100644
 +   ss2comm_set_ram(&CPUExRAM[0]);
 +   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
++   kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   ss2comm_overlay_spmode(svcsp_rom_ok());
 +   if (svcsp_rom_ok())
 +   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
@@ -349,7 +362,7 @@ index ef01e22..aa446a9 100644
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +833,117 @@ static void update_input(void)
+@@ -556,6 +845,123 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -449,6 +462,12 @@ index ef01e22..aa446a9 100644
 +      }
 +      else if (ss2comm_rom_is_ss2())
 +         input_buf = ss2sp_frame(input_buf, trig);
++      else if (kofsp_rom_ok())
++         /* KOF R-2 — 원버튼 엔진. ★ M1 단계에서는 kofsp_frame 이 아래 순정 폴드와
++            **똑같이** 접기만 한다(Y=A·X=B·L·R=A+B). 그래서 이 가지가 생겨도
++            KOF 의 출력은 한 비트도 안 바뀐다 — 그것이 M1 의 통과 조건이다.
++            ⚠ 순정 폴드보다 **앞**에 있어야 한다. 뒤에 두면 영영 안 불린다. */
++         input_buf = kofsp_frame(input_buf, (uint16_t)ret);
 +      else
 +      {  /* 순정 NGPC 롬 — 매크로 엔진이 없다. 강/기술 자리 버튼을 NGP 로 접어
 +            SVC 6키 배치·물리 패드가 그대로 통하게 한다: Y=A, X=B, L·R=A+B. */
@@ -467,7 +486,7 @@ index ef01e22..aa446a9 100644
  }
  
  void retro_run(void)
-@@ -598,12 +986,68 @@ void retro_run(void)
+@@ -598,12 +1004,68 @@ void retro_run(void)
        update_video = false;
     }
  
@@ -540,7 +559,7 @@ index ef01e22..aa446a9 100644
  
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-@@ -629,11 +1073,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+@@ -629,11 +1091,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -561,16 +580,17 @@ index ef01e22..aa446a9 100644
  
     check_color_depth();
  }
-@@ -762,6 +1210,8 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1228,9 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
 +   ss2sp_reset();
 +   svcsp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
++   kofsp_reset();
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1232,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1251,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  

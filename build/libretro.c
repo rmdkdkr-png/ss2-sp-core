@@ -397,6 +397,15 @@ extern void    svcsp_slots_import(const unsigned char *buf, int len);
 extern int     svcsp_rom_ok(void);
 extern char    svcsp_last_disp[64];
 extern int     svcsp_disp_seq;
+/* ── KOF R-2 원버튼 엔진 (kofsp.c) — 롬 헤더 0x24 "KOF R2" 로 자동 판별 ──
+   ★ 지금은 M1(배관만)이다. kofsp_frame 은 순정 롬 폴드와 **똑같이** 동작하므로
+     이 가지가 들어와도 KOF 의 조작은 한 비트도 안 바뀐다. 엔진은 오프셋을 재고 나서 얹는다. */
+extern uint8_t kofsp_frame(uint8_t pad, uint16_t ret);
+extern void    kofsp_set_engine(int on);
+extern int     kofsp_engine_on(void);
+extern void    kofsp_reset(void);
+extern void    kofsp_set_rom(const void *rom, unsigned len);
+extern int     kofsp_rom_ok(void);
 static bool    svcsp_toast_on = true;
 static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
 static unsigned char ov_band = 1, ov_band_p = 1;     /* 기술명 띠(화면 밖) 온오프 */
@@ -646,9 +655,11 @@ void retro_reset(void)
 {
    ss2sp_reset();
    svcsp_reset();
+   kofsp_reset();
    ss2comm_set_ram(&CPUExRAM[0]);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
+   kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2comm_overlay_spmode(svcsp_rom_ok());
    if (svcsp_rom_ok())
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
@@ -721,6 +732,7 @@ bool retro_load_game(const struct retro_game_info *info)
    ss2comm_set_ram(&CPUExRAM[0]);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
+   kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2comm_overlay_spmode(svcsp_rom_ok());
    if (svcsp_rom_ok())
    {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
@@ -929,6 +941,12 @@ static void update_input(void)
       }
       else if (ss2comm_rom_is_ss2())
          input_buf = ss2sp_frame(input_buf, trig);
+      else if (kofsp_rom_ok())
+         /* KOF R-2 — 원버튼 엔진. ★ M1 단계에서는 kofsp_frame 이 아래 순정 폴드와
+            **똑같이** 접기만 한다(Y=A·X=B·L·R=A+B). 그래서 이 가지가 생겨도
+            KOF 의 출력은 한 비트도 안 바뀐다 — 그것이 M1 의 통과 조건이다.
+            ⚠ 순정 폴드보다 **앞**에 있어야 한다. 뒤에 두면 영영 안 불린다. */
+         input_buf = kofsp_frame(input_buf, (uint16_t)ret);
       else
       {  /* 순정 NGPC 롬 — 매크로 엔진이 없다. 강/기술 자리 버튼을 NGP 로 접어
             SVC 6키 배치·물리 패드가 그대로 통하게 한다: Y=A, X=B, L·R=A+B. */
@@ -1212,6 +1230,7 @@ bool retro_unserialize(const void *data, size_t size)
 {
    ss2sp_reset();
    svcsp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
+   kofsp_reset();
    StateMem st;
 
    st.data           = (uint8_t*)data;
