@@ -67,7 +67,7 @@
      "button": "P",
      "kind": "special",
      "status": "확정",
-     "notes": "도쿠가미 파생. 이후 6+P(벌읊기) | 실측: 뱅크[0,22] | 실측 확정: 뱅크 168, 독물기 중 hcb+P, 피해 1→5. 벌읊기(6P)는 이 판본 미구현 추정",
+     "notes": "도쿠가미 파생. 이후 6+P(벌읊기) | 실측: 뱅크[0,22] | 실측 확정: 뱅크 168, 독물기 중 hcb+P, 피해 1→5. 벌읊기(6P)는 이 판본 미구현 추정 — 틀렸다, 나온다(act 172~174, 콤보 3). ★ 죄읊기 뒤에 섬돌뚫기를 붙이려 해 봤으나 안 된다 — 두 기술 커맨드가 6+P 로 **같아서** 게임이 벌읊기를 낸다. 섬돌뚫기는 구상(128식) 뒤 파생이다",
      "next": "벌읊기 (Batsu Yomi)"
     },
     {
@@ -175,10 +175,10 @@
    ],
    "slot_suggestion": {
     "N": "114식 황물기 (Aragami)",
-    "D": "100식 귀신태우기 (Oniyaki)",
-    "DF": "R.E.D. 킥",
-    "B": "75식 개",
-    "F": "최종결전오의 무식",
+    "F": "100식 귀신태우기 (Oniyaki)",
+    "B": "R.E.D. 킥",
+    "D": "910식 누에잡기 (Nue Tsumi)",
+    "DF": "75식 개",
     "DB": "212식 금월양 (Kototsuki You)",
     "AIR": "외식 나락 떨구기 (Naraku Otoshi)"
    },
@@ -276,11 +276,11 @@
    ],
    "slot_suggestion": {
     "N": "파워 웨이브",
-    "D": "라이징 태클",
-    "DF": "파워 덩크",
-    "B": "번 너클",
-    "F": "파워 가이저",
-    "DB": "크랙 슛"
+    "F": "라이징 태클",
+    "B": "크랙 슛",
+    "D": "파워 덩크",
+    "DF": "번 너클",
+    "DB": "파워 가이저"
    },
    "cancel_dud": false
   },
@@ -369,11 +369,11 @@
    ],
    "slot_suggestion": {
     "N": "호황권",
-    "D": "호포",
-    "DF": "비연질풍각",
-    "B": "잔렬권",
-    "F": "용호난무",
-    "DB": "패왕상후권"
+    "F": "호포",
+    "B": "비연질풍각",
+    "D": "잔렬권",
+    "DF": "패왕상후권",
+    "DB": "용호난무"
    },
    "cancel_dud": false
   },
@@ -431,7 +431,8 @@
      "button": "K",
      "kind": "special",
      "status": "확정",
-     "notes": "영문 다수결 'Sachiyo Dori', 일본자료는 사요치도리(小夜千鳥) — 소수. 이후 214+P 용염무 파생 | 실측: 뱅크[22] 피해1"
+     "notes": "영문 다수결 'Sachiyo Dori', 일본자료는 사요치도리(小夜千鳥) — 소수. 이후 214+P 용염무 파생 | 실측: 뱅크[22] 피해1",
+     "next": "용염무"
     },
     {
      "name": "필살인봉",
@@ -489,10 +490,10 @@
    ],
    "slot_suggestion": {
     "N": "화접선",
-    "D": "용염무",
-    "DF": "무사사비의 춤 (지상)",
-    "B": "사치요 도리 (小夜千鳥)",
-    "F": "필살인봉",
+    "F": "용염무",
+    "B": "무사사비의 춤 (지상)",
+    "D": "사치요 도리 (小夜千鳥)",
+    "DF": "필살인봉",
     "DB": "필살인봉",
     "AIR": "무사사비의 춤 (공중)"
    },
@@ -600,11 +601,11 @@
    ],
    "slot_suggestion": {
     "N": "발틱 런처",
-    "D": "문 슬래셔",
+    "F": "문 슬래셔",
+    "B": "그라운드 세이버",
+    "D": "이어링 폭탄",
     "DF": "아이 슬래셔",
-    "B": "이어링 폭탄",
-    "F": "그래비티 스톰",
-    "DB": "그라운드 세이버",
+    "DB": "그래비티 스톰",
     "AIR": "X 칼리버"
    },
    "cancel_dud": false
@@ -663,7 +664,7 @@
      "button": "K",
      "kind": "special",
      "status": "확정",
-     "notes": "약K. 장풍 반사 | 실측: 뱅크[32] | 홀드=강판: 뉴(ν) 사이코 리플렉터"
+     "notes": "약K. 장풍 반사 | 실측: 뱅크[32] | 홀드=강판: 뉴 사이코 리플렉터"
     },
     {
      "name": "사이킥 텔레포트",
@@ -712,11 +713,11 @@
    ],
    "slot_suggestion": {
     "N": "사이코 볼",
-    "D": "사이코 소드",
-    "DF": "사이코 리플렉터",
-    "B": "슈퍼 사이킥 스로우",
-    "F": "샤이닝 크리스탈 비트",
-    "DB": "사이킥 텔레포트"
+    "F": "사이코 소드",
+    "B": "사이코 리플렉터",
+    "D": "슈퍼 사이킥 스로우",
+    "DF": "사이킥 텔레포트",
+    "DB": "샤이닝 크리스탈 비트"
    },
    "cancel_dud": false
   },
@@ -775,7 +776,25 @@
      "kind": "special",
      "status": "확정",
      "damage": 3,
-     "notes": "3회 반복입력 3연격. 실측 214/63214/214214 동일 bank22 지문"
+     "notes": "3회 반복입력 3연격. 실측 214/63214/214214 동일 bank22 지문",
+     "next": "127식 아오이하나 2타"
+    },
+    {
+     "name": "127식 아오이하나 2타",
+     "command": "214",
+     "button": "P",
+     "kind": "special",
+     "status": "확정",
+     "notes": "실측: 재입력 뱅크141, 콤보 2 · 피해 4 (간격 12~16f)",
+     "next": "127식 아오이하나 3타"
+    },
+    {
+     "name": "127식 아오이하나 3타",
+     "command": "214",
+     "button": "P",
+     "kind": "special",
+     "status": "확정",
+     "notes": "실측: 뱅크145, 콤보 3 · 피해 7"
     },
     {
      "name": "212식 코토츠키 인",
@@ -830,11 +849,11 @@
    ],
    "slot_suggestion": {
     "N": "108식 야미바라이 (어둠쫓기)",
-    "D": "100식 오니야키",
-    "DF": "311식 츠마구시",
+    "F": "100식 오니야키",
     "B": "127식 아오이하나",
-    "F": "금 1211식 야오토메 (팔치녀)",
-    "DB": "212식 코토츠키 인",
+    "D": "311식 츠마구시",
+    "DF": "212식 코토츠키 인",
+    "DB": "금 1211식 야오토메 (팔치녀)",
     "AIR": "외식 유리오리 (백합꺾기)"
    },
    "cancel_dud": false
@@ -890,9 +909,10 @@
    ],
    "slot_suggestion": {
     "N": "오의 선풍열참",
-    "D": "오의 호월참",
-    "B": "오의 선풍열참",
-    "F": "비오의 천파봉신참",
+    "F": "오의 호월참",
+    "B": "오의 열진참",
+    "D": "오의 열진참",
+    "DF": "비오의 천파봉신참",
     "DB": "비오의 천파단공열참"
    },
    "cancel_dud": false
@@ -974,11 +994,11 @@
    ],
    "slot_suggestion": {
     "N": "시치카푸 에투",
-    "D": "레라 무츠베",
+    "F": "레라 무츠베",
+    "B": "카무이 림세",
+    "D": "매에 매달리기 (타카니 츠카마루)",
     "DF": "카무이 림세",
-    "B": "시치카푸 에투",
-    "F": "카무이 림세",
-    "DB": "매에 매달리기 (타카니 츠카마루)",
+    "DB": "시치카푸 에투",
     "AIR": "카무이 훔 케습"
    },
    "cancel_dud": false
@@ -1067,11 +1087,11 @@
    ],
    "slot_suggestion": {
     "N": "파동권(Hadouken)",
-    "F": "진공파동권(Shinku Hadouken)",
-    "B": "진공용권선풍각(Shinku Tatsumaki Senpukyaku)",
-    "D": "승룡권(Shoryuken)",
-    "DF": "용권선풍각(Tatsumaki Senpukyaku)",
-    "DB": "작열 파동권(Shakunetsu Hadouken)"
+    "F": "승룡권(Shoryuken)",
+    "B": "용권선풍각(Tatsumaki Senpukyaku)",
+    "D": "작열 파동권(Shakunetsu Hadouken)",
+    "DF": "진공파동권(Shinku Hadouken)",
+    "DB": "진공용권선풍각(Shinku Tatsumaki Senpukyaku)"
    },
    "cancel_dud": false
   },
@@ -1174,10 +1194,11 @@
    ],
    "slot_suggestion": {
     "N": "기공권(Kikoken)",
-    "F": "기공장(Kikosho)",
-    "D": "천승각(Tenshokyaku)",
-    "DF": "선원추(Sen'enshu)",
-    "DB": "스피닝 버드 킥(Spinning Bird Kick)",
+    "F": "천승각(Tenshokyaku)",
+    "B": "스피닝 버드 킥(Spinning Bird Kick)",
+    "D": "선원추(Sen'enshu)",
+    "DF": "기공장(Kikosho)",
+    "DB": "기공장(Kikosho)",
     "AIR": "응조각(Yousou Kyaku)"
    },
    "cancel_dud": false
@@ -1312,11 +1333,11 @@
    ],
    "slot_suggestion": {
     "N": "배니싱 플랫(Banishing Flat)",
-    "F": "파이널 아토믹 버스터(Final Atomic Buster)",
+    "F": "더블 라리아트(Double Lariat)",
     "B": "스크류 파일 드라이버(Screw Piledriver)",
-    "D": "더블 라리아트(Double Lariat)",
+    "D": "퀵 더블 라리아트(Quick Double Lariat)",
     "DF": "에어리얼 러시안 슬램(Aerial Russian Slam)",
-    "DB": "퀵 더블 라리아트(Quick Double Lariat)",
+    "DB": "파이널 아토믹 버스터(Final Atomic Buster)",
     "AIR": "플라잉 바디 프레스(Flying Body Press)"
    },
    "cancel_dud": false
@@ -1404,11 +1425,11 @@
    ],
    "slot_suggestion": {
     "N": "파동권(Hadouken)",
-    "F": "승룡열파(Shoryu Reppa)",
-    "B": "전방전신(Zenpou Tenshin)",
-    "D": "승룡권(Shoryuken)",
-    "DF": "신룡권(Shinryuken)",
-    "DB": "용권선풍각(Tatsumaki Senpukyaku)"
+    "F": "승룡권(Shoryuken)",
+    "B": "용권선풍각(Tatsumaki Senpukyaku)",
+    "D": "전방전신(Zenpou Tenshin)",
+    "DF": "승룡열파(Shoryu Reppa)",
+    "DB": "신룡권(Shinryuken)"
    },
    "cancel_dud": false
   },
@@ -1478,10 +1499,10 @@
    ],
    "slot_suggestion": {
     "N": "아도권(Gadouken)",
-    "F": "진공아도권(Shinku Gadouken)",
+    "F": "코류켄(Kouryuken)",
     "B": "단공각(Dankukyaku)",
-    "D": "코류켄(Kouryuken)",
-    "DF": "코류렉카(Kouryu Rekka)",
+    "D": "코류렉카(Kouryu Rekka)",
+    "DF": "진공아도권(Shinku Gadouken)",
     "DB": "필승무뢰권(Hisshou Burai Ken)"
    },
    "cancel_dud": false
@@ -1530,7 +1551,16 @@
      "button": "K",
      "kind": "special",
      "status": "확정",
-     "notes": "발동 후 P를 타이밍 맞춰 최대 3회 추가입력 | 실측: 뱅크[23]"
+     "notes": "발동 후 P를 타이밍 맞춰 최대 3회 추가입력 | 실측: 뱅크[23]",
+     "next": "사쿠라 오토시 추가타"
+    },
+    {
+     "name": "사쿠라 오토시 추가타",
+     "command": "5",
+     "button": "P",
+     "kind": "special",
+     "status": "확정",
+     "notes": "실측: 사쿠라 오토시 뒤 P, 뱅크161, 피해 4. 단독으론 안 맞는다"
     },
     {
      "name": "진공파동권(Shinku Hadouken)",
@@ -1568,11 +1598,11 @@
    ],
    "slot_suggestion": {
     "N": "파동권(Hadouken)",
-    "F": "진공파동권(Shinku Hadouken)",
+    "F": "쇼오켄(Shououken)",
     "B": "춘풍각(Shunpukyaku)",
-    "D": "쇼오켄(Shououken)",
-    "DF": "미다레자쿠라(Midare Zakura)",
-    "DB": "사쿠라 오토시(Sakura Otoshi)"
+    "D": "사쿠라 오토시(Sakura Otoshi)",
+    "DF": "진공파동권(Shinku Hadouken)",
+    "DB": "미다레자쿠라(Midare Zakura)"
    },
    "cancel_dud": false
   },
@@ -1653,11 +1683,11 @@
    ],
    "slot_suggestion": {
     "N": "소울 피스트(Soul Fist)",
-    "F": "다크니스 일루전(Darkness Illusion)",
+    "F": "섀도 블레이드(Shadow Blade)",
     "B": "벡터 드레인(Vector Drain)",
-    "D": "섀도 블레이드(Shadow Blade)",
+    "D": "발키리 턴(Valkyrie Turn)",
     "DF": "피니싱 샤워(Finishing Shower)",
-    "DB": "발키리 턴(Valkyrie Turn)"
+    "DB": "다크니스 일루전(Darkness Illusion)"
    },
    "cancel_dud": false
   },
@@ -1672,7 +1702,16 @@
      "kind": "special",
      "status": "확정",
      "damage": 3,
-     "notes": "이후 P 추가입력으로 롤링 어퍼 파생(첫타 미스여도 가능, 대공 겸용). 실측 dmg3·전진40px. 41236+P 입력도 동일 지문 흡수"
+     "notes": "이후 P 추가입력으로 롤링 어퍼 파생(첫타 미스여도 가능, 대공 겸용). 실측 dmg3·전진40px. 41236+P 입력도 동일 지문 흡수",
+     "next": "롤링 어퍼"
+    },
+    {
+     "name": "롤링 어퍼",
+     "command": "5",
+     "button": "P",
+     "kind": "special",
+     "status": "확정",
+     "notes": "실측: 롤링 버클러 뒤 P, 뱅크129, 콤보 2 · 피해 4"
     },
     {
      "name": "캣 스파이크(Cat Spike)",
@@ -1738,10 +1777,10 @@
    ],
    "slot_suggestion": {
     "N": "롤링 버클러(Rolling Buckler)",
-    "F": "댄싱 플래시(Dancing Flash)",
+    "F": "캣 스파이크(Cat Spike)",
     "B": "헬 캣(Hell Cat)",
     "D": "델타 킥(Delta Kick)",
-    "DF": "캣 스파이크(Cat Spike)",
+    "DF": "댄싱 플래시(Dancing Flash)",
     "DB": "플리즈 헬프 미(Please Help Me)"
    },
    "cancel_dud": false
@@ -1774,7 +1813,8 @@
      "kind": "special",
      "status": "확정",
      "damage": 0,
-     "notes": "←모으고 →+P. 실측 고유 지문(banks2)·전진15px 확인, 무피해=측정창 내 탄 미착탄 추정"
+     "notes": "←모으고 →+P. 실측 고유 지문(banks2)·전진15px 확인, 무피해=측정창 내 탄 미착탄 추정",
+     "name_hold": "소닉 붐(강)"
     },
     {
      "name": "서머솔트 킥(Somersault Kick)",
@@ -1782,7 +1822,8 @@
      "button": "K",
      "kind": "special",
      "status": "확정",
-     "notes": "↓모으고 ↑+K. 명칭 소수의견: GameFAQs 'Flash Kick'. 실측 [2]8+P(dmg3)는 점프 공격 지문으로 판단 | 실측: 뱅크[3] 피해8"
+     "notes": "↓모으고 ↑+K. 명칭 소수의견: GameFAQs 'Flash Kick'. 실측 [2]8+P(dmg3)는 점프 공격 지문으로 판단 | 실측: 뱅크[3] 피해8",
+     "name_hold": "서머솔트 킥(강)"
     },
     {
      "name": "소닉 허리케인(Sonic Hurricane)",
@@ -1810,13 +1851,11 @@
     }
    ],
    "slot_suggestion": {
-    "N": "소닉 붐(Sonic Boom)",
-    "F": "소닉 허리케인(Sonic Hurricane)",
-    "D": "서머솔트 킥(Somersault Kick)",
-    "DF": "서머솔트 스트라이크(Somersault Strike)",
-    "DB": "크로스파이어 블리츠(Crossfire Blitz)"
+    "B": "소닉 붐(Sonic Boom)",
+    "D": "서머솔트 킥(Somersault Kick)"
    },
-   "cancel_dud": false
+   "cancel_dud": false,
+   "slots_literal": true
   }
  ]
 }
