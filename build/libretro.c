@@ -441,11 +441,18 @@ static unsigned ss2_last_w = FB_WIDTH, ss2_last_h = FB_HEIGHT;
 static unsigned char ov_sp = 1, ov_chat = 1, ov_spk = 0, ov_ref = 1, ov_sides = 1;
 static unsigned char ov_sp_p = 1, ov_chat_p = 1, ov_spk_p = 0, ov_ref_p = 1, ov_sides_p = 1;
 
+/* 기둥은 SS2 에서만 뜻이 있다 — 초상 자료가 SS2 롬에서 구워지기 때문이다.
+   다른 롬에서 켜면 ss2comm_side() 가 「자료 없음」 가지로 빠져 마름모 무늬 틀만
+   그리고(해설·띠가 둘 다 꺼져 있으면 아예 안 그린다), 그 대가로 화면 폭이
+   160 → 288 로 벌어진다. 값도 없이 캔버스만 넓히는 셈이라 순정 롬에서는 끈다.
+   ss2_sides 는 사용자 취향으로 그대로 두고 **효과만** 롬으로 가른다. */
+static int sides_on(void) { return ss2_sides && ss2comm_rom_is_ss2(); }
+
 static void ss2_set_geometry(void)
 {
    struct retro_game_geometry geom;
    int band = ss2comm_band_h();
-   geom.base_width   = ss2_sides ? SS2_WIDE_W : FB_WIDTH;
+   geom.base_width   = sides_on() ? SS2_WIDE_W : FB_WIDTH;
    geom.base_height  = FB_HEIGHT + band;
    geom.max_width    = SS2_WIDE_W;
    geom.max_height   = FB_HEIGHT + SS2COMM_BAND_MAX;
@@ -1019,7 +1026,7 @@ void retro_run(void)
       spec.SoundBufSize = 0;
    }
 
-   if (ss2_sides)
+   if (sides_on())
    {
       /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
          게임 그림을 가운데로 옮겨 넓은 캔버스(288px)로 내보낸다 */
@@ -1068,7 +1075,7 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    info->timing.sample_rate    = 44100;
    {
       int band = ss2comm_band_h();                   /* 해설 확장 띠(20px) 사용 시에만 > 0 */
-      info->geometry.base_width   = ss2_sides ? SS2_WIDE_W : MEDNAFEN_CORE_GEOMETRY_BASE_W;
+      info->geometry.base_width   = sides_on() ? SS2_WIDE_W : MEDNAFEN_CORE_GEOMETRY_BASE_W;
       info->geometry.base_height  = MEDNAFEN_CORE_GEOMETRY_BASE_H + band;
       info->geometry.max_width    = SS2_WIDE_W;
       info->geometry.max_height   = MEDNAFEN_CORE_GEOMETRY_MAX_H + SS2COMM_BAND_MAX;

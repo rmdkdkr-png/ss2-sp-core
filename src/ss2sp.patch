@@ -15,7 +15,7 @@ index b61e812..05ec58b 100644
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..99b961a 100644
+index ef01e22..aa446a9 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -32,7 +32,7 @@ index ef01e22..99b961a 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,108 @@ static void check_color_depth(void)
+@@ -377,6 +379,115 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -98,11 +98,18 @@ index ef01e22..99b961a 100644
 +static unsigned char ov_sp = 1, ov_chat = 1, ov_spk = 0, ov_ref = 1, ov_sides = 1;
 +static unsigned char ov_sp_p = 1, ov_chat_p = 1, ov_spk_p = 0, ov_ref_p = 1, ov_sides_p = 1;
 +
++/* 기둥은 SS2 에서만 뜻이 있다 — 초상 자료가 SS2 롬에서 구워지기 때문이다.
++   다른 롬에서 켜면 ss2comm_side() 가 「자료 없음」 가지로 빠져 마름모 무늬 틀만
++   그리고(해설·띠가 둘 다 꺼져 있으면 아예 안 그린다), 그 대가로 화면 폭이
++   160 → 288 로 벌어진다. 값도 없이 캔버스만 넓히는 셈이라 순정 롬에서는 끈다.
++   ss2_sides 는 사용자 취향으로 그대로 두고 **효과만** 롬으로 가른다. */
++static int sides_on(void) { return ss2_sides && ss2comm_rom_is_ss2(); }
++
 +static void ss2_set_geometry(void)
 +{
 +   struct retro_game_geometry geom;
 +   int band = ss2comm_band_h();
-+   geom.base_width   = ss2_sides ? SS2_WIDE_W : FB_WIDTH;
++   geom.base_width   = sides_on() ? SS2_WIDE_W : FB_WIDTH;
 +   geom.base_height  = FB_HEIGHT + band;
 +   geom.max_width    = SS2_WIDE_W;
 +   geom.max_height   = FB_HEIGHT + SS2COMM_BAND_MAX;
@@ -141,7 +148,7 @@ index ef01e22..99b961a 100644
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +496,103 @@ static void check_variables(void)
+@@ -392,6 +503,103 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -245,7 +252,7 @@ index ef01e22..99b961a 100644
  }
  
  void retro_init(void)
-@@ -436,6 +637,28 @@ void retro_init(void)
+@@ -436,6 +644,28 @@ void retro_init(void)
  
  void retro_reset(void)
  {
@@ -274,7 +281,7 @@ index ef01e22..99b961a 100644
     neopop_reset();
  }
  
-@@ -448,6 +671,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +678,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -282,7 +289,7 @@ index ef01e22..99b961a 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +682,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +689,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -296,7 +303,7 @@ index ef01e22..99b961a 100644
  
        { 0 },
     };
-@@ -479,6 +710,45 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +717,45 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -342,7 +349,7 @@ index ef01e22..99b961a 100644
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +826,117 @@ static void update_input(void)
+@@ -556,6 +833,117 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -460,7 +467,7 @@ index ef01e22..99b961a 100644
  }
  
  void retro_run(void)
-@@ -598,12 +979,68 @@ void retro_run(void)
+@@ -598,12 +986,68 @@ void retro_run(void)
        update_video = false;
     }
  
@@ -508,7 +515,7 @@ index ef01e22..99b961a 100644
 +      spec.SoundBufSize = 0;
 +   }
 +
-+   if (ss2_sides)
++   if (sides_on())
 +   {
 +      /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
 +         게임 그림을 가운데로 옮겨 넓은 캔버스(288px)로 내보낸다 */
@@ -533,7 +540,7 @@ index ef01e22..99b961a 100644
  
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-@@ -629,11 +1066,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+@@ -629,11 +1073,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -544,7 +551,7 @@ index ef01e22..99b961a 100644
 -   info->geometry.aspect_ratio = MEDNAFEN_CORE_GEOMETRY_ASPECT_RATIO;
 +   {
 +      int band = ss2comm_band_h();                   /* 해설 확장 띠(20px) 사용 시에만 > 0 */
-+      info->geometry.base_width   = ss2_sides ? SS2_WIDE_W : MEDNAFEN_CORE_GEOMETRY_BASE_W;
++      info->geometry.base_width   = sides_on() ? SS2_WIDE_W : MEDNAFEN_CORE_GEOMETRY_BASE_W;
 +      info->geometry.base_height  = MEDNAFEN_CORE_GEOMETRY_BASE_H + band;
 +      info->geometry.max_width    = SS2_WIDE_W;
 +      info->geometry.max_height   = MEDNAFEN_CORE_GEOMETRY_MAX_H + SS2COMM_BAND_MAX;
@@ -554,7 +561,7 @@ index ef01e22..99b961a 100644
  
     check_color_depth();
  }
-@@ -762,6 +1203,8 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1210,8 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
@@ -563,7 +570,7 @@ index ef01e22..99b961a 100644
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1225,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1232,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  
