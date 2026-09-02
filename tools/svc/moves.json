@@ -221,7 +221,8 @@
      "kind": "special",
      "status": "확정",
      "damage": 3,
-     "notes": "실측 bank23, damage3 ([1]9도 동일 지문)"
+     "notes": "실측 bank23, damage3 ([1]9도 동일 지문)",
+     "name_hold": "라이징 태클(강)"
     },
     {
      "name": "크랙 슛",
@@ -276,13 +277,14 @@
    ],
    "slot_suggestion": {
     "N": "파워 웨이브",
-    "F": "라이징 태클",
-    "B": "크랙 슛",
-    "D": "파워 덩크",
-    "DF": "번 너클",
-    "DB": "파워 가이저"
+    "F": "파워 덩크",
+    "B": "번 너클",
+    "D": "라이징 태클",
+    "DF": "파이어 킥",
+    "DB": "크랙 슛"
    },
-   "cancel_dud": false
+   "cancel_dud": false,
+   "slots_literal": true
   },
   {
    "id": 2,
@@ -491,8 +493,8 @@
    "slot_suggestion": {
     "N": "화접선",
     "F": "용염무",
-    "B": "무사사비의 춤 (지상)",
-    "D": "사치요 도리 (小夜千鳥)",
+    "B": "사치요 도리 (小夜千鳥)",
+    "D": "무사사비의 춤 (지상)",
     "DF": "필살인봉",
     "DB": "필살인봉",
     "AIR": "무사사비의 춤 (공중)"
@@ -600,12 +602,12 @@
     }
    ],
    "slot_suggestion": {
-    "N": "발틱 런처",
-    "F": "문 슬래셔",
+    "N": "이어링 폭탄",
+    "F": "아이 슬래셔",
     "B": "그라운드 세이버",
-    "D": "이어링 폭탄",
-    "DF": "아이 슬래셔",
-    "DB": "그래비티 스톰",
+    "D": "문 슬래셔",
+    "DF": "그래비티 스톰",
+    "DB": "발틱 런처",
     "AIR": "X 칼리버"
    },
    "cancel_dud": false
@@ -1194,9 +1196,9 @@
    ],
    "slot_suggestion": {
     "N": "기공권(Kikoken)",
-    "F": "천승각(Tenshokyaku)",
+    "F": "선원추(Sen'enshu)",
     "B": "스피닝 버드 킥(Spinning Bird Kick)",
-    "D": "선원추(Sen'enshu)",
+    "D": "천승각(Tenshokyaku)",
     "DF": "기공장(Kikosho)",
     "DB": "기공장(Kikosho)",
     "AIR": "응조각(Yousou Kyaku)"

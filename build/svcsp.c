@@ -590,10 +590,17 @@ static void svc_compile(const svc_move *m)
         잡고 있던 시간이 충분하면 첫 칸을 건너뛰고 나머지만 넣는다. */
       if ((m->flags & 16) && m->len > 0)
       {
-         /* 게이트(svc_charge_ok)를 통과해 여기 온 것이므로 사실상 늘 스킵이지만,
-            보류·재시도 경로에서 늦게 컴파일될 수도 있어 같은 판정을 다시 쓴다. */
-         if (svc_charge_ok(m))
-            skip_charge = 1;
+         /* ★ 컴파일 시점 차지 **재검** — 보류(pending)를 거쳐 늦게 오면 발사 시점에
+            차지가 소멸해 있을 수 있다. 옛날엔 이때 40f 자가충전 큐로 흘렀는데, 그러면
+            한참 뒤 유령 발동(차지 무효면 마무리 8+K 가 점프킥으로 샘 — 연타 누수 제보의
+            경로)이 된다. 불성립이면 **조용히 취소**한다. */
+         if (!svc_charge_ok(m))
+         {
+            if (svc_dbg()) fprintf(stderr, "[svcsp] charge-expired at compile -> 취소\n");
+            q_n = q_i = q_left = 0;
+            return;
+         }
+         skip_charge = 1;
          /* ⚠️ x사본(0x0934) −10 「즉발」은 **가짜였다** — 나가던 것은 붐이 아니라
             앞+강 계열(act 37/38, 유저 포즈 판정 + 원거리 무히트 실측). 이분법의 성공
             판정 집합이 오염돼 있었다. 즉발 경로 전면 철회. 진짜 붐 = act 2 + 원거리 히트. */
@@ -724,10 +731,12 @@ tail:
                   (m->btn & PAD_A) ? "P" : "K",
                   svc_compile_cancel ? " 캔슬" : "");
       }
-      { /* 강이 확정되면 갈아 끼울 수 있게 꼬리(화살표+버튼)를 기억해 둔다 */
-        const char *sp = svcsp_last_disp;
-        while (*sp && *sp != ' ') sp++;
-        snprintf(svc_disp_tail, sizeof svc_disp_tail, "%s", sp);
+      { /* 강이 확정되면 갈아 끼울 수 있게 꼬리(화살표+버튼)를 기억해 둔다.
+           ⚠️ 「첫 공백 이후」로 자르면 안 된다 — 「소닉 붐」처럼 이름에 공백이 있으면
+           꼬리에 " 붐 …"이 딸려 들어가 강판 표시가 「소닉 붐 붐 …」이 된다(제보).
+           이름 길이만큼 건너뛴 위치가 꼬리의 시작이다. */
+        size_t nl = strlen(nb);
+        snprintf(svc_disp_tail, sizeof svc_disp_tail, "%s", svcsp_last_disp + nl);
       }
       svcsp_disp_seq++;
    }
