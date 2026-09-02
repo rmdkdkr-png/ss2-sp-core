@@ -155,9 +155,24 @@ static int kof_dbg(void)
    → 매크로를 쏘기 전에 이만큼 조용한 창을 보장하거나, 이력을 덮어써야 한다. */
 #define KOFSP_HIST_CLEAR 12
 
+/* 캐릭터 ID — **로스터 색인 그대로다**(쿄 0 … 사이수 13, 루갈 14).
+   쿄 무대 둘과 레오나 무대를 대서 잡았다: 쿄=0 / 레오나=4.
+   교차 증인 — 레오나 무대에서 **P2 는 0(쿄) 그대로**였다(화면과 일치).
+   P2 는 +0x140 이다. */
+#define OFF_CHAR1 0x0D8B
+#define OFF_CHAR2 (OFF_CHAR1 + KOFSP_P2_STRIDE)   /* 0x0ECB */
+
+/* PLAYER SELECT 는 **행(팀) × 자리(3인)** 이다 — D 로 행, R 로 자리, B 로 확정.
+   실측 지도(2026-09-03, tools/kof/kof_mkchars.py 가 이 표로 상태를 굽는다):
+     쿠사나기      쿄0      사이수13  신고11
+     초히로인      아테나8   유리9     카스미12
+     신사우스타운   료2      마이3     테리1
+     오로치        야시로5   셰르미6   크리스7
+     에디트        레오나4   *랜덤*    이오리10
+   ⚠ **루갈(14)은 이 화면에서 못 고른다.** 그래서 계획의 「15명」은 실제로 **14명**이다.
+   ⚠ 에디트 자리1 은 `ランダム` 이라 상태를 구우면 안 된다 — 캐릭터가 실행마다 바뀐다. */
+
 /* 미측정 — 이 값들이 채워져야 엔진이 돈다. 목록 자체가 사냥 목록이다. */
-static const int OFF_CHAR1     = KOFSP_UNMEASURED;   /* 전투중 판별 4종 */
-static const int OFF_CHAR2     = KOFSP_UNMEASURED;
 static const int OFF_STYLE     = KOFSP_UNMEASURED;
 static const int OFF_TIMER     = KOFSP_UNMEASURED;
 /* ── 전투중 판별 — SVC 식 4종은 못 좁혔다. 대신 **근사 하나**를 쓴다 ──
@@ -174,7 +189,7 @@ static const int OFF_TIMER     = KOFSP_UNMEASURED;
 
 int kofsp_unmeasured_count(void)
 {
-   const int *v[] = { &OFF_CHAR1, &OFF_CHAR2, &OFF_STYLE, &OFF_TIMER };
+   const int *v[] = { &OFF_STYLE, &OFF_TIMER };
    int i, n = 0;
    for (i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
       if (*v[i] == KOFSP_UNMEASURED) n++;

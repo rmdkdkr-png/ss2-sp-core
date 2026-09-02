@@ -26,14 +26,17 @@ static void ck(int cond, const char *what)
    if (!cond) { printf("  ★실패: %s\n", what); fails++; }
 }
 
-/* libretro.c 의 순정 폴드 가지를 **그대로 옮겨 적은 것**. 이것이 기준이다. */
+/* 기준 폴드 — **M2 에서 계약이 바뀌었다.**
+   M1 때는 순정 폴드와 완전히 같아야 했다(L·R 둘 다 A+B).
+   M2 에서 **레트로패드 R 을 SP 트리거로 돌렸으므로 R 은 더 이상 접히지 않는다.**
+   그건 의도한 졸업이다 — 시험을 지우지 말고 **새 계약으로 고친다.**
+   L 은 그대로 A+B 로 남는다(사람의 A+B 동시입력 수단을 뺏지 않는다). */
 static unsigned char ref_fold(unsigned char pad, unsigned ret)
 {
    if (ret & (1u << RP_Y)) pad |= NGP_A;
    if (ret & (1u << RP_X)) pad |= NGP_B;
-   if ((ret & (1u << RP_L)) || (ret & (1u << RP_R)))
-      pad |= (unsigned char)(NGP_A | NGP_B);
-   return pad;
+   if (ret & (1u << RP_L)) pad |= (unsigned char)(NGP_A | NGP_B);
+   return pad;   /* ⚠ R 은 일부러 뺐다 — 트리거다 */
 }
 
 static int rom_says(const char *path, int want)
@@ -97,6 +100,18 @@ int main(void)
          }
       printf("  %ld 조합 중 어긋남 %ld\n", n, bad);
       if (bad) fails++;
+   }
+
+   printf("\n3b) 트리거(R)는 접히지 않는가 — M2 의 계약\n");
+   {
+      /* R 만 눌렀을 때 아무 버튼도 안 들어가야 한다. 여기가 접히면 트리거를 누를 때마다
+         A+B 가 같이 들어가 커맨드가 오염된다. */
+      unsigned char a = kofsp_frame(0, (unsigned short)(1u << RP_R));
+      ck(a == 0, "R 단독 = 패드 0 (트리거는 게임 버튼이 아니다)");
+      ck(kofsp_frame(0, (unsigned short)(1u << RP_L)) == (NGP_A | NGP_B),
+         "L 은 여전히 A+B");
+      printf("  R 단독 → %02X · L 단독 → %02X\n", a,
+             kofsp_frame(0, (unsigned short)(1u << RP_L)));
    }
 
    printf("\n4) 엔진 토글·미측정 개수\n");
