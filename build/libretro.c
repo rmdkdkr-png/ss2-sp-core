@@ -441,6 +441,17 @@ static bool ss2sp_enable = true;
 #define SS2_SIDE_W 64
 #define SS2_WIDE_W (SS2_SIDE_W*2 + FB_WIDTH)
 static bool     ss2_sides = true;                 /* 코어 옵션 ngp_ss2sp_sides */
+static int      comm_mode_opt = 4;                /* 해설창 옵션 원값 (0끔/2안위/3안아래/4위띠) */
+
+/* 기둥이 켜져 있으면 위-띠(above)를 **화면 안 아래**로 강등한다 — 옆(288)이
+   넓어졌는데 세로까지 +32 로 늘릴 이유가 없다는 제보. 기둥을 끄면 원값 복원. */
+static void ss2_apply_comm_mode(void)
+{
+   extern void ss2comm_draw_enable(int mode);
+   int m = comm_mode_opt;
+   if (m == 4 && ss2_sides) m = 3;
+   ss2comm_draw_enable(m);
+}
 static uint16_t ss2_wide[SS2_WIDE_W * (FB_HEIGHT + SS2COMM_BAND_MAX)];
 static unsigned ss2_last_w = FB_WIDTH, ss2_last_h = FB_HEIGHT;
 /* 오버레이가 직접 만지는 값 — 코어 옵션이 바뀌면 여기로도 동기한다 */
@@ -482,6 +493,7 @@ static void ss2_overlay_apply(void)
    if (ov_sides != ov_sides_p)
    {
       ss2_sides = ov_sides != 0;
+      ss2_apply_comm_mode();       /* 기둥 상태에 따라 해설 위-띠 ↔ 화면 안 아래 */
       ss2_set_geometry();
       ov_sides_p = ov_sides;
    }
@@ -561,7 +573,8 @@ static void check_variables(void)
       else if (!strcmp(var.value, "above"))        mode = 4;
       else if (!strcmp(var.value, "inside_top"))   mode = 2;
       else if (!strcmp(var.value, "inside_bottom"))mode = 3;
-      ss2comm_draw_enable(mode);
+      comm_mode_opt = mode;
+      ss2_apply_comm_mode();                         /* 기둥 켬이면 above → 화면 안 아래 */
       if ((ss2comm_band_h() | (ss2comm_band_top() << 8)) != prev)
          update_video = true;                        /* 화면 세로가 바뀌면 지오메트리 재통보 */
    }
@@ -591,6 +604,7 @@ static void check_variables(void)
       if (on != ss2_sides)
       {
          ss2_sides = on;
+         ss2_apply_comm_mode();
          ss2_set_geometry();
       }
    }
