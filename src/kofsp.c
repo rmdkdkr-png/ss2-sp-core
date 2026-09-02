@@ -55,6 +55,24 @@
 #define KOFSP_Y_GROUND 128
 #define KOFSP_H_GROUND 24
 
+/* 좌우 반전 — **bit7** 이다(SVC 의 `0x092C` bit7 과 같은 꼴).
+   평시 P1=0 / P2=129 인데, CPU 더미가 넘어간 프레임에 **동시에 반대로** 뒤집혔다:
+   P1 0→128, P2 129→1. 36프레임 뒤 원복. 두 블록이 반대로 움직이는 것이 교차 증인이다.
+   ⚠ 앞점프로는 못 넘는다(정지 더미는 통과 불가) — 「적의 동작=ノーマル」 무대를 따로 구워
+     CPU 가 스스로 넘게 해야 잡힌다. 그게 kof_spar_cpu.st 다.
+   ⚠ **좌표 비교로 반전을 판정하지 마라.** SVC 에서 6번 오판한 자리다. */
+#define OFF_FACE      0x0D4A
+#define KOFSP_FACE_BIT 0x80
+
+/* ── 방향 이력 링 — **없다** (실측, 2026-09-02) ──────────────────
+   SVC 는 0x0CB8~ 에 24칸 링이 있어서 커맨드를 직접 써 넣어 발동을 9→3프레임으로 줄였다.
+   KOF R-2 에는 **그런 것이 없다.** 프레임마다 램 16KB 를 전량 떠서(48프레임) 확인했다:
+     · 옆 칸이 내 값을 늦게 받는 **시프트 관계가 한 쌍도 없다**
+     · 시스템 대역(0x0C00~0x1200)에서 변하는 주소가 **12개뿐**이고
+       그중 「입력 때만 몇 번」 변하는 원형 버퍼 후보가 **0개**
+   → 링 주입은 못 쓴다. 대신 **찌꺼기 만료(KOFSP_HIST_CLEAR)를 지키는 쪽**으로 간다:
+     매크로 전에 방향이 조용한 12프레임을 확보한다. 값은 +12프레임 지연이다. */
+
 /* 콤보 카운터 — **반증까지 통과**했다.
    두 히트의 간격을 벌려 가며 재니 ≤34프레임이면 2, **≥38프레임이면 둘 다 맞았는데도 0**.
    경계가 따로 잰 피격 경직 창(~36프레임)과 맞아떨어진다.
@@ -119,16 +137,14 @@ static const int OFF_CHAR1     = KOFSP_UNMEASURED;   /* 전투중 판별 4종 */
 static const int OFF_CHAR2     = KOFSP_UNMEASURED;
 static const int OFF_STYLE     = KOFSP_UNMEASURED;
 static const int OFF_TIMER     = KOFSP_UNMEASURED;
-static const int OFF_FACE      = KOFSP_UNMEASURED;   /* 좌우 반전. ⚠ 좌표 비교 금지 */
-static const int OFF_DIRHIST   = KOFSP_UNMEASURED;   /* 링 주입 */
-static const int OFF_RING_TOP  = KOFSP_UNMEASURED;
-/* 아직 안 잰 것: 방향 이력 링과 그 최신 위치. 링 사냥은 `!w`(24칸 상한)로는 못 하고
-   프레임마다 램 16KB 를 통째로 떠서 오프라인 diff 해야 한다. */
+/* 남은 것은 **전투중 판별** 네 개뿐이다. 지금은 전투/메뉴를 가르는 바이트가
+   3,924개나 나와 못 좁혔다 — 전투 표본이 사실상 한 장면뿐이라 그렇다.
+   캐릭터·무대를 바꾼 전투 상태를 더 구워서 「전투에서 늘 같고 메뉴에서 늘 다른」 것으로
+   좁혀야 한다. 그때까지 엔진은 전투 판별 없이 돈다(잘못 발동할 뿐 안 깨진다). */
 
 int kofsp_unmeasured_count(void)
 {
-   const int *v[] = { &OFF_CHAR1, &OFF_CHAR2, &OFF_STYLE, &OFF_TIMER, &OFF_FACE,
-                      &OFF_DIRHIST, &OFF_RING_TOP };
+   const int *v[] = { &OFF_CHAR1, &OFF_CHAR2, &OFF_STYLE, &OFF_TIMER };
    int i, n = 0;
    for (i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
       if (*v[i] == KOFSP_UNMEASURED) n++;
