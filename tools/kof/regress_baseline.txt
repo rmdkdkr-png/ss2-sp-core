@@ -1,0 +1,5 @@
+1층 단위 PASS
+2층 무회귀 PASS
+3층 발동률 PASS (kof_m5gate.py, 시행 20)
+4층 누출 PASS
+소요 12.2분
