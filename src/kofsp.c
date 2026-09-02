@@ -36,8 +36,31 @@
            위상 2종 재확인이 남아 확정으로 안 올린다.
    0x0D5A/0x0D5C: 16비트 리틀엔디언 X/Y 속도. 앞 +6553 / 뒤 -6553 으로 부호가 뒤집힌다. */
 #define OFF_ACT   0x0D3C
-#define OFF_VX    0x0D5A
-#define OFF_VY    0x0D5C
+#define OFF_VX    0x0D5A   /* 16비트. 앞 +6553 / 뒤 −6553 (≈0.1px, 소수부다) */
+
+/* ⚠ 1일차에 `0x0D5C` 를 「Y 속도(위로 갈 때 −5)」라고 적어 뒀는데
+   **점프 시계열에서 재현되지 않았다** — 상승·정점·하강 내내 0 이었다.
+   그때는 6프레임 간격 덤프였고 지금은 매 프레임이다. 그러니 그 이름표는 **취소**하고
+   미측정으로 되돌린다. 다시 재기 전에는 쓰지 마라. */
+#define OFF_VY_UNCONFIRMED 0x0D5C
+
+/* 세로 위치 — 점프를 매 프레임 훑어 확인했다. 둘은 **서로 거울**이다(합이 152):
+     0x0D50  화면 Y (지상 128, 정점 104 — 위로 갈수록 **감소**)
+     0x0D58  지면 위 높이 (지상 24, 정점 48 — 위로 갈수록 **증가**)
+   공중 판정은 지상값과 다른지로 한다. 점프 높이는 24.
+   ⚠ 지상값 128/24 는 **이 무대(ちゅうきんとう)에서 잰 것**이다. 무대가 바뀌어도
+     같은지 확인 안 했다 — 높이 쪽(0x0D58)이 무대에 덜 휘둘릴 것으로 보이나 미확인이다. */
+#define OFF_Y1      0x0D50
+#define OFF_H1      0x0D58
+#define KOFSP_Y_GROUND 128
+#define KOFSP_H_GROUND 24
+
+/* 콤보 카운터 — **반증까지 통과**했다.
+   두 히트의 간격을 벌려 가며 재니 ≤34프레임이면 2, **≥38프레임이면 둘 다 맞았는데도 0**.
+   경계가 따로 잰 피격 경직 창(~36프레임)과 맞아떨어진다.
+   ⚠ 첫 시도는 **무효 실험**이었다 — 3연타를 넣었는데 체력이 한 번만 줄었다(2·3타가 헛침).
+     「콤보가 실제로 성립했는지」부터 확인하고서야 이 바이트가 나왔다. */
+#define OFF_COMBO 0x10ED
 
 /* ── 확정 (2026-09-02, 스파링 정지 무대·쿄) ─────────────────────
    전부 tools/kof/kof_hunt.py 로 잡았다. 요령은 **조건 길이를 똑같이 맞추는 것**이다 —
@@ -97,18 +120,15 @@ static const int OFF_CHAR2     = KOFSP_UNMEASURED;
 static const int OFF_STYLE     = KOFSP_UNMEASURED;
 static const int OFF_TIMER     = KOFSP_UNMEASURED;
 static const int OFF_FACE      = KOFSP_UNMEASURED;   /* 좌우 반전. ⚠ 좌표 비교 금지 */
-static const int OFF_Y1        = KOFSP_UNMEASURED;   /* 공중 판정 */
 static const int OFF_DIRHIST   = KOFSP_UNMEASURED;   /* 링 주입 */
 static const int OFF_RING_TOP  = KOFSP_UNMEASURED;
-/* 콤보 카운터 — 아직 못 찾았다. 3연타를 10프레임 간격으로 넣었는데 단조 증가하는 것이
-   `0x10F3`(공격마다 +6) 하나뿐이었고 그건 게이지 모양이다. 콤보가 실제로 성립했는지부터
-   의심스럽다(밀려나서 2·3타가 헛쳤을 수 있다). 히트 창(경직 36프레임) 안에서 다시 잴 것. */
-static const int OFF_COMBO     = KOFSP_UNMEASURED;
+/* 아직 안 잰 것: 방향 이력 링과 그 최신 위치. 링 사냥은 `!w`(24칸 상한)로는 못 하고
+   프레임마다 램 16KB 를 통째로 떠서 오프라인 diff 해야 한다. */
 
 int kofsp_unmeasured_count(void)
 {
    const int *v[] = { &OFF_CHAR1, &OFF_CHAR2, &OFF_STYLE, &OFF_TIMER, &OFF_FACE,
-                      &OFF_Y1, &OFF_DIRHIST, &OFF_RING_TOP, &OFF_COMBO };
+                      &OFF_DIRHIST, &OFF_RING_TOP };
    int i, n = 0;
    for (i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
       if (*v[i] == KOFSP_UNMEASURED) n++;
