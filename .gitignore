@@ -2,3 +2,4 @@
 *.ngc
 *.ngp
 tools/kof/ngprun
+tools/kof/test_kofsp

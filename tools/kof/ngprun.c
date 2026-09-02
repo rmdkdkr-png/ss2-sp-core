@@ -157,6 +157,32 @@ static int envcb(unsigned cmd, void *data) {
       v->value = e ? e : "japanese";
       return 1;
     }
+    /* NGP_OPTS="키=값,키=값" — DEFAULTS 를 덮는다.
+       회귀에 꼭 필요하다: 기본값이 ngp_ss2sp=disabled 라 코어의 **입력 분기 블록이
+       통째로 안 돈다.** 그 상태로 「출력이 같다」를 재면 아무것도 안 재고 있는 것이다.
+       (엔진 켬/끔 대조군도 이 스위치로 만든다.) */
+    {
+      static char obuf[512];
+      const char *o = getenv("NGP_OPTS");
+      if (o) {
+        size_t kl = strlen(v->key);
+        const char *q = o;
+        while (*q) {
+          const char *e = strchr(q, ',');
+          size_t seg = e ? (size_t)(e - q) : strlen(q);
+          if (seg > kl && !strncmp(q, v->key, kl) && q[kl] == '=') {
+            size_t vl = seg - kl - 1;
+            if (vl >= sizeof obuf) vl = sizeof obuf - 1;
+            memcpy(obuf, q + kl + 1, vl);
+            obuf[vl] = 0;
+            v->value = obuf;
+            return 1;
+          }
+          if (!e) break;
+          q = e + 1;
+        }
+      }
+    }
     for (int i = 0; DEFAULTS[i].key; i++)
       if (!strcmp(v->key, DEFAULTS[i].key)) { v->value = DEFAULTS[i].value; return 1; }
     v->value = NULL;
