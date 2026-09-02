@@ -205,8 +205,18 @@ static int kof_engine_on;
 
 /* 매크로 진행 상태 — 리셋·스테이트 로드 때 버려야 한다.
    SS2 는 스테이트 로드 뒤 남은 매크로 잔여가 유령 발동을 냈다. */
+/* 매크로 한 스텝 — n 프레임 동안 bits 를 넣는다. bits 의 FWD/BAK 는 반전으로 푼다. */
+typedef struct { unsigned char n, bits; } Step;
+
+/* 마지막 스텝을 사람이 쥔 만큼 늘리되 이만큼까지만 — 무한정 끌면 다음 입력이 밀린다.
+   강 문턱이 6프레임이므로 24 면 충분히 여유롭다. */
+#define KOFSP_HOLD_CAP 24
+
+static const Step *mac_tab;
 static int mac_step = -1;   /* -1 = 쉬는 중 */
 static int mac_left;
+static int mac_hold;        /* 마지막 스텝을 몇 프레임 늘렸나 */
+static int mac_trig;        /* 매크로가 도는 동안 트리거를 쥔 프레임 수 (약/강 판정) */
 static int mac_fwd;         /* 시작할 때 굳힌 「앞」 비트 */
 static int trig_prev;
 
@@ -227,6 +237,7 @@ void kofsp_reset(void)
 {
    mac_step = -1;
    mac_left = 0;
+   mac_hold = mac_trig = 0;
    trig_prev = 0;
 }
 
@@ -260,11 +271,39 @@ void kofsp_reset(void)
      **이 게임엔 링이 없어서** 못 쓴다. 그래서 기다리는 쪽이 유일한 방법이다.
    ★ 「앞」은 반전에 따라 좌우가 바뀐다. 슬롯은 앞/뒤, 패드는 좌/우다 —
      안 뒤집으면 반전 무대에서 전부 오발로 찍힌다(SVC 에서 75건 허위 전과). */
-static const struct { unsigned char n, bits; } MACRO_QCF_P[] = {
-   { KOFSP_HIST_CLEAR, 0 },        /* 찌꺼기가 만료될 때까지 아무것도 안 넣는다 */
-   { 4, NGP_D },
-   { 4, (unsigned char)(NGP_D | 0x80) },   /* 0x80 = 「앞」 자리표시. 아래에서 푼다 */
-   { 2, (unsigned char)(0x80 | NGP_A) },
+/* 방향 자리표시 — 실제 좌/우는 반전을 보고 푼다.
+   슬롯은 앞/뒤인데 패드는 좌/우다. 안 뒤집으면 반전 무대에서 전부 오발로 찍힌다. */
+#define FWD 0x80
+#define BAK 0x40
+
+/* ── 기술표 (act 카탈로그 실측, 쿄·스파링 무대) ───────────────────
+   ⚠ **짧고 모호하지 않은 커맨드만 쓴다.** 카탈로그에서 확인한 것:
+     `41236` 은 `236` 과, `63214` 는 `214` 와 **act 지문이 같다** —
+     긴 모션이 끝의 짧은 모션에 흡수된다. 그런 것을 슬롯에 태우면
+     「안 나갔다」가 아니라 「다른 게 나갔다」가 되어 판정이 통째로 흐려진다.
+   ⚠ 모든 매크로는 **조용한 12프레임**으로 시작한다(찌꺼기 만료). 링이 없으니 이 길뿐이다. */
+#define Q { KOFSP_HIST_CLEAR, 0 }
+
+static const Step M_236P[] = { Q, {4,NGP_D}, {4,NGP_D|FWD}, {2,FWD|NGP_A}, {0,0} };
+static const Step M_236K[] = { Q, {4,NGP_D}, {4,NGP_D|FWD}, {2,FWD|NGP_B}, {0,0} };
+static const Step M_214P[] = { Q, {4,NGP_D}, {4,NGP_D|BAK}, {2,BAK|NGP_A}, {0,0} };
+static const Step M_623P[] = { Q, {4,FWD},   {4,NGP_D}, {4,NGP_D|FWD}, {2,NGP_A}, {0,0} };
+static const Step M_421K[] = { Q, {4,BAK},   {4,NGP_D}, {4,NGP_D|BAK}, {2,NGP_B}, {0,0} };
+/* 초필 — 카탈로그에서 **피해 19** 로 가장 컸고 버튼·강약에 무관했다(네 갈래가 같은 지문) */
+static const Step M_SUPER[] = { Q, {4,NGP_D}, {4,NGP_D|BAK}, {4,BAK}, {4,NGP_D|BAK},
+                                {4,NGP_D}, {4,NGP_D|FWD}, {2,FWD|NGP_A}, {0,0} };
+
+/* 슬롯 — 트리거를 누를 때 **잡고 있던 방향**으로 고른다.
+   비어 있으면 완전 무반응(0 을 넣지 않고 아예 매크로를 시작하지 않는다). */
+enum { SLOT_N, SLOT_F, SLOT_B, SLOT_D, SLOT_DF, SLOT_DB, SLOT_AIR, SLOT_MAX };
+static const Step *const SLOTS[SLOT_MAX] = {
+   M_236P,    /* N   중립 — 장풍 자리 */
+   M_623P,    /* F   앞  — 대공 (vx 222 로 전진하는 것을 확인) */
+   M_214P,    /* B   뒤  */
+   M_421K,    /* D   아래 — 피해 7 */
+   M_SUPER,   /* DF  앞아래 — 초필 (피해 19) */
+   M_236K,    /* DB  뒤아래 */
+   M_236P,    /* AIR 공중 */
 };
 
 static int kof_forward_bit(void)
@@ -288,26 +327,75 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
 
    if (trig && !trig_prev && mac_step < 0)
    {  /* 엣지에서만 시작한다. 누르고 있는 동안 되풀이 발동하면 누출이 된다. */
-      mac_step = 0;
-      mac_left = MACRO_QCF_P[0].n;
-      mac_fwd  = kof_forward_bit();
-      if (kof_dbg()) fprintf(stderr, "[kofsp] 매크로 시작 (앞=%s)\n",
-                             mac_fwd == NGP_R ? "R" : "L");
+      int fwd = kof_forward_bit();
+      int back = (fwd == NGP_R) ? NGP_L : NGP_R;
+      int held_f = (pad & fwd) != 0, held_b = (pad & back) != 0;
+      int held_d = (pad & NGP_D) != 0;
+      int air = CPUExRAM && CPUExRAM[OFF_H1] != KOFSP_H_GROUND;
+      int slot;
+
+      if (air)                     slot = SLOT_AIR;
+      else if (held_d && held_f)   slot = SLOT_DF;
+      else if (held_d && held_b)   slot = SLOT_DB;
+      else if (held_d)             slot = SLOT_D;
+      else if (held_f)             slot = SLOT_F;
+      else if (held_b)             slot = SLOT_B;
+      else                         slot = SLOT_N;
+
+      if (SLOTS[slot])             /* 빈 슬롯 = 완전 무반응 */
+      {
+         mac_tab  = SLOTS[slot];
+         mac_step = 0;
+         mac_left = mac_tab[0].n;
+         mac_hold = 0;
+         mac_trig = 0;
+         mac_fwd  = fwd;
+         if (kof_dbg())
+            fprintf(stderr, "[kofsp] 슬롯 %d 시작 (앞=%s%s)\n", slot,
+                    fwd == NGP_R ? "R" : "L", air ? ", 공중" : "");
+      }
    }
    trig_prev = trig;
 
    if (mac_step >= 0)
    {
-      unsigned char b = MACRO_QCF_P[mac_step].bits;
+      unsigned char b = mac_tab[mac_step].bits;
+      int back = (mac_fwd == NGP_R) ? NGP_L : NGP_R;
+      int last = (mac_tab[mac_step + 1].n == 0);
       /* 매크로가 도는 동안 사람 입력은 버린다 — 섞으면 커맨드가 오염된다 */
-      pad = (uint8_t)((b & 0x7F) | ((b & 0x80) ? mac_fwd : 0));
+      pad = (uint8_t)((b & 0x3F)
+                      | ((b & FWD) ? mac_fwd : 0)
+                      | ((b & BAK) ? back : 0));
+
+      /* ── 강약: **사람이 누른 길이를 그대로 게임 버튼 길이로 옮긴다** ──
+         엔진이 「이쯤이면 강이겠지」로 채우면 사람의 탭이 약과 강으로 갈린다
+         (SVC 가 근거 없는 5 로 그렇게 됐다).
+
+         ★ 그런데 그냥 「트리거를 쥔 동안 버튼을 유지」로는 **모자란다.**
+           매크로 앞머리(조용한 12 + 모션 8 = 20프레임) 동안 사람의 홀드가 다 소모되어,
+           마지막 스텝에 남는 것이 몇 프레임뿐이다. 실측: 24프레임을 쥐어도
+           **홀드 카운터가 2에서 멈췄다**(강은 3이 필요하다).
+         → 그래서 **앞머리를 측정 창으로 쓴다.** 매크로가 도는 동안 트리거를 쥔 프레임을
+           세고, 마지막 스텝에 들어갈 때 그 수로 약/강을 정해 **버튼 길이를 직접 준다.**
+           문턱은 실측값(6프레임 = 카운터 3)을 그대로 쓴다. */
+      if (trig) mac_trig++;
+      if (last && trig && mac_left <= 1 && mac_hold < KOFSP_HOLD_CAP)
+      {
+         mac_hold++;
+         return pad;          /* 트리거를 계속 쥐고 있으면 더 유지한다 */
+      }
       if (--mac_left <= 0)
       {
          mac_step++;
-         if (mac_step >= (int)(sizeof(MACRO_QCF_P) / sizeof(MACRO_QCF_P[0])))
-            mac_step = -1;
+         if (mac_tab[mac_step].n == 0) mac_step = -1;      /* 표 끝 */
          else
-            mac_left = MACRO_QCF_P[mac_step].n;
+         {
+            mac_left = mac_tab[mac_step].n;
+            /* 마지막 스텝(버튼이 들어가는 칸)에 들어설 때 약/강을 정한다.
+               앞머리에서 트리거를 문턱만큼 쥐고 있었으면 버튼을 길게 준다. */
+            if (mac_tab[mac_step + 1].n == 0 && mac_trig >= KOFSP_HOLD_STRONG)
+               mac_left = KOFSP_HOLD_STRONG + 4;   /* 카운터가 3을 넘기도록 여유 */
+         }
       }
    }
    return pad;
