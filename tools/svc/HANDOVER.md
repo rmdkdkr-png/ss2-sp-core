@@ -251,3 +251,27 @@ tools/mech/MECH.md      다른 게임에도 쓰는 절차서
 메모리 접근 추적이 또 필요하면: `build/mednafen/ngp/mem.c` 의 `loadB` 맨 앞에
 주소 비교 + `pc` 출력 훅을 넣는다. `build/` 는 `build.sh` 가 초기화하므로 그때는
 `make` 를 직접 돌린다.
+
+---
+
+## 9. 앱 연동 (PocketCore v3.47, 2026-09-02)
+
+- 앱이 **한글패치를 릴리즈에서 자동 다운로드**한다: KrPatch 고정 태그 \pocketcore\ 의
+  \patches.json\ (게임 id → 최신 IPS 주소·판) → \PocketCore/patch/\ 에 저장,
+  Patcher 가 동봉 assets 보다 이쪽을 먼저 쓴다. 판이 바뀌면 도장(:P판)이 어긋나 재패치.
+- Games 표에 **KOF R-2**(표식 \KOF R2\)·**아랑전설 퍼스트 컨택트**(\RB_F_CONTACT\) 추가 —
+  표식은 롬셋 헤더 0x24 실측. 둘 다 svc 코어(원버튼 엔진은 SVC 롬이 아니면 잔다)로 돈다.
+- patches.json 은 배포 스크립트(pub_pocketcore.py)가 KrPatch 릴리즈 **실태를 훑어** 자동 생성 —
+  게임별 자산 이름 정규식으로 최신판을 고른다. 새 한패를 올리면 앱 쪽은 손댈 것 없다.
+
+### v3.48 — 컨텐츠 외장화 (앱 업데이트와 분리)
+
+- **APK 재설치는 앱이 바뀔 때만.** 코어·음성팩·한글패치는 각자 고정 태그 릴리즈에서
+  버튼 하나로 받는다: \core-svc\ \core-ss2\(ABI 3벌 .so) · \ss2-voice\(ss2_voice_ko.pak)
+  · 한패는 patches.json. 색인은 \pocketcore\ 태그의 \cores.json\.
+- 내려받은 코어는 **앱 내부 저장소**(files/cores/{svc,ss2}.so) — sdcard 는 noexec 라
+  dlopen 이 안 되는 기기가 많다. 코어 선택 순서: 수동 PocketCore/cores/ → 내부 자동 → 동봉.
+- 배포 스크립트: scratchpad/pub_content.py (코어·팩 릴리즈 포스트 + cores.json 생성),
+  apk318.sh 가 ABI 별 .so 를 ~/ss2/release/cores/ 로 내보낸다.
+- 함정: 같은 프로세스에서 코어 교체 직후 재실행하면 dlopen 이 옛 핸들을 돌려줄 수 있다
+  (경로 동일). 보통은 프로세스가 죽어 무관 — 이상하면 앱 완전 종료 후 재실행.
