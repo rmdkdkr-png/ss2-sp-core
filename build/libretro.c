@@ -884,8 +884,10 @@ static void update_input(void)
          A+B 버튼(Y·L)은 패드 바이트에 A·B 를 한꺼번에 세워 준다 —
          뒤를 잡고 누르면 엔진이 비오의로 받는다. */
       uint16_t trig = 0;
-      if (!svcsp_rom_ok())
-      {  /* SS2 전용 선처리 — SvC 는 svcsp_frame 이 레트로패드 원본을 직접 해석한다 */
+      if (!svcsp_rom_ok() && ss2comm_rom_is_ss2())
+      {  /* SS2 전용 선처리 — SvC 는 svcsp_frame 이 레트로패드 원본을 직접 해석한다.
+            SS2 도 SvC 도 아닌 순정 롬(메탈슬러그 등)은 여기 오면 안 된다 — 예전엔
+            롬 검사 없이 돌아서 X·R 이 삼켜지고 Y·L 이 A+B 로 변조되는 무반응 사고. */
          if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_X)) ||
              (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R)))
             trig |= 1u;
@@ -918,8 +920,17 @@ static void update_input(void)
             }
          }
       }
-      else
+      else if (ss2comm_rom_is_ss2())
          input_buf = ss2sp_frame(input_buf, trig);
+      else
+      {  /* 순정 NGPC 롬 — 매크로 엔진이 없다. 강/기술 자리 버튼을 NGP 로 접어
+            SVC 6키 배치·물리 패드가 그대로 통하게 한다: Y=A, X=B, L·R=A+B. */
+         if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_Y)) input_buf |= (1 << 4);
+         if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_X)) input_buf |= (1 << 5);
+         if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_L)) ||
+             (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R)))
+            input_buf |= (uint8_t)((1 << 4) | (1 << 5));
+      }
       if (ss2sp_card_block)      /* 카드가 없어 걸러진 순간 — 왜 안 나갔는지 알려 준다 */
       {
          ss2sp_card_block = 0;

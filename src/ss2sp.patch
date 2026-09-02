@@ -15,7 +15,7 @@ index b61e812..05ec58b 100644
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..2236529 100644
+index ef01e22..99b961a 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -23,7 +23,7 @@ index ef01e22..2236529 100644
  
  #define MEDNAFEN_CORE_NAME_MODULE "ngp"
 -#define MEDNAFEN_CORE_NAME "Beetle NeoPop"
-+#define MEDNAFEN_CORE_NAME "Beetle NeoPop (SS2 One-button)"
++#define MEDNAFEN_CORE_NAME "Beetle NeoPop (SVC Modern)"
  /* TODO/FIXME - only thing missing is flash/RTC refactors */
 -#define MEDNAFEN_CORE_VERSION "v1.29.0.0"
 +/* 실행기(HTML)와 같은 버전을 달아 둔다 — 레트로아크 코어 정보에서 확인할 수 있다 */
@@ -32,7 +32,7 @@ index ef01e22..2236529 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,95 @@ static void check_color_depth(void)
+@@ -377,6 +379,108 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -48,11 +48,15 @@ index ef01e22..2236529 100644
 +extern int     svcsp_engine_on(void);
 +extern void    svcsp_reset(void);
 +extern void    svcsp_set_rom(const void *rom, unsigned len);
++extern int     svcsp_slots_dirty(void);
++extern int     svcsp_slots_export(unsigned char *buf, int cap);
++extern void    svcsp_slots_import(const unsigned char *buf, int len);
 +extern int     svcsp_rom_ok(void);
 +extern char    svcsp_last_disp[64];
 +extern int     svcsp_disp_seq;
 +static bool    svcsp_toast_on = true;
 +static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
++static unsigned char ov_band = 1, ov_band_p = 1;     /* 기술명 띠(화면 밖) 온오프 */
 +extern const char *ss2sp_last_name;
 +/* ── SS2 캐릭터 해설 엔진 (ss2comm.c) ── */
 +extern void        ss2comm_set_ram(void *p);
@@ -71,6 +75,8 @@ index ef01e22..2236529 100644
 +extern void        ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h);
 +extern void        ss2comm_draw_enable(int mode);
 +extern int         ss2comm_band_h(void);
++extern void        ss2comm_sp_band(int on);
++extern int         ss2comm_rom_is_ss2(void);
 +extern int         ss2comm_band_top(void);
 +extern int         ss2comm_drawing(void);
 +#define SS2COMM_BAND_MAX 32   /* = 엔진 SS2_BAND_H (30으로 어긋나 있던 것 정정) */
@@ -105,6 +111,8 @@ index ef01e22..2236529 100644
 +      environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geom);
 +}
 +
++static char svc_slots_file[560];   /* <system>/ngpsvc_slots.bin — 비면 저장 안 함 */
++
 +static void ss2_overlay_apply(void)
 +{
 +   if (ov_spk   != ov_spk_p)   { ss2comm_set_speaker(ov_spk);  ov_spk_p   = ov_spk; }
@@ -117,6 +125,11 @@ index ef01e22..2236529 100644
 +      ov_sp_p = ov_sp;
 +   }
 +   if (ov_toast != ov_toast_p) { svcsp_toast_on = ov_toast != 0; ov_toast_p = ov_toast; }
++   if (ov_band  != ov_band_p)
++   {  /* 띠는 화면 세로를 바꾼다 — 지오메트리를 다시 알려야 프론트가 안 깨진다 */
++      if (!ss2comm_rom_is_ss2()) { ss2comm_sp_band(ov_band); ss2_set_geometry(); }
++      ov_band_p = ov_band;
++   }
 +   if (ov_sides != ov_sides_p)
 +   {
 +      ss2_sides = ov_sides != 0;
@@ -128,7 +141,7 @@ index ef01e22..2236529 100644
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +483,80 @@ static void check_variables(void)
+@@ -392,6 +496,103 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -169,6 +182,11 @@ index ef01e22..2236529 100644
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 +      ss2comm_set_duo(!strcmp(var.value, "enabled"));
 +
++   var.key   = "ngp_svcsp_engine";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      svcsp_set_engine(strcmp(var.value, "disabled") != 0);
++
 +   var.key   = "ngp_svcsp_toast";
 +   var.value = NULL;
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -190,6 +208,24 @@ index ef01e22..2236529 100644
 +         update_video = true;                        /* 화면 세로가 바뀌면 지오메트리 재통보 */
 +   }
 +
++   var.key   = "ngp_svcsp_band";
++   var.value = NULL;
++   {  /* 기술명 띠 — 게임 그림 위에 겹치지 않고 화면 밖 띠에 기술 이름을 띄운다.
++         해설이 없는 롬(SVC 등)용. SS2 는 해설 띠가 이미 그 자리를 쓴다.
++         기본 켬: 겹쳐 그리면 HP 바·연출과 부딪혀 읽기 어려웠다. */
++      int on = 1;
++      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++         on = strcmp(var.value, "disabled") != 0;
++      ov_band = ov_band_p = (unsigned char)on;   /* 오버레이 그림자값을 옵션과 맞춘다 */
++      if (!ss2comm_rom_is_ss2())
++      {
++         int prev = ss2comm_band_h();
++         ss2comm_sp_band(on);
++         if (ss2comm_band_h() != prev) ss2_set_geometry();
++      }
++      else ss2comm_sp_band(0);
++   }
++
 +   var.key   = "ngp_ss2sp_sides";
 +   var.value = NULL;
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -209,7 +245,7 @@ index ef01e22..2236529 100644
  }
  
  void retro_init(void)
-@@ -436,6 +601,27 @@ void retro_init(void)
+@@ -436,6 +637,28 @@ void retro_init(void)
  
  void retro_reset(void)
  {
@@ -223,6 +259,7 @@ index ef01e22..2236529 100644
 +   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
 +      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
 +      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
++      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
 +      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
 +   }
 +   else
@@ -237,7 +274,7 @@ index ef01e22..2236529 100644
     neopop_reset();
  }
  
-@@ -448,6 +634,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +671,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -245,7 +282,7 @@ index ef01e22..2236529 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +645,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +682,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -259,7 +296,7 @@ index ef01e22..2236529 100644
  
        { 0 },
     };
-@@ -479,6 +673,27 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +710,45 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -272,6 +309,7 @@ index ef01e22..2236529 100644
 +   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
 +      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
 +      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
++      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
 +      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
 +   }
 +   else
@@ -282,12 +320,29 @@ index ef01e22..2236529 100644
 +      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
 +      ss2comm_toast(ver_toast, 180);
 +   }
++   if (svcsp_rom_ok())
++   {  /* SvC 슬롯 배치 복원 — <시스템>/ngpsvc_slots.bin (없으면 기본 배치) */
++      const char *sd2 = NULL;
++      if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sd2) && sd2 && *sd2)
++      {
++         FILE *sf2;
++         unsigned char sbuf[160];
++         snprintf(svc_slots_file, sizeof svc_slots_file, "%s/ngpsvc_slots.bin", sd2);
++         sf2 = fopen(svc_slots_file, "rb");
++         if (sf2)
++         {
++            size_t sn = fread(sbuf, 1, sizeof sbuf, sf2);
++            fclose(sf2);
++            svcsp_slots_import(sbuf, (int)sn);
++         }
++      }
++   }
 +   ss2comm_reset();
 +
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +771,95 @@ static void update_input(void)
+@@ -556,6 +826,117 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -326,6 +381,17 @@ index ef01e22..2236529 100644
 +         }
 +         ss2_ov_prev = ret;
 +         ss2_overlay_apply();
++         if (svc_slots_file[0] && svcsp_slots_dirty())
++         {  /* 슬롯 편집 즉시 저장 — 130B, 오버레이 열린 동안만 닿는 경로 */
++            FILE *sf3 = fopen(svc_slots_file, "wb");
++            if (sf3)
++            {
++               unsigned char sbuf[160];
++               int sn = svcsp_slots_export(sbuf, (int)sizeof sbuf);
++               if (sn > 0) fwrite(sbuf, 1, (size_t)sn, sf3);
++               fclose(sf3);
++            }
++         }
 +         input_buf = 0;
 +         return;
 +      }
@@ -338,8 +404,10 @@ index ef01e22..2236529 100644
 +         A+B 버튼(Y·L)은 패드 바이트에 A·B 를 한꺼번에 세워 준다 —
 +         뒤를 잡고 누르면 엔진이 비오의로 받는다. */
 +      uint16_t trig = 0;
-+      if (!svcsp_rom_ok())
-+      {  /* SS2 전용 선처리 — SvC 는 svcsp_frame 이 레트로패드 원본을 직접 해석한다 */
++      if (!svcsp_rom_ok() && ss2comm_rom_is_ss2())
++      {  /* SS2 전용 선처리 — SvC 는 svcsp_frame 이 레트로패드 원본을 직접 해석한다.
++            SS2 도 SvC 도 아닌 순정 롬(메탈슬러그 등)은 여기 오면 안 된다 — 예전엔
++            롬 검사 없이 돌아서 X·R 이 삼켜지고 Y·L 이 A+B 로 변조되는 무반응 사고. */
 +         if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_X)) ||
 +             (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R)))
 +            trig |= 1u;
@@ -372,8 +440,17 @@ index ef01e22..2236529 100644
 +            }
 +         }
 +      }
-+      else
++      else if (ss2comm_rom_is_ss2())
 +         input_buf = ss2sp_frame(input_buf, trig);
++      else
++      {  /* 순정 NGPC 롬 — 매크로 엔진이 없다. 강/기술 자리 버튼을 NGP 로 접어
++            SVC 6키 배치·물리 패드가 그대로 통하게 한다: Y=A, X=B, L·R=A+B. */
++         if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_Y)) input_buf |= (1 << 4);
++         if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_X)) input_buf |= (1 << 5);
++         if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_L)) ||
++             (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R)))
++            input_buf |= (uint8_t)((1 << 4) | (1 << 5));
++      }
 +      if (ss2sp_card_block)      /* 카드가 없어 걸러진 순간 — 왜 안 나갔는지 알려 준다 */
 +      {
 +         ss2sp_card_block = 0;
@@ -383,7 +460,7 @@ index ef01e22..2236529 100644
  }
  
  void retro_run(void)
-@@ -598,12 +902,68 @@ void retro_run(void)
+@@ -598,12 +979,68 @@ void retro_run(void)
        update_video = false;
     }
  
@@ -396,11 +473,11 @@ index ef01e22..2236529 100644
 +   if (!ss2_paused)
 +   {
 +      Emulate(&spec, sound_buf);
- 
--   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++
 +      width  = spec.DisplayRect.w;
 +      height = spec.DisplayRect.h;
-+
+ 
+-   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
 +      {
 +         const char *cline = ss2comm_frame();
 +         int band = ss2comm_band_h();
@@ -456,7 +533,7 @@ index ef01e22..2236529 100644
  
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-@@ -629,11 +989,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+@@ -629,11 +1066,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -477,7 +554,7 @@ index ef01e22..2236529 100644
  
     check_color_depth();
  }
-@@ -762,6 +1126,8 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1203,8 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
@@ -486,7 +563,7 @@ index ef01e22..2236529 100644
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1148,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1225,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  
@@ -516,7 +593,7 @@ index ef01e22..2236529 100644
  {
     if(type == RETRO_MEMORY_SYSTEM_RAM)
 diff --git a/libretro_core_options.h b/libretro_core_options.h
-index a0dc3ec..b91407b 100644
+index a0dc3ec..831907e 100644
 --- a/libretro_core_options.h
 +++ b/libretro_core_options.h
 @@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
@@ -528,7 +605,7 @@ index a0dc3ec..b91407b 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -52,6 +52,120 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -52,6 +52,134 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
        },
        "english",
     },
@@ -619,6 +696,20 @@ index a0dc3ec..b91407b 100644
 +      "above",
 +   },
 +   {
++      "ngp_svcsp_engine",
++      "SvC 모던 조작 (원버튼 필살기)",
++      NULL,
++      "SNK vs. Capcom MotM 전용. 켜면 R가 기술키가 됩니다 - 방향+R = 배치된 필살기(짧게 약, 길게 강), 기본기 연타 = 자동 콤보(히트 확인 후 초필 마무리, 게이지 부족이면 필살기). B/A 약, Y/X 강, L=A+B는 그대로. 배치는 게임 중 아래+옵션 메뉴에서. 끄면 R=A+B.",
++      NULL,
++      "system",
++      {
++         { "enabled",  "켬" },
++         { "disabled", "끔" },
++         { NULL, NULL },
++      },
++      "enabled"
++   },
++   {
 +      "ngp_svcsp_toast",
 +      "SvC 기술명 표시",
 +      NULL,
@@ -649,7 +740,7 @@ index a0dc3ec..b91407b 100644
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
  };
  
-@@ -72,6 +186,17 @@ struct retro_core_option_definition option_defs_us[] = {
+@@ -72,6 +200,17 @@ struct retro_core_option_definition option_defs_us[] = {
        },
        "english",
     },

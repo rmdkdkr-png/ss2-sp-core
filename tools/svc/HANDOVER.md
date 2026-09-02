@@ -275,3 +275,16 @@ tools/mech/MECH.md      다른 게임에도 쓰는 절차서
   apk318.sh 가 ABI 별 .so 를 ~/ss2/release/cores/ 로 내보낸다.
 - 함정: 같은 프로세스에서 코어 교체 직후 재실행하면 dlopen 이 옛 핸들을 돌려줄 수 있다
   (경로 동일). 보통은 프로세스가 죽어 무관 — 이상하면 앱 완전 종료 후 재실행.
+
+### v3.49 — 순정 롬 4종 수리 + 레포 정리 (2026-09-02)
+
+- **순정 롬 무반응 수리**(메탈슬러그 제보): update_input 의 SS2 선처리·ss2sp_frame 이
+  롬 검사 없이 돌아 비SVC 롬에서 X·R 삼킴, Y·L → A+B 변조. \ss2comm_rom_is_ss2()\ 로
+  게이트하고 순정 롬은 Y=A·X=B·L/R=A+B 폴드. **ss2sp.patch 는 upstream 왕복 검증으로
+  재생성** — build/libretro.c 를 고치면 반드시 재생성할 것 (regen_patch.sh 참고).
+- 회귀 22/23 (밀착 1건은 기지 실패) — SVC 경로 무회귀 실측.
+- 배포 레포 정리: 앱 = PocketCore 레포 app 태그 / 코어·팩 = ss2-sp-core 레포
+  core-svc·core-ss2·ss2-voice / 한패 = KrPatch. 색인(patches/cores/news .json)은
+  PocketCore app 태그. KrPatch 옛 pocketcore 태그는 구버전 갈아타기 다리.
+- 앱: 오토세이브(.state.auto)·AAudio 에러콜백+장치 반납/재개·게임별 패드
+  (pad_<id>.txt)·순정 프로필(A·B만)·수동 IPS 규칙(patch/<롬이름>.ips)·소식창(news.json).
