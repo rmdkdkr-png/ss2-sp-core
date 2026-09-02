@@ -67,6 +67,24 @@
 #define OFF_ANIM_P 0x1014
 #define OFF_ANIM_K 0x1015
 
+/* ── P2 블록은 P1 + 0x140 ────────────────────────────────────────
+   P1 act 0x0D3C ↔ P2 act 0x0E7C 로 확인했다. 상대 쪽을 볼 때 이 간격을 쓴다. */
+#define KOFSP_P2_STRIDE 0x0140
+#define OFF_ACT2  (OFF_ACT + KOFSP_P2_STRIDE)   /* 0x0E7C */
+
+/* 히트 판정 — **상대 act 가 피격 경직값이 되는 프레임**이다.
+   SVC 는 별도 react 바이트(0x0AC4=255)를 썼는데, KOF 는 상대 act 로 충분하다.
+   무적 오프 무대에서 체력 감소와 **같은 프레임**에 76 이 뜨고, 약 36프레임 뒤 213 으로 돌아온다.
+   255 로 튀는 바이트도 다섯 개 있었지만 전부 P2 블록 **밖**이라 히트 섬광 효과로 보인다. */
+#define KOFSP_ACT_HITSTUN 76
+
+/* 상대 체력 — P2 블록 안(act+0x45). 히트한 **그 프레임에** 줄어든다.
+   ⚠ 사본이 둘 더 있다: `0x0D0D` 는 같이 줄고, **`0x0D0E` 는 22프레임 늦게 따라온다**
+     (체력바 애니메이션). 지연 사본으로 히트 프레임을 재면 판정이 통째로 밀린다.
+   실측 피해(쿄, 근접): **약 3 · 강 7** — 이걸로 「홀드=강」 이름표가 확인됐다.
+   ⚠ 무적이 기본 켜짐이라 피해를 재려면 스파링 설정에서 꺼야 한다(kof_spar_dmg.st). */
+#define OFF_HP2 0x0EC1
+
 /* 입력 이력 만료 — 찌꺼기 모션이 **다음 입력과 이어 붙는다**(막는 게 아니라).
    623 모션 뒤 236+B 를 넣으면 간격 11프레임까지 623 이 나가거나 엉뚱한 게 나간다.
    **12프레임부터 두 위상 모두 깨끗하다.**
@@ -82,13 +100,15 @@ static const int OFF_FACE      = KOFSP_UNMEASURED;   /* 좌우 반전. ⚠ 좌�
 static const int OFF_Y1        = KOFSP_UNMEASURED;   /* 공중 판정 */
 static const int OFF_DIRHIST   = KOFSP_UNMEASURED;   /* 링 주입 */
 static const int OFF_RING_TOP  = KOFSP_UNMEASURED;
-static const int OFF_REACT     = KOFSP_UNMEASURED;   /* 검증 전용 */
+/* 콤보 카운터 — 아직 못 찾았다. 3연타를 10프레임 간격으로 넣었는데 단조 증가하는 것이
+   `0x10F3`(공격마다 +6) 하나뿐이었고 그건 게이지 모양이다. 콤보가 실제로 성립했는지부터
+   의심스럽다(밀려나서 2·3타가 헛쳤을 수 있다). 히트 창(경직 36프레임) 안에서 다시 잴 것. */
 static const int OFF_COMBO     = KOFSP_UNMEASURED;
 
 int kofsp_unmeasured_count(void)
 {
    const int *v[] = { &OFF_CHAR1, &OFF_CHAR2, &OFF_STYLE, &OFF_TIMER, &OFF_FACE,
-                      &OFF_Y1, &OFF_DIRHIST, &OFF_RING_TOP, &OFF_REACT, &OFF_COMBO };
+                      &OFF_Y1, &OFF_DIRHIST, &OFF_RING_TOP, &OFF_COMBO };
    int i, n = 0;
    for (i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
       if (*v[i] == KOFSP_UNMEASURED) n++;
