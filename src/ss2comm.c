@@ -2455,13 +2455,16 @@ void ss2comm_overlay_draw(uint16_t *fb, int pitch_px, int w, int h){
 }
 
 int ss2comm_band_h(void){
-  if(cm_on && cm_rom_ss2 && (cm_draw==1 || cm_draw==4)) return SS2_BAND_H;
+  /* 해설이 살아 있는 SS2 에서는 sp_band(기술명 띠) 몫을 차단한다 — 해설이 「화면 안」
+     모드로 강등돼도 sp_band 가 32 를 계속 주장하면, 밀기는 도는데 칠하는 사람이 없어
+     맨 위 32줄에 HUD 가 복제된 채 남는다 (실기 제보: HUD 두 벌). */
+  if(cm_on && cm_rom_ss2) return (cm_draw==1 || cm_draw==4) ? SS2_BAND_H : 0;
   return sp_band ? SS2_BAND_H : 0;
 }
 int ss2comm_ref_h(void){ return 0; }  /* 심판은 이제 게임 화면 위 오버레이 — 제 자리를 차지하지 않는다 */
 int ss2comm_ref_overlay(void);        /* 아래에 — 이번 프레임에 오버레이가 실제로 그려졌으면 그 높이 */
 int ss2comm_band_top(void){
-  if(cm_on && cm_rom_ss2 && cm_draw==4) return 1;
+  if(cm_on && cm_rom_ss2) return cm_draw==4 ? 1 : 0;   /* band_h 와 같은 차단 규칙 */
   return sp_band ? 1 : 0;          /* 기술명 띠는 항상 화면 위 */
 }
 int ss2comm_drawing(void){ return ((cm_on && cm_rom_ss2 && cm_draw) || sp_band) ? 1 : 0; }
