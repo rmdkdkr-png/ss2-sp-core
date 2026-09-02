@@ -139,6 +139,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "above",
    },
    {
+      "ngp_kofsp_engine",
+      "KOF R-2 모던 조작 (원버튼 필살기)",
+      NULL,
+      "더 킹 오브 파이터즈 R-2 전용. 켜면 R가 기술키가 됩니다 - 방향+R 로 필살기가 나갑니다(짧게 누르면 약, 길게 누르면 강). 방향 없이=장풍, 앞=대공, 뒤/아래/뒤아래=각각 다른 기술, 앞아래=초필살기, 공중에서도 나갑니다. B/A 는 그대로 펀치/킥이고 홀드하면 강입니다. 끄면 R=A+B (순정과 같음).",
+      NULL,
+      "system",
+      {
+         { "enabled",  "켬" },
+         { "disabled", "끔" },
+         { NULL, NULL },
+      },
+      "disabled"
+   },
+   {
       "ngp_svcsp_engine",
       "SvC 모던 조작 (원버튼 필살기)",
       NULL,

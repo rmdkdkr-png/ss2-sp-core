@@ -566,6 +566,14 @@ static void check_variables(void)
       svcsp_toast_on = strcmp(var.value, "disabled") ? true : false;
    ov_toast = ov_toast_p = svcsp_toast_on ? 1 : 0;
 
+   /* KOF R-2 원버튼 엔진 — **기본 꺼짐**. 켜면 R 이 기술키가 되고 R=A+B 폴드가 사라진다.
+      ⚠ 다른 옵션과 달리 **조회에 실패해도 아무 일 없어야 한다** — 값이 없으면 그대로 꺼진 채다
+        (지오메트리 옵션이 조회 실패 시 켜지는 바람에 화면 크기가 조용히 바뀐 전과가 있다). */
+   var.key   = "ngp_kofsp_engine";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      kofsp_set_engine(strcmp(var.value, "disabled") != 0);
+
    var.key   = "ngp_ss2sp_comm_draw";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
