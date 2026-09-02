@@ -115,6 +115,8 @@ static int svc_sp_strong(void)
 #define SVC_HOLD_MIN    2       /* 1프레임은 위상에 따라 씹힌다 */
 static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴에서만 켠다 */
 static int svc_native_basics;                   /* 앱 모드 — 기본기는 순정 통과(탭 약/홀드 강) */
+static int svc_basics_split = 1;                /* 옵션 — 약/강 4버튼 리맵. 끄면 순정 2버튼 */
+void svcsp_set_basics(int on) { svc_basics_split = !!on; }
 static int svc_engine_now(void)
 {
    if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
@@ -1162,7 +1164,28 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
                  (unsigned)ret, (unsigned)(took ? tp : pad));
       if (took) { prev_trig = 0; return tp; }
    }
-   if (!svc_native_basics)
+   if (!svc_native_basics && !svc_basics_split)
+   {  /* ★ 강약 구분 끔(옵션) — A·B 는 **순정 그대로**(탭=약/꾹=강, 약컷 없음).
+         다만 강버튼(Y/X)까지 순정 홀드로 내리면 강기본기가 8프레임짜리가 된다
+         (제보: 「빠른 강기본기 되겠나」) — 그래서 Y/X 는 즉발 주입을 유지한다.
+         = 순정 2버튼 감각 + 원할 때만 쓰는 빠른 강버튼. */
+      if (ret & (1u << 1))
+      {
+         pad |= 0x10;
+         if (svc_fast_strong() && !svc_airborne())
+         { int iv = svc_inject_val();
+           if (CPUExRAM[OFF_HOLDCNT_P] < iv) CPUExRAM[OFF_HOLDCNT_P] = (uint8_t)iv; }
+      }
+      if (ret & (1u << 9))
+      {
+         pad |= 0x20;
+         if (svc_fast_strong() && !svc_airborne())
+         { int iv = svc_inject_val();
+           if (CPUExRAM[OFF_HOLDCNT_K] < iv) CPUExRAM[OFF_HOLDCNT_K] = (uint8_t)iv; }
+      }
+      if (ret & (1u << 10)) pad |= 0x30;                  /* L = A+B */
+   }
+   else if (!svc_native_basics)
    {  /* 기본 레이아웃(양 모드 공통): A·B=약 고정, Y=강펀치(C) X=강킥(D), L=A+B.
          약 고정 = 물리 버튼을 6f(실측 약 상한)에서 강제 해제 — 꾹 눌러도 강이 안 된다.
          메뉴에서는 그냥 짧은 A 누름과 같아 부작용 없음.

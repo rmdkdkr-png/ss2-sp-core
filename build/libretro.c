@@ -388,6 +388,7 @@ extern void    ss2sp_set_layout(int sp);
 /* ── SvC MotM 원버튼 엔진 (svcsp.c) — 롬 헤더로 자동 판별, SvC 때만 이쪽이 받는다 ── */
 extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 extern void    svcsp_set_engine(int on);
+extern void    svcsp_set_basics(int on);
 extern int     svcsp_engine_on(void);
 extern void    svcsp_reset(void);
 extern void    svcsp_set_rom(const void *rom, unsigned len);
@@ -553,6 +554,11 @@ static void check_variables(void)
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       svcsp_set_engine(strcmp(var.value, "disabled") != 0);
+
+   var.key   = "ngp_svcsp_basics";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      svcsp_set_basics(strcmp(var.value, "disabled") != 0);   /* 끄면 순정 2버튼 */
 
    var.key   = "ngp_svcsp_toast";
    var.value = NULL;

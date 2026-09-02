@@ -153,6 +153,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "enabled"
    },
    {
+      "ngp_svcsp_basics",
+      "SvC 강약 버튼 구분",
+      NULL,
+      "켬 = 약P/약K/강P/강K 4버튼(약은 짧게 고정, 강은 즉발). 끔 = 순정 2버튼(B/A 탭=약, 꾹=강 - 게임 원판정). 끔에서도 Y/X는 즉발 강으로 살아 있습니다. (SNK vs. Capcom MotM 전용)",
+      NULL,
+      "system",
+      {
+         { "enabled",  "켬" },
+         { "disabled", "끔" },
+         { NULL, NULL },
+      },
+      "enabled"
+   },
+   {
       "ngp_svcsp_toast",
       "SvC 기술명 표시",
       NULL,
