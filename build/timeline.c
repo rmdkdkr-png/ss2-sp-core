@@ -14,7 +14,6 @@ extern void        ss2comm_set_enabled(int on);
 extern void        ss2comm_set_speaker(int idx);
 extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
-extern void        ss2comm_set_duo(int on);
 
 const char *ss2sp_last_name = 0;
 int         ss2sp_last_ok   = 0;
@@ -53,10 +52,10 @@ static void hit(int scr,int *hp1,int *hp2,int who,int dmg){
 
 int main(void){
     int hp1=128, hp2=128, i, r;
-    ss2comm_set_ram(ram); ss2comm_set_enabled(1); ss2comm_set_speaker(0); ss2comm_set_duo(1);
+    ss2comm_set_ram(ram); ss2comm_set_enabled(1); ss2comm_set_speaker(0);
     ss2comm_reset(); memset(ram,0,sizeof ram);
     ram[BLK1]=8*(2*2+0);   /* 하오마루 */
-    ram[BLK2]=8*(2*3+0);   /* 겐주로 */
+    ram[BLK2]=8*(2*3+0); ram[0x17DF]=3;   /* 겐주로 */
 
     hold(180, 0xF0, 2, 128, 128);            /* 캐릭터 고르기 3초 */
     hold(180, 0xF0, 6, 128, 128);            /* VS 화면 3초 */
@@ -83,13 +82,15 @@ int main(void){
         int prev = 0, gap, big = 0;
         for(i = 0; i < said_n; i++){
             gap = said_at[i] - prev;
-            if(gap >= 180) { printf("  %6.1fs  ── 조용 %4.1f초 ──\n", prev/60.0, gap/60.0); big++; }
+            if(gap >= 420) { printf("  %6.1fs  ── 조용 %4.1f초 ──\n", prev/60.0, gap/60.0); big++; }
             printf("  %6.1fs  %s\n", said_at[i]/60.0, said_tx[i]);
             prev = said_at[i];
         }
         gap = frame - prev;
-        if(gap >= 180){ printf("  %6.1fs  ── 조용 %4.1f초 ──\n", prev/60.0, gap/60.0); big++; }
-        printf("\n3초 이상 빈 자리 %d군데\n", big);
+        if(gap >= 420){ printf("  %6.1fs  ── 조용 %4.1f초 ──\n", prev/60.0, gap/60.0); big++; }
+        /* 4.5초는 **일부러 둔 최소 간격**이다(GAP_BATTLE). 그건 침묵이 아니다.
+           진짜 빈 자리는 그보다 확실히 긴 7초 이상을 센다. */
+        printf("\n7초 이상 빈 자리 %d군데\n", big);
         printf("말한 비율: %d줄 / %.0f초 = %.1f초에 한 줄\n",
                said_n, frame/60.0, said_n ? (frame/60.0)/said_n : 0.0);
     }

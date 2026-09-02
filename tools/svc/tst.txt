@@ -1,0 +1,3 @@
+!load svc_c0_4.st
+5 -
+!w s@5

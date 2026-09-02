@@ -1,0 +1,9 @@
+!load /tmp/user_state.st
+30 -
+1 X
+20 -
+1 X
+22 -
+1 X
+80 -
+!w z@0

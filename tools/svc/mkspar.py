@@ -31,8 +31,14 @@ NAME = ['쿄','테리','료','마이','레오나','아테나','이오리','하�
 
 DUMMY = {'보통': 0, '정지': 1, '상단방어': 2}   # 적동작에서 → 를 누르는 횟수
 
-def spar(mode, cid):
-    return '%s/svc_spar_%s_%d.st' % (SAVE, mode, cid)
+def spar(mode, cid, style='균형'):
+    """유파 이름은 **균형일 때만 생략**한다 — 이미 구워 둔 파일 이름을 안 깨뜨리려고."""
+    s = '' if style == '균형' else style + '_'
+    return '%s/svc_spar_%s%s_%d.st' % (SAVE, s, mode, cid)
+
+def ctpath(mode, cid, face, style='균형'):
+    s = '' if style == '균형' else style + '_'
+    return '%s/svc_ct_%s%s_%d_%d.st' % (SAVE, s, mode, cid, face)
 
 def go(lines, csvp=None):
     open('/tmp/mkspar.txt', 'w').write('\n'.join(lines) + '\n')
@@ -42,8 +48,13 @@ def go(lines, csvp=None):
     return subprocess.run([RUN, CORE, ROM, '/tmp/mkspar.txt'],
                           capture_output=True, env=env, cwd=CWD)
 
-def boot_to_select(dummy):
-    """부팅 → 스파링 설정(적동작 지정) → 유파 → **캐릭터 선택 화면**까지."""
+STYLE = {'균형': 0, '반격': 1, '속공': 2}    # STYLE SELECT 화면의 위에서부터 순서
+
+def boot_to_select(dummy, style='균형'):
+    """부팅 → 스파링 설정(적동작 지정) → **유파** → 캐릭터 선택 화면까지.
+
+       유파는 이동 방식(달리기/스텝)이 달라진다고 알려져 있다. 엔진이 넣는 방향 주입이
+       대시를 건드릴 수 있으므로 축으로 세워야 한다 — 여태 「균형」 하나로만 쟀다."""
     sc = ['360 -']
     for _ in range(10): sc += ['3 ST', '47 -']
     sc += ['3 B', '60 -', '3 B', '60 -']        # 메인 메뉴
@@ -52,7 +63,8 @@ def boot_to_select(dummy):
     for _ in range(5): sc += ['3 D', '20 -']    # 적동작 줄
     for _ in range(DUMMY[dummy]): sc += ['3 R', '22 -']
     for _ in range(5): sc += ['3 U', '20 -']    # 시작 줄로 복귀
-    sc += ['3 B', '97 -']                       # 유파 선택
+    sc += ['3 B', '97 -']                       # 유파 선택 화면
+    for _ in range(STYLE[style]): sc += ['3 D', '24 -']
     sc += ['3 B', '97 -']                       # 캐릭터 선택
     return sc
 
@@ -73,9 +85,9 @@ def to_fight():
     sc += ['150 -']
     return sc
 
-def survey(dummy):
+def survey(dummy, style='균형'):
     """격자 24칸을 돌며 어느 칸이 어느 캐릭터인지 실측으로 적는다."""
-    sc = boot_to_select(dummy) + ['!save /tmp/sel.st']
+    sc = boot_to_select(dummy, style) + ['!save /tmp/sel.st']
     for col in range(4):
         for row in range(6):
             t = 'g%d_%d' % (col, row)
@@ -113,7 +125,7 @@ def verify(paths, dummy):
               '체력 -%d' % hurt, '쓸 만함' if good else '** 못 씀 **'))
     return ok
 
-def contact(mode, chars, recipe=None):
+def contact(mode, chars, recipe=None, style='균형'):
     """접촉 상태 세이브를 굽는다 — 캐릭터 × 방향.
 
        poke 로 거리를 맞추려 했으나 안 된다: 0x0934 는 **표시 사본**이라 값은 박히는데
@@ -130,7 +142,7 @@ def contact(mode, chars, recipe=None):
     SAM = list(range(6, 96, 8))
     sc = ['1 -']; made = []
     for cid in chars:
-        src = spar(mode, cid)
+        src = spar(mode, cid, style)
         # 방향 0 — 그냥 걸어가 붙는다
         t = 'f0_%d' % cid
         sc += ['!load %s' % src, '30 -', '90 R', '!save /tmp/%s.st' % t, '2 A']
@@ -170,8 +182,7 @@ def contact(mode, chars, recipe=None):
             best[(cid, face)] = (dmg, t)
     out = {}
     for (cid, face), (dmg, t) in sorted(best.items()):
-        dst = '%s/svc_ct_%s_%d_%d.st' % (SAVE, mode, cid, face)
-        shutil.copyfile('/tmp/%s.st' % t, dst)
+        shutil.copyfile('/tmp/%s.st' % t, ctpath(mode, cid, face, style))
         out[(cid, face)] = t
     print('  접촉 세이브 %d/%d칸' % (len(out), len(chars) * 2))
     for cid in chars:
@@ -183,6 +194,21 @@ def contact(mode, chars, recipe=None):
 
 if __name__ == '__main__':
     want = sys.argv[1] if len(sys.argv) > 1 else '둘다'
+    if want == '유파':
+        # 균형 말고 나머지 두 유파를 굽는다. 정지 허수아비만 — 축을 하나씩 늘린다.
+        for st in ('반격', '속공'):
+            print('── 유파 = %s · 적동작 = 정지' % st)
+            grid = survey('정지', st)
+            print('  격자에서 찾은 캐릭터 %d명' % len(grid))
+            paths = {}
+            for cid, g in sorted(grid.items()):
+                dst = spar('정지', cid, st)
+                shutil.copyfile('/tmp/%s.st' % g, dst); paths[cid] = dst
+            verify(paths, '정지')
+            print('  접촉 굽기')
+            contact('정지', sorted(grid), style=st)
+            print()
+        sys.exit(0)
     if want == '접촉':
         print('── 접촉 굽기 · 적동작 = 정지')
         rec = contact('정지', [c for c in range(18) if os.path.exists(spar('정지', c))])

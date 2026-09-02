@@ -1,0 +1,10 @@
+!load /tmp/user_state.st
+30 -
+1 X
+8 -
+!w a@8
+8 -
+!w a@16
+8 -
+!w a@24
+!ufix

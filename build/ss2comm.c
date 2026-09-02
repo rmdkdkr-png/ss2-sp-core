@@ -2386,6 +2386,25 @@ void ss2comm_toast(const char *t, int frames){
   snprintf(toast_txt, sizeof toast_txt, "%s", t);
   toast_left = frames;
 }
+/* ── 동작 번호 상시 표시 — 검증용. svcsp 가 매 프레임 값을 넣는다.
+   영상·스크린샷만으로 「실제 무엇이 발동했나」를 게임이 직접 말하게 하는 장치.
+   사람 눈 판독(강약을 임팩트 컷으로 못 가르는 문제)을 없앤다. ── */
+static char actovl_txt[24];
+void ss2comm_actshow(const char *t){
+  snprintf(actovl_txt, sizeof actovl_txt, "%s", t ? t : "");
+}
+static void actovl_render(uint16_t *fb, int pitch_px, int w, int h){
+  int tw, ytop, clipBot;
+  if(!actovl_txt[0]) return;
+  tw = line_w11(actovl_txt, actovl_txt + sizeof actovl_txt);
+  if(tw <= 0 || tw > w) return;
+  if(sp_band && !(cm_on && cm_rom_ss2)){ ytop = (SS2_BAND_H - 11) / 2; clipBot = SS2_BAND_H; }
+  else                                 { ytop = 2;                     clipBot = h; }
+  /* 왼쪽 구석 고정 — draw_line11 은 [x0,x1] 가운데 정렬이라 폭을 딱 맞춰 왼쪽에 박는다.
+     +8 여유는 「x > x1-4 에서 끊는」 내부 규칙 때문 — 없으면 마지막 글자가 반 잘린다(실측) */
+  draw_line11(fb, pitch_px, 2, 2 + tw + 8, actovl_txt, actovl_txt + sizeof actovl_txt,
+              ytop, 0, clipBot, 999, 0xFFE0, 0);
+}
 static void toast_render(uint16_t *fb, int pitch_px, int w, int h){
   int tw, x0, x1, x, y, y0, band;
   if(toast_left <= 0) return;
@@ -2423,9 +2442,11 @@ void ss2comm_draw(uint16_t *fb, int pitch_px, int w, int h){
     for(y = 0; y < SS2_BAND_H; y++)
       for(x = 0; x < w; x++) fb[y*pitch_px + x] = 0x0000;
     toast_render(fb, pitch_px, w, h);
+    actovl_render(fb, pitch_px, w, h);
     return;
   }
   toast_render(fb, pitch_px, w, h);              /* 해설 온오프와 무관하게 그린다 */
+  actovl_render(fb, pitch_px, w, h);
   if(!cm_on || !cm_rom_ss2 || !cm_draw) return;
   band    = (cm_draw==1 || cm_draw==4);
   bandTop = (cm_draw==4);

@@ -1,0 +1,11 @@
+30 -
+!load /home/dudu/ss2/saves/ss2/gd7/f000.st
+420 -
+3 B
+60 -
+3 A
+60 -
+2 R
+900 -
+3 A
+600 -

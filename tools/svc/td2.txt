@@ -1,0 +1,14 @@
+!load svc_c0_0.st
+30 -
+3 B
+4 -
+2 D
+1 D R1
+8 -
+!w imm@0
+8 -
+!w imm@8
+20 -
+!w imm@28
+30 -
+!w imm@58
