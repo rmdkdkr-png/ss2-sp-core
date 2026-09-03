@@ -478,7 +478,8 @@ static const RingCmd RINGS[SLOT_MAX] = {
 static int kof_ring_on(void)
 {
    static int v = -1;
-   if (v < 0) { const char *e = getenv("KOFSP_RING"); v = (e && *e == '1'); }
+   /* 기본 **켬**. 끄려면 KOFSP_RING=0 — 대조군을 돌릴 길은 남겨 둔다. */
+   if (v < 0) { const char *e = getenv("KOFSP_RING"); v = !(e && *e == '0'); }
    return v;
 }
 /* 링 주입 경로가 쓰는 즉석 스텝 표 — 마지막 한 칸뿐이다. */
