@@ -117,6 +117,8 @@ static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴�
 static int svc_native_basics;                   /* 앱 모드 — 기본기는 순정 통과(탭 약/홀드 강) */
 static int svc_basics_split = 1;                /* 옵션 — 약/강 4버튼 리맵. 끄면 순정 2버튼 */
 void svcsp_set_basics(int on) { svc_basics_split = !!on; }
+static int svc_land_on = 0;                     /* 옵션 — 착지 선입력. 기본 끔(유저 결정 2026-09-04) */
+void svcsp_set_land(int on) { svc_land_on = !!on; }
 static int svc_engine_now(void)
 {
    if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
@@ -1243,7 +1245,11 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       uint16_t bedge = (uint16_t)(ret & ~prev_ret);
       int air = svc_airborne();
       prev_ret = ret;
-      if (air)
+      if (!svc_land_on)
+      {  /* 옵션 끔(기본) — 게임엔 손대지 않고 상태만 비운다. 켜는 순간 묵은 무장이 튀지 않게 */
+         land_btn = 0; land_wait = 0; land_cyc = 0;
+      }
+      else if (air)
       {  /* 공중에서 새로 누른 기본기를 기억한다. 나중 누름이 앞 누름을 덮어쓴다 */
          static int air_hold;
          static unsigned char air_acte;

@@ -13,6 +13,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 uint8_t svcsp_frame_app(uint8_t pad, uint16_t trig);   /* 앱용: trig bit0 = 기술키 */
 void    svcsp_set_engine(int on);   /* 원버튼 엔진 토글 (기본 꺼짐) */
 void    svcsp_set_basics(int on);   /* 약/강 4버튼 리맵 토글 (기본 켬) — 끄면 순정 2버튼 */
+void    svcsp_set_land(int on);     /* 착지 선입력 토글 (기본 끔) — 켜면 착지 직전 누른 기본기를 착지 순간 대신 낸다 */
 int     svcsp_engine_on(void);
 
 /* 롬 로드·리셋·스테이트 로드 시 호출. 진행 중이던 커맨드를 버린다. */

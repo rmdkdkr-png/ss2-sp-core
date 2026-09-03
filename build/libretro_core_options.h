@@ -181,6 +181,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "enabled"
    },
    {
+      "ngp_svcsp_land",
+      "SvC 착지 선입력",
+      NULL,
+      "켬 = 점프 공격 뒤 착지 직전에 누른 기본기를 엔진이 기억했다가 착지하는 순간 대신 눌러 줍니다(쥔 채 착지=강, 탭=약). 끔(기본) = 순정 그대로 — 공중에서 누른 건 공중기로만 쓰이고 지상기는 착지 뒤 다시 눌러야 나갑니다. (SNK vs. Capcom MotM 전용)",
+      NULL,
+      "system",
+      {
+         { "disabled", "끔" },
+         { "enabled",  "켬" },
+         { NULL, NULL },
+      },
+      "disabled"
+   },
+   {
       "ngp_svcsp_toast",
       "SvC 기술명 표시",
       NULL,
