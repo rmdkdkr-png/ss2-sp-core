@@ -16,7 +16,7 @@ index b61e812..1889f51 100644
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..ffa466e 100644
+index ef01e22..430c311 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -169,7 +169,7 @@ index ef01e22..ffa466e 100644
     {
        /* user must manually restart core for change to happen */
        if (!strcmp(var.value, "japanese"))
-@@ -392,6 +514,124 @@ static void check_variables(void)
+@@ -392,6 +514,141 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -186,6 +186,23 @@ index ef01e22..ffa466e 100644
 +   {
 +      ss2comm_set_enabled(strcmp(var.value, "disabled") != 0);
 +      ov_chat = ov_chat_p = (strcmp(var.value, "disabled") != 0) ? 1 : 0;
++   }
++
++   /* 캐릭터 챗 / 심판(쿠로코) — 마스터(ngp_ss2sp_comm)와 따로 끈다. 유저 요청(2026-09-03):
++      「캐릭터 챗은 기본 끔, 쿠로코 목소리는 남겨라」. 마스터를 끄면 둘 다 죽으므로(ss2comm 539행)
++      앱 설정은 이 두 키를 쓰고 마스터는 켜 둔다. */
++   var.key   = "ngp_ss2sp_chat";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      ss2comm_set_chat(strcmp(var.value, "disabled") != 0);
++   else
++      ss2comm_set_chat(0);                           /* 옵션이 없으면 기본 끔 */
++   var.key   = "ngp_ss2sp_ref";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++   {
++      int on = strcmp(var.value, "disabled") != 0;
++      ss2comm_set_ref(on); ov_ref = ov_ref_p = (unsigned char)on;
 +   }
 +
 +   var.key   = "ngp_ss2sp_comm_spk";
@@ -294,7 +311,7 @@ index ef01e22..ffa466e 100644
  }
  
  void retro_init(void)
-@@ -399,6 +639,12 @@ void retro_init(void)
+@@ -399,6 +656,12 @@ void retro_init(void)
     struct retro_log_callback log;
     char *dir = NULL;
  
@@ -307,7 +324,7 @@ index ef01e22..ffa466e 100644
     if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log))
        log_cb = log.log;
     else 
-@@ -436,6 +682,33 @@ void retro_init(void)
+@@ -436,6 +699,33 @@ void retro_init(void)
  
  void retro_reset(void)
  {
@@ -341,7 +358,7 @@ index ef01e22..ffa466e 100644
     neopop_reset();
  }
  
-@@ -448,6 +721,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +738,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -349,7 +366,7 @@ index ef01e22..ffa466e 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +732,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +749,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -363,7 +380,7 @@ index ef01e22..ffa466e 100644
  
        { 0 },
     };
-@@ -479,6 +760,64 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +777,64 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -428,7 +445,7 @@ index ef01e22..ffa466e 100644
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +895,95 @@ static void update_input(void)
+@@ -556,6 +912,95 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -524,24 +541,23 @@ index ef01e22..ffa466e 100644
  }
  
  void retro_run(void)
-@@ -598,13 +1026,70 @@ void retro_run(void)
+@@ -598,13 +1043,70 @@ void retro_run(void)
        update_video = false;
     }
  
 -   Emulate(&spec, sound_buf);
 +   {
 +   int ss2_paused = ss2comm_overlay_active();
- 
--   width  = spec.DisplayRect.w;
--   height = spec.DisplayRect.h;
++
 +   if (!ss2_paused)
 +   {
 +      Emulate(&spec, sound_buf);
- 
--   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++
 +      width  = spec.DisplayRect.w;
 +      height = spec.DisplayRect.h;
-+
+ 
+-   width  = spec.DisplayRect.w;
+-   height = spec.DisplayRect.h;
 +      {
 +         const char *cline = ss2comm_frame();
 +         int band = ss2comm_band_h();
@@ -571,7 +587,8 @@ index ef01e22..ffa466e 100644
 +      height = ss2_last_h;
 +      spec.SoundBufSize = 0;
 +   }
-+
+ 
+-   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
 +   if (ss2_sides)
 +   {
 +      /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
@@ -599,7 +616,7 @@ index ef01e22..ffa466e 100644
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
  
-@@ -629,11 +1114,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+@@ -629,11 +1131,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -620,7 +637,7 @@ index ef01e22..ffa466e 100644
  
     check_color_depth();
  }
-@@ -762,6 +1251,8 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1268,8 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
@@ -629,7 +646,7 @@ index ef01e22..ffa466e 100644
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1273,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1290,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  
@@ -659,7 +676,7 @@ index ef01e22..ffa466e 100644
  {
     if(type == RETRO_MEMORY_SYSTEM_RAM)
 diff --git a/libretro_core_options.h b/libretro_core_options.h
-index a0dc3ec..fa385e4 100644
+index a0dc3ec..494aedf 100644
 --- a/libretro_core_options.h
 +++ b/libretro_core_options.h
 @@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
@@ -671,7 +688,7 @@ index a0dc3ec..fa385e4 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -50,7 +50,135 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -50,7 +50,163 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
           { "japanese",  NULL },
           { NULL, NULL},
        },
@@ -697,6 +714,34 @@ index a0dc3ec..fa385e4 100644
 +      "SS2 Character Commentary",
 +      NULL,
 +      "Samurai Shodown! 2 only. One of 15 characters comments on the match: KO, perfect win, comeback, win streak, story progress and menu chatter. Press L2 during play to hand over to the next commentator. Korean text.",
++      NULL,
++      "video",
++      {
++         { "enabled",  "Enabled" },
++         { "disabled", "Disabled" },
++         { NULL, NULL},
++      },
++      "enabled",
++   },
++   {
++      "ngp_ss2sp_chat",
++      "SS2 Character Chat",
++      NULL,
++      "Samurai Shodown! 2 only. The commentator character's lines (relationship banter, KO/perfect/comeback remarks, menu chatter). Off keeps only the referee (Kuroko). Default off.",
++      NULL,
++      "video",
++      {
++         { "enabled",  "Enabled" },
++         { "disabled", "Disabled" },
++         { NULL, NULL},
++      },
++      "disabled",
++   },
++   {
++      "ngp_ss2sp_ref",
++      "SS2 Referee (Kuroko)",
++      NULL,
++      "Samurai Shodown! 2 only. The referee calls the match: fighter names, round start, decision. Voice comes from the Korean voice pack when installed. Independent of Character Chat.",
 +      NULL,
 +      "video",
 +      {
@@ -808,7 +853,7 @@ index a0dc3ec..fa385e4 100644
     },
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
  };
-@@ -70,7 +198,18 @@ struct retro_core_option_definition option_defs_us[] = {
+@@ -70,7 +226,18 @@ struct retro_core_option_definition option_defs_us[] = {
           { "japanese",  NULL },
           { NULL, NULL},
        },

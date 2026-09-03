@@ -529,6 +529,23 @@ static void check_variables(void)
       ov_chat = ov_chat_p = (strcmp(var.value, "disabled") != 0) ? 1 : 0;
    }
 
+   /* 캐릭터 챗 / 심판(쿠로코) — 마스터(ngp_ss2sp_comm)와 따로 끈다. 유저 요청(2026-09-03):
+      「캐릭터 챗은 기본 끔, 쿠로코 목소리는 남겨라」. 마스터를 끄면 둘 다 죽으므로(ss2comm 539행)
+      앱 설정은 이 두 키를 쓰고 마스터는 켜 둔다. */
+   var.key   = "ngp_ss2sp_chat";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      ss2comm_set_chat(strcmp(var.value, "disabled") != 0);
+   else
+      ss2comm_set_chat(0);                           /* 옵션이 없으면 기본 끔 */
+   var.key   = "ngp_ss2sp_ref";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      int on = strcmp(var.value, "disabled") != 0;
+      ss2comm_set_ref(on); ov_ref = ov_ref_p = (unsigned char)on;
+   }
+
    var.key   = "ngp_ss2sp_comm_spk";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
