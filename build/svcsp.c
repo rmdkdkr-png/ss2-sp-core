@@ -119,7 +119,8 @@ static int svc_basics_split = 1;                /* 옵션 — 약/강 4버튼 �
 void svcsp_set_basics(int on) { svc_basics_split = !!on; }
 /* 강 발동 맞춤(유저 2026-09-04 「즉발이랑 홀드를 맞췄으면, 그 중간 프레임으로」): 2버튼 모드에서
    Y/X 즉발은 주입값 2(2프레임 늦게), A/B 홀드는 5프레임째 카운터 3 주입(4프레임 빠르게) → 둘 다 같은
-   프레임에 명중. 실측(쿄, 하네스 축): 즉발 20/19 → 22/21, 홀드 26/25 → 22/21. 대가: 약으로 남는 탭이
+   프레임에 명중. 실측(쿄, 하네스 축 = 사용자 표기 축 +2): 즉발 20/19 → 22/21, 홀드 26/25 → 22/21
+   (사용자 표기로는 즉발 18·꾹 24 → 20). 대가: 약으로 남는 탭이
    6f → 4f. 4버튼 모드(강약 구분 켬)는 홀드 강이 없으므로 무관. 롤백 지점: 태그 stake-3.75. */
 static int svc_hold_sync = 1;                   /* 옵션 ngp_svcsp_holdsync — 기본 mid(켬) */
 void svcsp_set_holdsync(int on) { svc_hold_sync = !!on; }
@@ -1283,9 +1284,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
          land_btn = 0; land_wait = 0; land_cyc = 0;
       }
       else if (air)
-      {  /* 공중에서 새로 누른 기본기를 기억한다. 나중 누름이 앞 누름을 덮어쓴다 */
-         static int air_hold;
-         static unsigned char air_acte;
+      {  /* 공중에서 새로 누른 기본기를 기억한다. 나중 누름이 앞 누름을 덮어쓴다 (air_hold/air_acte 는 파일 스코프) */
          if      (bedge & (1u << 1)) { land_btn = 0x10; land_str = 1; land_wait = SVC_LAND_WIN; air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
          else if (bedge & (1u << 9)) { land_btn = 0x20; land_str = 1; land_wait = SVC_LAND_WIN; air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
          else if (bedge & (1u << 0)) { land_btn = 0x10; land_str = 0; land_wait = SVC_LAND_WIN; air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
