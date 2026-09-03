@@ -390,6 +390,7 @@ extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 extern void    svcsp_set_engine(int on);
 extern void    svcsp_set_basics(int on);
 extern void    svcsp_set_land(int on);
+extern void    svcsp_set_holdsync(int on);
 extern int     svcsp_engine_on(void);
 extern void    svcsp_reset(void);
 extern void    svcsp_set_rom(const void *rom, unsigned len);
@@ -560,6 +561,14 @@ static void check_variables(void)
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       svcsp_set_basics(strcmp(var.value, "disabled") != 0);   /* 끄면 순정 2버튼 */
+
+   /* 강 발동 맞춤 — 기본 켬(mid). 값 "off" 일 때만 순정(즉발 18·홀드 24). */
+   var.key   = "ngp_svcsp_holdsync";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      svcsp_set_holdsync(strcmp(var.value, "off") != 0);
+   else
+      svcsp_set_holdsync(1);
 
    /* 착지 선입력 — **기본 꺼짐**. 조회에 실패해도 꺼진 채여야 한다(kofsp 와 같은 성질). */
    var.key   = "ngp_svcsp_land";

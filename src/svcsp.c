@@ -117,8 +117,22 @@ static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴�
 static int svc_native_basics;                   /* 앱 모드 — 기본기는 순정 통과(탭 약/홀드 강) */
 static int svc_basics_split = 1;                /* 옵션 — 약/강 4버튼 리맵. 끄면 순정 2버튼 */
 void svcsp_set_basics(int on) { svc_basics_split = !!on; }
+/* 강 발동 맞춤(유저 2026-09-04 「즉발이랑 홀드를 맞췄으면, 그 중간 프레임으로」): 2버튼 모드에서
+   Y/X 즉발은 주입값 2(2프레임 늦게), A/B 홀드는 5프레임째 카운터 3 주입(4프레임 빠르게) → 둘 다 같은
+   프레임에 명중. 실측(쿄, 하네스 축): 즉발 20/19 → 22/21, 홀드 26/25 → 22/21. 대가: 약으로 남는 탭이
+   6f → 4f. 4버튼 모드(강약 구분 켬)는 홀드 강이 없으므로 무관. 롤백 지점: 태그 stake-3.75. */
+static int svc_hold_sync = 1;                   /* 옵션 ngp_svcsp_holdsync — 기본 mid(켬) */
+void svcsp_set_holdsync(int on) { svc_hold_sync = !!on; }
 static int svc_land_on = 0;                     /* 옵션 — 착지 선입력. 기본 끔(유저 결정 2026-09-04) */
 void svcsp_set_land(int on) { svc_land_on = !!on; }
+/* 착지 선입력 상태 — 파일 스코프. 리뷰 지적(2026-09-04): 블록 안 static 이면 svcsp_reset(리셋·스테이트 로드)이
+   못 비워 사이클 중 로드 뒤에도 계속 주입했다. */
+static uint16_t land_prev_ret;
+static int  land_wait, land_cyc, land_air, land_str, air_hold;
+static unsigned char land_a0, air_acte;
+static uint8_t land_btn;
+static void svc_land_reset(void)
+{ land_prev_ret = 0; land_wait = land_cyc = land_air = land_str = air_hold = 0; land_a0 = air_acte = 0; land_btn = 0; }
 static int svc_engine_now(void)
 {
    if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
@@ -548,6 +562,18 @@ static int svc_fast_strong(void)
 static int svc_inject_val(void)
 { int t = svc_rom_thr_read ? svc_rom_thr_read : 4;   /* 롬을 아직 안 읽었으면 원본값 4 */
   int v = t - 1; return v < 1 ? 1 : v; }
+/* 실험 knob: 2버튼 모드에서 A/B 를 N프레임 쥐면 카운터를 문턱−1 로 올려 강 래치를 당긴다(0=끔).
+   대가: 그 길이 이상의 탭은 약이 못 된다 — 약 창이 N 으로 준다. */
+static int svc_hold_boost(void)
+{ static int v=-1; if(v<0){const char*e=getenv("SVCSP_HOLDBOOST"); v=e?atoi(e):-1;}
+  return v >= 0 ? v : (svc_hold_sync ? 5 : 0); }                 /* env 는 연구용 덮어쓰기 */
+/* 2버튼 모드 Y/X 즉발 주입값 — 맞춤이면 2(문턱 4 기준), 아니면 문턱−1. env SVCSP_INJECT 우선. */
+static int svc_inject_2btn(void)
+{ int base = svc_inject_val();
+  { static int ov = -1; if (ov < 0) { const char *e = getenv("SVCSP_INJECT"); ov = e ? atoi(e) : 0; }
+    if (ov > 0) return ov < base ? ov : base; }
+  if (svc_hold_sync && base > 2) return 2;
+  return base; }
 static int svc_ring_on(void)
 { static int v=-1; if(v<0){const char*e=getenv("SVCSP_RING"); v=e?atoi(e):1;} return v; }
 static int  compiled_ring;   /* 이번 컴파일이 링 주입 경로였나 — 강약 보정에 쓴다 */
@@ -1175,17 +1201,28 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       {
          pad |= 0x10;
          if (svc_fast_strong() && !svc_airborne())
-         { int iv = svc_inject_val();
+         { int iv = svc_inject_2btn();                    /* 맞춤이면 2 — 홀드와 같은 프레임 */
            if (CPUExRAM[OFF_HOLDCNT_P] < iv) CPUExRAM[OFF_HOLDCNT_P] = (uint8_t)iv; }
       }
       if (ret & (1u << 9))
       {
          pad |= 0x20;
          if (svc_fast_strong() && !svc_airborne())
-         { int iv = svc_inject_val();
+         { int iv = svc_inject_2btn();
            if (CPUExRAM[OFF_HOLDCNT_K] < iv) CPUExRAM[OFF_HOLDCNT_K] = (uint8_t)iv; }
       }
       if (ret & (1u << 10)) pad |= 0x30;                  /* L = A+B */
+      {  /* 강 발동 맞춤 — A/B 를 N프레임(기본 5) 쥐면 카운터를 문턱−1 로 올려 강 래치를 당긴다(지상 전용) */
+         static int hb_p, hb_k;
+         hb_p = (ret & (1u << 0)) ? hb_p + 1 : 0;
+         hb_k = (ret & (1u << 8)) ? hb_k + 1 : 0;
+         int hb = svc_hold_boost();
+         if (hb > 0 && !svc_airborne())
+         {  int iv = svc_thr() - 1; if (iv < 1) iv = 1;
+            if (hb_p >= hb && CPUExRAM[OFF_HOLDCNT_P] < iv) CPUExRAM[OFF_HOLDCNT_P] = (uint8_t)iv;
+            if (hb_k >= hb && CPUExRAM[OFF_HOLDCNT_K] < iv) CPUExRAM[OFF_HOLDCNT_K] = (uint8_t)iv;
+         }
+      }
    }
    else if (!svc_native_basics)
    {  /* 기본 레이아웃(양 모드 공통): A·B=약 고정, Y=강펀치(C) X=강킥(D), L=A+B.
@@ -1238,13 +1275,9 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
         소비되고 지상으로 안 넘어온다. 착지 뒤에 누른 것만 나가고, 그것도 누른 시점
         +8~20 프레임이라 「점프 기본기 → 착지 → 기본기」를 손으로 잇기가 어렵다.
         그래서 착지 직전 창 안에 누른 것을 엔진이 대신 들고 있다가 낸다. */
-      static uint16_t prev_ret;
-      static int  land_wait, land_cyc, land_air, land_str;
-      static unsigned char land_a0;
-      static uint8_t land_btn;
-      uint16_t bedge = (uint16_t)(ret & ~prev_ret);
+      uint16_t bedge = (uint16_t)(ret & ~land_prev_ret);
       int air = svc_airborne();
-      prev_ret = ret;
+      land_prev_ret = ret;
       if (!svc_land_on)
       {  /* 옵션 끔(기본) — 게임엔 손대지 않고 상태만 비운다. 켜는 순간 묵은 무장이 튀지 않게 */
          land_btn = 0; land_wait = 0; land_cyc = 0;
@@ -1675,6 +1708,7 @@ uint8_t svcsp_frame_app(uint8_t pad, uint16_t trig)
 
 void svcsp_reset(void)
 {
+   svc_land_reset();                    /* 착지 선입력 잔재 — 리뷰 지적 */
    q_n = q_i = q_left = 0;
    pending = 0; pending_left = 0; pending_kind = 0; move_started = 0;
    retry_mv = 0; retry_cnt = 0; retry_at = 0; macro_end_at = 0; compile_no_retry = 0;
