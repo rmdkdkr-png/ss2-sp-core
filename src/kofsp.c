@@ -107,7 +107,13 @@ static int kof_dbg(void)
 #define OFF_FACE2     (OFF_FACE + KOFSP_P2_STRIDE)   /* 교차 증인용 — 판정에는 안 쓴다 */
 #define KOFSP_FACE_BIT 0x80
 
-/* ── 방향 이력 링 — **없다.** 두 번 찾았고 두 번째는 근거가 선다 ─────
+/* ── 방향 이력 링 사냥 기록 — ⚠ **아래 「없다」는 결론은 틀렸다.** 링은 있다 ─────
+   (진짜 링은 `0x1020~0x105E` 32칸. 아래 390행 주석을 보라.
+    이 대목을 지우지 않고 남기는 이유는 **어떻게 틀렸는지가 다음 사냥의 재산**이기 때문이다.
+    아래 2차 사냥의 치명상: 기준선을 t=0 덤프로 잡아서 **자극에 즉시 반응하는 바이트가
+    통째로 빠졌다** — 카나리아로 세운 패드 레지스터조차 그 안에 있었다.
+    그래서 `0x105C`·`0x105E` 를 첫 출력에서 보고도 「0x0FF0 래치 무리」로 묶어 버렸다.
+    래치처럼 보인 것은 링의 **꼭대기 두 칸**이었다.)
 
    SVC 는 0x0CB8~ 에 24칸 링이 있어 커맨드를 직접 써 넣고 발동을 9→3프레임으로 줄인다.
    KOF R-2 에서 같은 것을 찾으려고 두 번 사냥했다.
@@ -135,7 +141,7 @@ static int kof_dbg(void)
      `0x0FFC` 는 반전값(0x1F ^ dir). `0x1009/100A/100B` 은 D/L/R 별 플래그.
      값은 NGP 패드 비트 그대로 (U=01 D=02 L=04 R=08).
 
-   → **링 주입은 못 쓴다.** 그리고 대기를 없애는 것도 안 된다(아래 KOFSP_HIST_CLEAR 주석).
+   → 당시 결론: 「링 주입은 못 쓴다」. **뒤집혔다.**
      지연을 더 줄이려면 남은 길은 **매크로 모션 자체를 짧게** 하는 것뿐인데,
      2프레임 걸음은 위상 한쪽에서 단계를 놓칠 위험이 있어 정착 오프셋을 40칸 훑어야 한다.
    ⚠ 「12프레임 만료」의 정체는 **아직 모른다.** 이력이 램에 없으니 그 12프레임이
@@ -387,6 +393,65 @@ static const Step M_SUPER[] = { Q, {4,NGP_D}, {4,NGP_D|BAK}, {4,BAK}, {4,NGP_D|B
 
 /* 슬롯 — 트리거를 누를 때 **잡고 있던 방향**으로 고른다.
    비어 있으면 완전 무반응(0 을 넣지 않고 아예 매크로를 시작하지 않는다). */
+/* ══ 방향 이력 링 — **있다.** 2026-09-03 실측 ══════════════════════
+   앞선 주석이 「없다」고 단정했는데 틀렸다. 첫 사냥 출력에 0x105C·0x105E 가 이미
+   있었는데 0x0FF0 래치 무리로 뭉뚱그리고 띠를 안 편 것이 잘못이다.
+
+   구조 — 236 모션을 넣고 매 프레임 본 것:
+     f3  105E=D · f7 105A=D 105C=D 105E=DF · f13 1054=D … 105C=F 105E=F · f29 전부 0
+   **값이 0x105E 로 들어와 2프레임마다 한 칸씩 낮은 주소로 밀린다.**
+   8칸 × 2프레임 = 16프레임 기억 — 실측한 12~13프레임 오염 창과 맞는다.
+   값은 NGP 패드 비트 그대로. SVC 의 0x0CB8(간격 2)과 같은 구조다.
+
+   ★ 주입 규칙은 **마지막 방향이 무엇이냐로 갈린다** (SVC 와 같다):
+       마지막이 →/← (카디널) : 앞 칸만 박고 **마지막 방향+버튼은 실제로 입력**
+       마지막이 대각(↘·↙)    : **전부 박고 버튼만** 입력
+     반대로 하면 다른 기술이 나간다 — 236(D,DF,F)을 전부 박았더니 623 이 나갔다.
+
+   ★ 대조군: 커맨드가 아닌 패턴(전부 D·F·DF·U·0, 쿄에게 없는 214)은 **아무것도 안 낸다.**
+     주입이 원인이라는 것이 이걸로 선다.
+
+   ⚠ 하네스 poke 로는 236 을 증명할 수 없었다 — 링을 **정적으로** 붙잡으면 게임이
+     밀면서 읽는 시작점이 돌아 사실상 모든 회전을 시도하고, F 가 새것 끝에 있는 한
+     회전하면 늘 F 가 D 앞에 온다(= 623). **한 번만 쓰는 것**이 본질이다. */
+#define OFF_DIRHIST  0x1020
+#define DIRHIST_LEN  64
+/* ★ 링은 8칸이 아니라 **32칸(64바이트, 0x1020~0x105E)** = 64프레임을 기억한다.
+   16바이트만 지우고 주입했더니 앞걷기 뒤 중립이 236 대신 623 이 됐다 — 지워지지 않은
+   아래쪽에 걷기 F 가 남아 D 앞에 붙은 것이다. 90프레임 걸으며 0x1000~0x1060 을
+   전량 뜨면 8(=R)이 0x105E 에서 0x1020 까지 내려가고 0x101E 는 안 변한다(거기부터 딴 것). */
+#define RING_TOP     0x105E
+
+/* 링에 방향을 써 넣는다. dirs 는 **연대순**(오래된 것부터)이고 마지막이 가장 새것이다.
+   새것이 RING_TOP 이고 2씩 내려간다. 한 방향당 **두 칸**을 쓴다 — 게임이 2프레임마다
+   미니까 실제로 4프레임 잡은 입력은 두 칸을 차지한다. 한 칸만 쓰면 안 나간다(실측). */
+static void kof_ring_write(const unsigned char *dirs, int n, int rep)
+{
+   int i;
+   if (!CPUExRAM) return;
+   memset(&CPUExRAM[OFF_DIRHIST], 0, DIRHIST_LEN);   /* 먼저 지운다 — 찌꺼기와 안 섞이게 */
+   for (i = 0; i < n; i++)
+   {
+      int a = RING_TOP - 2 * ((n - 1 - i) * rep);
+      int k;
+      for (k = 0; k < rep; k++)
+         if (a - 2 * k >= OFF_DIRHIST) CPUExRAM[a - 2 * k] = dirs[i];
+   }
+}
+
+/* 슬롯별 링 서술자. dirs 는 FWD/BAK 자리표시를 그대로 쓰고 쓸 때 반전으로 푼다.
+   lastin=1 이면 마지막 방향을 **안 박고** 패드로 실제 입력한다(카디널 규칙). */
+/* rep = 방향 하나가 차지하는 **칸 수**. 게임이 2프레임마다 미니까 4프레임 잡은 입력은 두 칸이다.
+   다만 링은 8칸뿐이라 **초필(7방향)은 두 칸씩 넣으면 14칸이 필요해 안 들어간다** → 한 칸씩. */
+typedef struct { const unsigned char *dirs; unsigned char n, lastin, btn, rep; } RingCmd;
+
+static const unsigned char R_236[] = { NGP_D, NGP_D | FWD, FWD };
+static const unsigned char R_214[] = { NGP_D, NGP_D | BAK, BAK };
+static const unsigned char R_623[] = { FWD, NGP_D, NGP_D | FWD };
+static const unsigned char R_421[] = { BAK, NGP_D, NGP_D | BAK };
+static const unsigned char R_SUP[] = { NGP_D, NGP_D | BAK, BAK, NGP_D | BAK,
+                                       NGP_D, NGP_D | FWD, FWD };
+
 enum { SLOT_N, SLOT_F, SLOT_B, SLOT_D, SLOT_DF, SLOT_DB, SLOT_AIR, SLOT_MAX };
 static const Step *const SLOTS[SLOT_MAX] = {
    M_236P,    /* N   중립 — 장풍 자리 */
@@ -397,6 +462,47 @@ static const Step *const SLOTS[SLOT_MAX] = {
    M_236K,    /* DB  뒤아래 */
    M_236P,    /* AIR 공중 */
 };
+
+/* 위 SLOTS 와 **같은 순서**다. 하나라도 어긋나면 다른 기술이 나간다. */
+static const RingCmd RINGS[SLOT_MAX] = {
+   { R_236, 3, 1, NGP_A, 2 },   /* N   236P — 마지막 F 는 실제 입력 */
+   { R_623, 3, 0, NGP_A, 2 },   /* F   623P — 마지막이 대각이라 전부 박고 버튼만 */
+   { R_214, 3, 1, NGP_A, 2 },   /* B   214P */
+   { R_421, 3, 0, NGP_B, 2 },   /* D   421K — 마지막 대각, 버튼만 */
+   { R_SUP, 7, 1, NGP_A, 2 },   /* DF  초필 2141236P — 14칸, 32칸 안에 넉넉히 든다 */
+   { R_236, 3, 1, NGP_B, 2 },   /* DB  236K */
+   /* AIR 공중: 주입하지 않는다. 링을 지우면 기술이 아예 안 나간다(act 8) —
+      공중 판정이 다른 경로를 타는 듯하고, 근거 없이 우기느니 원래 매크로로 둔다. */
+   { 0,     0, 0, 0,     0 },
+};
+static int kof_ring_on(void)
+{
+   static int v = -1;
+   if (v < 0) { const char *e = getenv("KOFSP_RING"); v = (e && *e == '1'); }
+   return v;
+}
+/* 링 주입 경로가 쓰는 즉석 스텝 표 — 마지막 한 칸뿐이다. */
+static Step mac_dyn[2];
+
+/* ★ 한 번 쓰고 끝내면 안 된다 — 게임이 **2프레임마다 링을 한 칸씩 민다.**
+   트리거 프레임에 써 넣으면 다음 프레임에 이미 밀려 나가고, 마지막 방향+버튼이
+   읽히는 시점에는 배치가 어긋나 엉뚱한 기술이 나간다(실측: 중립이 236 대신 623).
+   손 입력과 나란히 떠 보면 답이 분명하다 — 손은 `1058=D 105A=D 105C=DF 105E=DF` **그 배치
+   그대로 두 프레임을 버틴 뒤** 발동한다. 마지막 방향 F 는 링에 들어가지도 않는다.
+   그래서 **마지막 입력이 도는 동안 매 프레임 다시 쓴다.** poke 실험이 통했던 이유도 이것이다
+   (poke 는 매 프레임 덮는다). */
+static unsigned char ring_buf[8];
+static int ring_n, ring_hold, ring_rep;
+
+
+/* 평시 act — 서있기·앞걷기·뒤걷기·웅크림·전환. 기술/피격 중이면 아니다. */
+static int kof_act_neutral(void)
+{
+   unsigned char a;
+   if (!CPUExRAM) return 1;
+   a = CPUExRAM[OFF_ACT];
+   return a == 213 || a == 64 || a == 75 || a == 180 || a == 177 || a == 143;
+}
 
 static int kof_forward_bit(void)
 {
@@ -462,6 +568,41 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
          if (kof_quiet >= KOFSP_HIST_CLEAR)
             mac_left = 1;
          mac_fwd  = fwd;
+         /* ── 링 주입 경로 ─────────────────────────────────────────
+            모션을 패드로 걸어가는 대신 **이력 링에 한 번 써 넣고** 마지막만 입력한다.
+            대기 12프레임도 필요 없다 — 기다려서 만료시키는 대신 **지우기** 때문이다. */
+         /* ★ 기술이 도는 중에는 링을 태우지 않는다.
+            링 경로는 +0 프레임에 꽂히는데 그 순간 기본기가 아직 돌고 있으면 게임이 그냥
+            **버린다**(실측: 강펀 뒤 F·D·DF 슬롯이 전부 무발동). 원래 매크로는 앞에 대기가
+            있어 그 사이 기본기가 끝나므로 문제가 없었다. 평시가 아니면 매크로로 간다 —
+            느리지만 나가기는 한다. */
+         if (kof_ring_on() && RINGS[slot].n && kof_act_neutral())
+         {
+            const RingCmd *rc = &RINGS[slot];
+            unsigned char d[8];
+            int i, n = rc->n - (rc->lastin ? 1 : 0);
+            for (i = 0; i < n; i++)
+               d[i] = (unsigned char)((rc->dirs[i] & 0x3F)
+                                      | ((rc->dirs[i] & FWD) ? fwd : 0)
+                                      | ((rc->dirs[i] & BAK) ? back : 0));
+            memcpy(ring_buf, d, (size_t)n);
+            ring_n = n;
+            ring_rep = rc->rep;
+            ring_hold = 3;               /* 마지막 스텝 2프레임 + 읽히는 프레임 1 */
+            kof_ring_write(d, n, rc->rep);
+            {
+               unsigned char lastd = rc->dirs[rc->n - 1];
+               mac_dyn[0].n = 2;
+               mac_dyn[0].bits = (unsigned char)(rc->btn | (rc->lastin
+                     ? ((lastd & 0x3F) | ((lastd & FWD) ? fwd : 0) | ((lastd & BAK) ? back : 0))
+                     : 0));
+               mac_dyn[1].n = 0;
+               mac_dyn[1].bits = 0;
+            }
+            mac_tab  = mac_dyn;
+            mac_step = 0;
+            mac_left = mac_dyn[0].n;
+         }
          if (kof_dbg())
             fprintf(stderr, "[kofsp] 슬롯 %d 시작 (앞=%s%s)\n", slot,
                     fwd == NGP_R ? "R" : "L", air ? ", 공중" : "");
@@ -472,6 +613,7 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
    if (mac_step >= 0)
    {
       unsigned char b = mac_tab[mac_step].bits;
+      if (ring_hold > 0) { kof_ring_write(ring_buf, ring_n, ring_rep); ring_hold--; }
       int back = (mac_fwd == NGP_R) ? NGP_L : NGP_R;
       int last = (mac_tab[mac_step + 1].n == 0);
       /* 매크로가 도는 동안 사람 입력은 버린다 — 섞으면 커맨드가 오염된다 */
