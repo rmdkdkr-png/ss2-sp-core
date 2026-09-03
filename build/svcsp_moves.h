@@ -246,9 +246,9 @@ static const unsigned char mo_c11_4[] = {0x01};
 static const unsigned char mo_c11_5[] = {0x02,0x06,0x04};
 static const unsigned char mo_c11_6[] = {0x02,0x06,0x04};
 static const unsigned char mo_c11_7[] = {0x08,0x02,0x0A};
-static const unsigned char mo_c11_8[] = {0x08,0x0A,0x02,0x06,0x04,0x08};
-static const unsigned char mo_c11_9[] = {0x08,0x0A,0x02,0x06,0x04,0x08};
-static const unsigned char mo_c11_10[] = {0x08,0x0A,0x02,0x06,0x04,0x08};
+static const unsigned char mo_c11_8[] = {0x08,0x0A,0x02,0x06,0x04,0x05,0x01,0x09};
+static const unsigned char mo_c11_9[] = {0x08,0x0A,0x02,0x06,0x04,0x05,0x01,0x09};
+static const unsigned char mo_c11_10[] = {0x08,0x0A,0x02,0x06,0x04,0x05,0x01,0x09};
 static const unsigned char mo_c11_11[] = {0x08,0x0A,0x02,0x06,0x04,0x08};
 static const unsigned char mo_c11_12[] = {0x02,0x0A,0x08,0x02,0x0A,0x08};
 static const unsigned char mo_c11_13[] = {0x02,0x06,0x04,0x02,0x06,0x04};
@@ -259,9 +259,9 @@ static const svc_move mv_c11[] = {
   {"더블 라리아트(Double Lariat)", 0, mo_c11_5, 3, 0x10, 0, -1, -1, -1},
   {"퀵 더블 라리아트(Quick Double Lariat)", 0, mo_c11_6, 3, 0x20, 0, -1, -1, -1},
   {"배니싱 플랫(Banishing Flat)", 0, mo_c11_7, 3, 0x10, 0, -1, -1, -1},
-  {"스크류 파일 드라이버(Screw Piledriver)", 0, mo_c11_8, 6, 0x10, 1, -1, -1, -1},
-  {"아토믹 수플렉스(Atomic Suplex)", 0, mo_c11_9, 6, 0x20, 1, -1, -1, -1},
-  {"플라잉 파워밤(Flying Powerbomb)", 0, mo_c11_10, 6, 0x20, 0, -1, -1, -1},
+  {"스크류 파일 드라이버(Screw Piledriver)", 0, mo_c11_8, 8, 0x10, 1, -1, -1, -1},
+  {"아토믹 수플렉스(Atomic Suplex)", 0, mo_c11_9, 8, 0x20, 1, -1, -1, -1},
+  {"플라잉 파워밤(Flying Powerbomb)", 0, mo_c11_10, 8, 0x20, 0, -1, -1, -1},
   {"파이널 아토믹 버스터(Final Atomic Buster)", 0, mo_c11_11, 6, 0x10, 33, -1, -1, -1},
   {"에어리얼 러시안 슬램(Aerial Russian Slam)", 0, mo_c11_12, 6, 0x20, 32, -1, -1, -1},
   {"러시안 비트(Russian Beat)", 0, mo_c11_13, 6, 0x20, 32, -1, -1, -1},
