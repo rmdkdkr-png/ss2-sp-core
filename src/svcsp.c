@@ -1331,7 +1331,12 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
                      엣지는 공중에서 이미 소진돼 즉발 경로가 착지에서는 안 걸리기
                      때문(실측). 약 버튼 선입력은 주입 없이 3프레임 = 약으로 나간다. */
                   pad |= land_btn;
-                  if (land_str && svc_fast_strong())
+                  /* ★ 홀드 입력 지원(2026-09-04 유저 제보 「착지 시 강이 안 되고 약이 나간다」): 약 자리 버튼(A/B)이라도
+                     발사 순간 아직 쥐고 있으면 홀드 의도 = 강. 3f 탭으로만 내보내면 순정 2버튼 사용자의 점프강→착지강이
+                     늘 약으로 둔갑한다. 강약 구분(basics) 켬에서는 A/B 가 약 고정이라 그대로 둔다. */
+                  int held_weak = (ret & ((land_btn & 0x10) ? (1u << 0) : (1u << 8))) != 0;
+                  int as_strong = land_str || (held_weak && (svc_native_basics || !svc_basics_split));
+                  if (as_strong && svc_fast_strong())
                   {
                      int off = (land_btn & 0x10) ? OFF_HOLDCNT_P : OFF_HOLDCNT_K;
                      int iv  = svc_inject_val();
