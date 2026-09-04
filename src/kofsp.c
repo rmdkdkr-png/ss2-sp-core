@@ -514,6 +514,32 @@ static int kof_act_neutral(void)
    return a == 213 || a == 64 || a == 75 || a == 180 || a == 177 || a == 143;
 }
 
+/* ── 기술명 표시 ──────────────────────────────────────────────────
+   ★ 슬롯 **이름**이 아니라 **커맨드 표기**를 띄운다. 이유가 있다 —
+   같은 슬롯이 캐릭터마다 다른 기술이다. 중립 슬롯을 「장풍」이라 적으면 쿄처럼
+   장풍이 아닌 캐릭터에서 거짓말이 된다. 커맨드 표기는 14명 전부에게 참이고,
+   덤으로 유저가 손으로 치는 법을 배운다.
+   표기는 **앞뒤 기준**이다(격겜 관례). 반전이어도 →는 「앞」을 뜻한다.
+   강/약은 안 적는다 — 누르는 길이로 나중에 갈리므로 이 시점엔 아직 모른다. */
+char kofsp_last_disp[64];
+int  kofsp_disp_seq;
+static const char *const DISP[SLOT_MAX] = {
+   "↓↘→ + 펀치",                      /* N   236P */
+   "→↓↘ + 펀치",                      /* F   623P */
+   "↓↙← + 펀치",                      /* B   214P */
+   "←↓↙ + 킥",                       /* D   421K */
+   "↓↙←↙↓↘→ + 펀치",                  /* DF  초필 2141236P */
+   "↓↘→ + 킥",                       /* DB  236K */
+   "공중 ↓↘→ + 펀치",                   /* AIR 공중 236P */
+};
+/* 버퍼를 채우고 **그다음에** seq 를 올린다. 순서가 사양이다. */
+static void kof_disp(int slot)
+{
+   if (slot < 0 || slot >= SLOT_MAX || !DISP[slot]) return;
+   snprintf(kofsp_last_disp, sizeof kofsp_last_disp, "%s", DISP[slot]);
+   kofsp_disp_seq++;
+}
+
 static int kof_forward_bit(void)
 {
    /* 반전은 P1 의 것만 믿는다 — 「うごかない」 더미는 플래그가 갱신되지 않는다. */
@@ -596,6 +622,7 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
          int f2 = kof_forward_bit();
          kof_ring_start(SLOT_AIR, f2, (f2 == NGP_R) ? NGP_L : NGP_R);
          mac_fwd = f2; mac_hold = 0; mac_trig = 0;
+         kof_disp(SLOT_AIR);   /* 트리거 때가 아니라 실제로 나가는 이 순간에 띄운다 */
          air_pend = 0;
       }
    }
@@ -634,6 +661,7 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
          mac_left = mac_tab[0].n;
          mac_hold = 0;
          mac_trig = 0;
+         kof_disp(slot);
          /* ── 조용했으면 기다리지 않는다 ────────────────────────────
             0번 스텝은 **찌꺼기가 만료되기를 기다리는** 칸이다. 그런데 사람이
             직전에 방향을 안 눌렀다면 만료될 찌꺼기가 애초에 없다.
