@@ -13,6 +13,7 @@
    기술명은 롬 버전 종속이라 코어/앱에서는 다루지 않는다 — 흥·썰 위주. */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "ss2comm.h"
 
 #ifdef SS2SP_RAM_POINTER
@@ -1937,7 +1938,15 @@ void ss2comm_overlay_bind_extra(const char *name, unsigned char *v){
 }
 int  ss2comm_overlay_active(void){ return ov_on; }
 void ss2comm_overlay_toggle(void){
+  /* 띄울 항목이 하나도 없으면 열지 않는다 — 빈 창이 떠서 입력만 먹던 것(순정 롬).
+     프론트는 ss2comm_overlay_active() 로 열렸는지 보고 입력을 돌리므로 여기서 막으면 된다. */
+  if(!ov_on && !ov_n
+#ifdef SS2OV_SP
+     && !ov_svc
+#endif
+    ) { if(getenv("SS2COMM_DEBUG")) fprintf(stderr, "[overlay] 항목 0 - 열지 않음\n"); return; }
   ov_on = !ov_on;
+  if(getenv("SS2COMM_DEBUG")) fprintf(stderr, "[overlay] %s (항목 %d)\n", ov_on ? "열림" : "닫힘", ov_n);
   if(ov_on){ ov_cur = 0;
 #ifdef SS2OV_SP
     ov_page = 0;

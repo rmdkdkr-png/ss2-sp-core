@@ -475,6 +475,34 @@ static void ss2_set_geometry(void)
 
 static char svc_slots_file[560];   /* <system>/ngpsvc_slots.bin — 비면 저장 안 함 */
 
+/* ★ 게임별 오버레이 항목 (유저 2026-09-04 「게임별 오버레이메뉴 … 손 좀 봐」).
+   전에는 SvC 가 아니면 **무조건 SS2 항목**을 띄웠다 — KOF R-2·메탈슬러그·월화에서 해설·쿠로코·기둥이
+   떠 있고 아무 일도 안 했다. 게다가 「원버튼 필살기」 칸이 늘 ss2sp_enable 로 가서 KOF 엔진은 못 켰다.
+   순정 롬은 **항목 0** — ss2comm_overlay_toggle 이 그때 아예 안 열어 준다(빈 창이 입력을 먹던 것도 같이 막힌다). */
+static void ss2_overlay_rebind(void)
+{
+   ss2comm_overlay_spmode(svcsp_rom_ok());
+   if (svcsp_rom_ok())
+   {  /* SvC — 원버튼 + 기술명 표시/띠 */
+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
+      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
+      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
+   }
+   else if (ss2comm_rom_is_ss2())
+   {  /* SS2 — 해설 일습 + 간이입력 */
+      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+      ov_sp = ov_sp_p = ss2sp_enable ? 1 : 0;
+   }
+   else if (kofsp_rom_ok())
+   {  /* KOF R-2 — 원버튼 하나뿐. 해설·기둥은 SS2 것이라 안 띄운다 */
+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
+      ov_sp = ov_sp_p = kofsp_engine_on() ? 1 : 0;
+   }
+   else
+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, 0);   /* 순정 롬 — 띄울 것이 없다 */
+}
+
 static void ss2_overlay_apply(void)
 {
    if (ov_spk   != ov_spk_p)   { ss2comm_set_speaker(ov_spk);  ov_spk_p   = ov_spk; }
@@ -482,8 +510,9 @@ static void ss2_overlay_apply(void)
    if (ov_ref   != ov_ref_p)   { ss2comm_set_ref(ov_ref);      ov_ref_p   = ov_ref; }
    if (ov_sp    != ov_sp_p)
    {
-      if (svcsp_rom_ok()) svcsp_set_engine(ov_sp != 0);   /* SvC: 원버튼 엔진만 토글 */
-      else                ss2sp_enable = ov_sp != 0;
+      if      (svcsp_rom_ok())      svcsp_set_engine(ov_sp != 0);   /* SvC */
+      else if (kofsp_rom_ok())      kofsp_set_engine(ov_sp != 0);   /* KOF R-2 — 전에는 여기로 못 왔다 */
+      else                          ss2sp_enable = ov_sp != 0;      /* SS2 간이입력 */
       ov_sp_p = ov_sp;
    }
    if (ov_toast != ov_toast_p) { svcsp_toast_on = ov_toast != 0; ov_toast_p = ov_toast; }
@@ -692,16 +721,7 @@ void retro_reset(void)
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
    kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
-   ss2comm_overlay_spmode(svcsp_rom_ok());
-   if (svcsp_rom_ok())
-   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
-      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
-      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
-      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
-   }
-   else
-      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+   ss2_overlay_rebind();
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
       static char ver_toast[48];
@@ -765,16 +785,7 @@ bool retro_load_game(const struct retro_game_info *info)
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
-   ss2comm_overlay_spmode(svcsp_rom_ok());
-   if (svcsp_rom_ok())
-   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
-      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
-      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
-      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
-   }
-   else
-      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+   ss2_overlay_rebind();
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
       static char ver_toast[48];
