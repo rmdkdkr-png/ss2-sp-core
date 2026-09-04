@@ -528,10 +528,17 @@ static void kof_ring_start(int slot, int fwd, int back)
          const RingCmd *rc = &RINGS[slot];
          unsigned char d[8];
          int i, n = rc->n - (rc->lastin ? 1 : 0);
+         /* ★★ 링에 넣는 값은 **반전하지 않는다.** 게임이 링에 넣는 것은 패드 그대로가 아니라
+            **앞뒤 기준**이다 — 왼쪽을 보며 D+왼쪽(0x06)을 눌러도 링에는 0x0A(D|R)가 들어간다
+            (실측: 넘어간 뒤 손 236 의 링이 오른쪽 볼 때와 **완전히 같은 2·2·10·10**).
+            여기서 fwd/back 으로 뒤집어 쓰는 바람에 **왼쪽을 볼 때 전 슬롯이 깨졌다**
+            (필살기 대신 약펀). 매크로 경로는 패드로 흘려 넣으니 반전이 맞아서 멀쩡했고,
+            그래서 「링을 켜야만 나는 고장」이었다.
+            앞 = NGP_R · 뒤 = NGP_L 로 **고정**. 반전은 아래 실제로 누르는 앵커에만 준다. */
          for (i = 0; i < n; i++)
             d[i] = (unsigned char)((rc->dirs[i] & 0x3F)
-                                   | ((rc->dirs[i] & FWD) ? fwd : 0)
-                                   | ((rc->dirs[i] & BAK) ? back : 0));
+                                   | ((rc->dirs[i] & FWD) ? NGP_R : 0)
+                                   | ((rc->dirs[i] & BAK) ? NGP_L : 0));
          memcpy(ring_buf, d, (size_t)n);
          ring_n = n;
          ring_rep = rc->rep;
