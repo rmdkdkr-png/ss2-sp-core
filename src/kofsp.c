@@ -308,6 +308,11 @@ typedef struct { unsigned char n, bits; } Step;
    강 문턱이 6프레임이므로 24 면 충분히 여유롭다. */
 #define KOFSP_HOLD_CAP 24
 
+/* 캔슬 창 — 상대가 경직에 막 들어간 뒤 몇 프레임 동안 SP 를 받아 준다.
+   (자세한 근거는 아래 kof_cancel_frames 옆 주석에 있다) */
+static int cancel_win;
+static int p2_stun_prev;
+
 static const Step *mac_tab;
 static int mac_step = -1;   /* -1 = 쉬는 중 */
 static int mac_left;
@@ -337,6 +342,8 @@ void kofsp_reset(void)
    mac_hold = mac_trig = 0;
    kof_quiet = 0;
    trig_prev = 0;
+   cancel_win = 0;
+   p2_stun_prev = 0;
 }
 
 /* ── 매 프레임 ───────────────────────────────────────────────────
@@ -505,6 +512,25 @@ static int kof_air_early(void)
 { static int v=-1; if(v<0){const char*e=getenv("KOFSP_AIREARLY"); v=(e&&*e=='1');} return v; }
 
 
+/* ── 캔슬 창 ──────────────────────────────────────────────────────
+   ★ 「평시 act 일 때만」 게이트가 **게임이 허용하는 캔슬을 막고 있었다.**
+   손으로 236 을 넣으면 기본기 히트 직후에 필살기가 나가는데(테리·이오리·카스미 강펀,
+   실측 창 +0), SP 키로는 14명 전원 무발동이었다. 손으로 되는 걸 엔진이 못 하면 결함이다 —
+   원버튼 엔진의 일은 **입력 부담을 줄이는 것이지 할 수 있는 일을 바꾸는 게 아니다.**
+
+   그 게이트를 넣은 이유 자체는 옳았다: 기본기가 도는 중에 링을 꽂으면 게임이 그냥 버린다.
+   틀린 것은 **「버려지는 자리」와 「캔슬되는 자리」를 한 덩어리로 묶은 것**이다.
+   상대가 경직에 **막 들어간 순간**을 신호로 써서 그 창에서만 연다 —
+   헛친 기본기 중에는 상대 경직이 없으니 계속 막힌다.
+
+   합격 기준(본부와 합의): 수리 뒤 SP 키 결과가 **손 입력 결과와 칸별로 정확히 같을 것.**
+   한 칸이라도 SP 만 열리면 그건 수리가 아니라 강화다. */
+static int kof_cancel_frames(void)
+/* 2 로 잡는다. 2·4·8 을 훑어 손 입력과 대조했더니 **2 와 8 이 두 위상 다 일치**했고
+   4 만 두 칸 어긋났다(경계값이 위상을 탄다). 통과하는 값 중 **제일 좁은 것**을 고른다 —
+   창이 넓을수록 손으로 못 하는 자리가 열릴 위험이 커지는데, 그건 수리가 아니라 강화다. */
+{ static int v=-1; if(v<0){const char*e=getenv("KOFSP_CANCEL"); v=e?atoi(e):2;} return v; }
+
 /* 평시 act — 서있기·앞걷기·뒤걷기·웅크림·전환. 기술/피격 중이면 아니다. */
 static int kof_act_neutral(void)
 {
@@ -608,6 +634,15 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
 
    if (!kofsp_engine_on() || !kof_is_rom) { trig_prev = trig; return pad; }
 
+   /* 상대가 경직에 **막 들어간** 프레임에 캔슬 창을 연다. */
+   if (CPUExRAM)
+   {
+      int stun = (CPUExRAM[OFF_ACT2] == KOFSP_ACT_HITSTUN);
+      if (stun && !p2_stun_prev) cancel_win = kof_cancel_frames();
+      else if (cancel_win > 0)   cancel_win--;
+      p2_stun_prev = stun;
+   }
+
    /* 미뤄 둔 공중 트리거 — 땅에 닿고 평시가 되는 첫 프레임에 꽂는다. */
    if (air_pend > 0 && mac_step < 0)
    {
@@ -679,7 +714,8 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
             **버린다**(실측: 강펀 뒤 F·D·DF 슬롯이 전부 무발동). 원래 매크로는 앞에 대기가
             있어 그 사이 기본기가 끝나므로 문제가 없었다. 평시가 아니면 매크로로 간다 —
             느리지만 나가기는 한다. */
-         if (kof_ring_on() && RINGS[slot].n && kof_act_neutral())
+         if (kof_ring_on() && RINGS[slot].n
+             && (kof_act_neutral() || cancel_win > 0))
             kof_ring_start(slot, fwd, back);
          if (kof_dbg())
             fprintf(stderr, "[kofsp] 슬롯 %d 시작 (앞=%s%s)\n", slot,
