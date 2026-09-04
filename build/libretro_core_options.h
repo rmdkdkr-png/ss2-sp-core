@@ -181,6 +181,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "enabled"
    },
    {
+      "ngp_kofsp_toast",
+      "KOF 기술 표기 표시",
+      NULL,
+      "KOF R-2 원버튼으로 기술이 나갈 때 커맨드 표기(↓↘→ + 펀치)를 띄웁니다. 슬롯마다 나가는 기술이 캐릭터별로 달라 이름 대신 표기를 적습니다 — 손으로 치는 법이 그대로 보입니다. (KOF R-2 전용)",
+      NULL,
+      "system",
+      {
+         { "enabled",  "켬" },
+         { "disabled", "끔" },
+         { NULL, NULL },
+      },
+      "enabled"
+   },
+   {
       "ngp_svcsp_holdsync",
       "SvC 강 발동 당김",
       NULL,

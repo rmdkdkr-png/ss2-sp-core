@@ -410,6 +410,10 @@ extern void    kofsp_reset(void);
 extern void    kofsp_set_rom(const void *rom, unsigned len);
 extern int     kofsp_rom_ok(void);
 static bool    svcsp_toast_on = true;
+extern char    kofsp_last_disp[64];   /* KOF 기술 표기(UTF-8) — 이식소 6c049fb */
+extern int     kofsp_disp_seq;
+static bool    kofsp_toast_on = true; /* KOF 기술명 표시 — 옵션 ngp_kofsp_toast */
+static unsigned char ov_ktoast = 1, ov_ktoast_p = 1;
 static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
 static unsigned char ov_band = 1, ov_band_p = 1;     /* 기술명 띠(화면 밖) 온오프 */
 extern const char *ss2sp_last_name;
@@ -495,9 +499,11 @@ static void ss2_overlay_rebind(void)
       ov_sp = ov_sp_p = ss2sp_enable ? 1 : 0;
    }
    else if (kofsp_rom_ok())
-   {  /* KOF R-2 — 원버튼 하나뿐. 해설·기둥은 SS2 것이라 안 띄운다 */
+   {  /* KOF R-2 — 원버튼 + 기술명 표시. 해설·기둥은 SS2 것이라 안 띄운다 */
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
+      ss2comm_overlay_bind_extra("기술명 표시", &ov_ktoast);
       ov_sp = ov_sp_p = kofsp_engine_on() ? 1 : 0;
+      ov_ktoast = ov_ktoast_p = kofsp_toast_on ? 1 : 0;
    }
    else
       ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, 0);   /* 순정 롬 — 띄울 것이 없다 */
@@ -516,6 +522,7 @@ static void ss2_overlay_apply(void)
       ov_sp_p = ov_sp;
    }
    if (ov_toast != ov_toast_p) { svcsp_toast_on = ov_toast != 0; ov_toast_p = ov_toast; }
+   if (ov_ktoast != ov_ktoast_p) { kofsp_toast_on = ov_ktoast != 0; ov_ktoast_p = ov_ktoast; }
    if (ov_band  != ov_band_p)
    {  /* 띠는 화면 세로를 바꾼다 — 지오메트리를 다시 알려야 프론트가 안 깨진다 */
       if (!ss2comm_rom_is_ss2()) { ss2comm_sp_band(ov_band); ss2_set_geometry(); }
@@ -600,6 +607,12 @@ static void check_variables(void)
       svcsp_set_holdsync(1);
 
    /* 착지 선입력 — **기본 꺼짐**. 조회에 실패해도 꺼진 채여야 한다(kofsp 와 같은 성질). */
+   var.key   = "ngp_kofsp_toast";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      kofsp_toast_on = strcmp(var.value, "disabled") ? true : false;
+   ov_ktoast = ov_ktoast_p = kofsp_toast_on ? 1 : 0;
+
    var.key   = "ngp_svcsp_land";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -989,7 +1002,18 @@ static void update_input(void)
             **똑같이** 접기만 한다(Y=A·X=B·L·R=A+B). 그래서 이 가지가 생겨도
             KOF 의 출력은 한 비트도 안 바뀐다 — 그것이 M1 의 통과 조건이다.
             ⚠ 순정 폴드보다 **앞**에 있어야 한다. 뒤에 두면 영영 안 불린다. */
+      {
          input_buf = kofsp_frame(input_buf, (uint16_t)ret);
+         {                                        /* 기술 표기 토스트 — SvC 와 같은 규약(먼저 버퍼, 그다음 seq) */
+            static int kdisp_seen;
+            if (kofsp_disp_seq != kdisp_seen)
+            {
+               kdisp_seen = kofsp_disp_seq;
+               if (kofsp_toast_on && kofsp_last_disp[0])
+                  ss2comm_toast(kofsp_last_disp, 80);
+            }
+         }
+      }
       else
       {  /* 순정 NGPC 롬 — 매크로 엔진이 없다. 강/기술 자리 버튼을 NGP 로 접어
             SVC 6키 배치·물리 패드가 그대로 통하게 한다: Y=A, X=B, L·R=A+B. */

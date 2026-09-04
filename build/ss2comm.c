@@ -2397,6 +2397,7 @@ void ss2comm_toast(const char *t, int frames){
   if(!t || !*t) return;
   snprintf(toast_txt, sizeof toast_txt, "%s", t);
   toast_left = frames;
+  if(getenv("SS2COMM_DEBUG")) fprintf(stderr, "[toast] %s\n", toast_txt);
 }
 /* ── 동작 번호 상시 표시 — 검증용. svcsp 가 매 프레임 값을 넣는다.
    영상·스크린샷만으로 「실제 무엇이 발동했나」를 게임이 직접 말하게 하는 장치.
