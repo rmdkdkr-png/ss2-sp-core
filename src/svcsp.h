@@ -13,7 +13,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 uint8_t svcsp_frame_app(uint8_t pad, uint16_t trig);   /* 앱용: trig bit0 = 기술키 */
 void    svcsp_set_engine(int on);   /* 원버튼 엔진 토글 (기본 꺼짐) */
 void    svcsp_set_basics(int on);   /* 약/강 4버튼 리맵 토글 (기본 켬) — 끄면 순정 2버튼 */
-void    svcsp_set_holdsync(int on); /* 강 발동 맞춤(기본 켬) — 2버튼 모드에서 즉발·홀드 강을 같은 프레임에 */
+void    svcsp_set_holdsync(int v);  /* 강 발동 당김 0=순정 1=보통(기본) 2=최대 — 2버튼 홀드 강의 발동 지연만 */
 void    svcsp_set_land(int on);     /* 착지 선입력 토글 (기본 끔) — 켜면 착지 직전 누른 기본기를 착지 순간 대신 낸다 */
 int     svcsp_engine_on(void);
 

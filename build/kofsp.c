@@ -471,9 +471,9 @@ static const RingCmd RINGS[SLOT_MAX] = {
    { R_421, 3, 0, NGP_B, 2 },   /* D   421K — 마지막 대각, 버튼만 */
    { R_SUP, 7, 1, NGP_A, 2 },   /* DF  초필 2141236P — 14칸, 32칸 안에 넉넉히 든다 */
    { R_236, 3, 1, NGP_B, 2 },   /* DB  236K */
-   /* AIR 공중: 주입하지 않는다. 링을 지우면 기술이 아예 안 나간다(act 8) —
-      공중 판정이 다른 경로를 타는 듯하고, 근거 없이 우기느니 원래 매크로로 둔다. */
-   { 0,     0, 0, 0,     0 },
+   /* AIR 공중: 트리거 시점에 꽂지 않는다 — **착지까지 미뤘다가** 지상과 똑같이 꽂는다.
+      떠 있을 때 꽂으면 낙하 14프레임 동안 링이 7칸 밀려 무의미해진다. */
+   { R_236, 3, 1, NGP_A, 2 },
 };
 static int kof_ring_on(void)
 {
@@ -494,6 +494,15 @@ static Step mac_dyn[2];
    (poke 는 매 프레임 덮는다). */
 static unsigned char ring_buf[8];
 static int ring_n, ring_hold, ring_rep;
+/* 공중에서 누른 트리거를 착지까지 들고 있는 카운터. 착지를 못 하면(피격 등) 그냥 만료된다. */
+#define KOFSP_AIR_PEND 90
+#define KOFSP_ACT_FALL 45      /* 착지 직후 남는 낙하 경직 */
+static int air_pend;
+/* 시험용: 착지 경직(act 45)이 끝나기를 기다리지 않고 땅에 닿자마자 꽂아 본다. */
+static int kof_air_pre(void)
+{ static int v=-1; if(v<0){const char*e=getenv("KOFSP_AIRPRE"); v=(e&&*e=='1');} return v; }
+static int kof_air_early(void)
+{ static int v=-1; if(v<0){const char*e=getenv("KOFSP_AIREARLY"); v=(e&&*e=='1');} return v; }
 
 
 /* 평시 act — 서있기·앞걷기·뒤걷기·웅크림·전환. 기술/피격 중이면 아니다. */
@@ -510,6 +519,36 @@ static int kof_forward_bit(void)
    /* 반전은 P1 의 것만 믿는다 — 「うごかない」 더미는 플래그가 갱신되지 않는다. */
    if (!CPUExRAM) return NGP_R;
    return (CPUExRAM[OFF_FACE] & KOFSP_FACE_BIT) ? NGP_L : NGP_R;
+}
+
+/* 링 주입 시작 — 트리거 엣지와 **착지 대기** 양쪽이 쓴다.
+   부르기 전에 kof_ring_on() · RINGS[slot].n · kof_act_neutral() 을 확인할 것. */
+static void kof_ring_start(int slot, int fwd, int back)
+{
+         const RingCmd *rc = &RINGS[slot];
+         unsigned char d[8];
+         int i, n = rc->n - (rc->lastin ? 1 : 0);
+         for (i = 0; i < n; i++)
+            d[i] = (unsigned char)((rc->dirs[i] & 0x3F)
+                                   | ((rc->dirs[i] & FWD) ? fwd : 0)
+                                   | ((rc->dirs[i] & BAK) ? back : 0));
+         memcpy(ring_buf, d, (size_t)n);
+         ring_n = n;
+         ring_rep = rc->rep;
+         ring_hold = 3;               /* 마지막 스텝 2프레임 + 읽히는 프레임 1 */
+         kof_ring_write(d, n, rc->rep);
+         {
+            unsigned char lastd = rc->dirs[rc->n - 1];
+            mac_dyn[0].n = 2;
+            mac_dyn[0].bits = (unsigned char)(rc->btn | (rc->lastin
+                  ? ((lastd & 0x3F) | ((lastd & FWD) ? fwd : 0) | ((lastd & BAK) ? back : 0))
+                  : 0));
+            mac_dyn[1].n = 0;
+            mac_dyn[1].bits = 0;
+         }
+         mac_tab  = mac_dyn;
+         mac_step = 0;
+         mac_left = mac_dyn[0].n;
 }
 
 uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
@@ -536,6 +575,24 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
 
    if (!kofsp_engine_on() || !kof_is_rom) { trig_prev = trig; return pad; }
 
+   /* 미뤄 둔 공중 트리거 — 땅에 닿고 평시가 되는 첫 프레임에 꽂는다. */
+   if (air_pend > 0 && mac_step < 0)
+   {
+      int on_ground = CPUExRAM && CPUExRAM[OFF_H1] == KOFSP_H_GROUND;
+      if (--air_pend <= 0) { /* 만료 */ }
+      /* ★ 「평시」를 기다리면 안 된다. 착지 뒤에도 낙하 경직(act 45)이 4프레임 남는데
+         게임은 그 동안에도 커맨드를 받는다 — 기다리면 딱 그만큼 손해다(실측 +22 → +18).
+         낙하 경직만 예외로 허용한다. 피격 경직 등 다른 act 는 그대로 막는다.
+         (낙하 중에 링을 미리 채워 두는 것도 해 봤는데 이득 0 — 착지+4 가 바닥이다.) */
+      else if (on_ground && (kof_act_neutral() || CPUExRAM[OFF_ACT] == KOFSP_ACT_FALL))
+      {
+         int f2 = kof_forward_bit();
+         kof_ring_start(SLOT_AIR, f2, (f2 == NGP_R) ? NGP_L : NGP_R);
+         mac_fwd = f2; mac_hold = 0; mac_trig = 0;
+         air_pend = 0;
+      }
+   }
+
    if (trig && !trig_prev && mac_step < 0)
    {  /* 엣지에서만 시작한다. 누르고 있는 동안 되풀이 발동하면 누출이 된다. */
       int fwd = kof_forward_bit();
@@ -545,6 +602,16 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
       int air = CPUExRAM && CPUExRAM[OFF_H1] != KOFSP_H_GROUND;
       int slot;
 
+      /* ★ 공중은 **미룬다.** 떠 있는 동안은 필살기가 안 나가고 착지해야 나가는데,
+         트리거 시점에 링을 꽂아 봐야 떨어지는 14프레임 동안 링이 7칸 밀려 버린다.
+         원래 매크로도 낙하 중에 다 돌아 버려서 **착지 뒤 8프레임을 더 기다렸다**(실측:
+         트리거→착지 14, 착지→발동 8). 그래서 착지하는 순간 지상과 똑같이 꽂는다. */
+      if (air && kof_ring_on() && RINGS[SLOT_AIR].n)
+      {
+         air_pend = KOFSP_AIR_PEND;
+         trig_prev = trig;
+         return pad;
+      }
       if (air)                     slot = SLOT_AIR;
       else if (held_d && held_f)   slot = SLOT_DF;
       else if (held_d && held_b)   slot = SLOT_DB;
@@ -578,32 +645,7 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
             있어 그 사이 기본기가 끝나므로 문제가 없었다. 평시가 아니면 매크로로 간다 —
             느리지만 나가기는 한다. */
          if (kof_ring_on() && RINGS[slot].n && kof_act_neutral())
-         {
-            const RingCmd *rc = &RINGS[slot];
-            unsigned char d[8];
-            int i, n = rc->n - (rc->lastin ? 1 : 0);
-            for (i = 0; i < n; i++)
-               d[i] = (unsigned char)((rc->dirs[i] & 0x3F)
-                                      | ((rc->dirs[i] & FWD) ? fwd : 0)
-                                      | ((rc->dirs[i] & BAK) ? back : 0));
-            memcpy(ring_buf, d, (size_t)n);
-            ring_n = n;
-            ring_rep = rc->rep;
-            ring_hold = 3;               /* 마지막 스텝 2프레임 + 읽히는 프레임 1 */
-            kof_ring_write(d, n, rc->rep);
-            {
-               unsigned char lastd = rc->dirs[rc->n - 1];
-               mac_dyn[0].n = 2;
-               mac_dyn[0].bits = (unsigned char)(rc->btn | (rc->lastin
-                     ? ((lastd & 0x3F) | ((lastd & FWD) ? fwd : 0) | ((lastd & BAK) ? back : 0))
-                     : 0));
-               mac_dyn[1].n = 0;
-               mac_dyn[1].bits = 0;
-            }
-            mac_tab  = mac_dyn;
-            mac_step = 0;
-            mac_left = mac_dyn[0].n;
-         }
+            kof_ring_start(slot, fwd, back);
          if (kof_dbg())
             fprintf(stderr, "[kofsp] 슬롯 %d 시작 (앞=%s%s)\n", slot,
                     fwd == NGP_R ? "R" : "L", air ? ", 공중" : "");

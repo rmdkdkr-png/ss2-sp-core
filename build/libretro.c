@@ -390,7 +390,7 @@ extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 extern void    svcsp_set_engine(int on);
 extern void    svcsp_set_basics(int on);
 extern void    svcsp_set_land(int on);
-extern void    svcsp_set_holdsync(int on);
+extern void    svcsp_set_holdsync(int v);
 extern int     svcsp_engine_on(void);
 extern void    svcsp_reset(void);
 extern void    svcsp_set_rom(const void *rom, unsigned len);
@@ -566,7 +566,7 @@ static void check_variables(void)
    var.key   = "ngp_svcsp_holdsync";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      svcsp_set_holdsync(strcmp(var.value, "off") != 0);
+      svcsp_set_holdsync(!strcmp(var.value, "off") ? 0 : !strcmp(var.value, "max") ? 2 : 1);
    else
       svcsp_set_holdsync(1);
 

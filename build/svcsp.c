@@ -117,13 +117,20 @@ static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴�
 static int svc_native_basics;                   /* 앱 모드 — 기본기는 순정 통과(탭 약/홀드 강) */
 static int svc_basics_split = 1;                /* 옵션 — 약/강 4버튼 리맵. 끄면 순정 2버튼 */
 void svcsp_set_basics(int on) { svc_basics_split = !!on; }
-/* 강 발동 맞춤(유저 2026-09-04 「즉발이랑 홀드를 맞췄으면, 그 중간 프레임으로」): 2버튼 모드에서
-   Y/X 즉발은 주입값 2(2프레임 늦게), A/B 홀드는 5프레임째 카운터 3 주입(4프레임 빠르게) → 둘 다 같은
-   프레임에 명중. 실측(쿄, 하네스 축 = 사용자 표기 축 +2): 즉발 20/19 → 22/21, 홀드 26/25 → 22/21
-   (사용자 표기로는 즉발 18·꾹 24 → 20). 대가: 약으로 남는 탭이
-   6f → 4f. 4버튼 모드(강약 구분 켬)는 홀드 강이 없으므로 무관. 롤백 지점: 태그 stake-3.75. */
-static int svc_hold_sync = 1;                   /* 옵션 ngp_svcsp_holdsync — 기본 mid(켬) */
-void svcsp_set_holdsync(int on) { svc_hold_sync = !!on; }
+/* ★ 강 발동 당김 (옵션 ngp_svcsp_holdsync). 2버튼 모드에서 A/B 를 꾹 눌러 내는 강이 **언제 시작하나**만 바꾼다.
+   ── 실측으로 갈라 놓은 세 축 (유저 2026-09-04 「쥐는 시간·약 모션·강 모션 따로일걸」 — 맞다) ──
+     ① 쥐는 시간(약/강 판정) : 게임 문턱. 카운터 0x0C76 이 2프레임에 1씩, 4가 되면 강 = 버튼 8프레임.
+                               확실히 약으로 남는 창은 6프레임(7프레임은 원래 위상 따라 갈리는 회색).
+     ② 약 기본기 모션        : 뗀 뒤 4프레임에 나간다. 이 옵션과 무관.
+     ③ 강 기본기 모션        : **캐릭터마다 다르다** — 실측 발동→명중 쿄 16 / c1 8 / c2~4 10 / c5 8.
+                               boost 를 어떻게 줘도 이 값은 안 변한다(전 캐릭 확인). 여기를 줄이는 건 FastCD.
+   이 옵션이 건드리는 건 ①과 ③ 사이의 **발동 지연**뿐이다 — 게임은 카운터가 문턱에 닿고도 2프레임 더 끌기
+   때문에 그 슬랙이 공짜로 있다. 실측(쿄, 하네스 축 = 표시 축 +2, 누름→명중):
+     off  발동 9~10 · 명중 25   |  mid 발동 7 · 명중 23   |  max 발동 5 · 명중 21
+   확실한 약 창: off 6 · mid 6(그대로!) · max 4. 그래서 기본은 mid — 약 창을 안 깎고 2프레임을 번다.
+   4버튼 모드(강약 구분 켬)는 홀드 강이 없으므로 무관. 롤백 지점: 태그 stake-3.75. */
+static int svc_hold_sync = 1;                   /* 0=off · 1=mid(기본) · 2=max */
+void svcsp_set_holdsync(int v) { svc_hold_sync = v < 0 ? 0 : (v > 2 ? 2 : v); }
 static int svc_land_on = 0;                     /* 옵션 — 착지 선입력. 기본 끔(유저 결정 2026-09-04) */
 void svcsp_set_land(int on) { svc_land_on = !!on; }
 /* 착지 선입력 상태 — 파일 스코프. 리뷰 지적(2026-09-04): 블록 안 static 이면 svcsp_reset(리셋·스테이트 로드)이
@@ -567,13 +574,14 @@ static int svc_inject_val(void)
    대가: 그 길이 이상의 탭은 약이 못 된다 — 약 창이 N 으로 준다. */
 static int svc_hold_boost(void)
 { static int v=-1; if(v<0){const char*e=getenv("SVCSP_HOLDBOOST"); v=e?atoi(e):-1;}
-  return v >= 0 ? v : (svc_hold_sync ? 5 : 0); }                 /* env 는 연구용 덮어쓰기 */
-/* 2버튼 모드 Y/X 즉발 주입값 — 맞춤이면 2(문턱 4 기준), 아니면 문턱−1. env SVCSP_INJECT 우선. */
+  if (v >= 0) return v;                                          /* env 는 연구용 덮어쓰기 */
+  return svc_hold_sync == 2 ? 5 : svc_hold_sync == 1 ? 7 : 0; }
+/* 2버튼 모드 Y/X 즉발 주입값 — **일부러 늦추지 않는다**. 전용 강 버튼이 빠른 게 그 버튼의 존재 이유고,
+   강약 구분을 끄면 화면에서 아예 빠지므로 물리 패드에만 남는다(앱 v3.77). env SVCSP_INJECT 만 연구용으로 받는다. */
 static int svc_inject_2btn(void)
 { int base = svc_inject_val();
   { static int ov = -1; if (ov < 0) { const char *e = getenv("SVCSP_INJECT"); ov = e ? atoi(e) : 0; }
     if (ov > 0) return ov < base ? ov : base; }
-  if (svc_hold_sync && base > 2) return 2;
   return base; }
 static int svc_ring_on(void)
 { static int v=-1; if(v<0){const char*e=getenv("SVCSP_RING"); v=e?atoi(e):1;} return v; }
