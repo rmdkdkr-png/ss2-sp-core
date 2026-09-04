@@ -35,6 +35,13 @@ void kofsp_set_ram(void *ram);    /* 램 포인터를 밖에서 주는 빌드용
    0 이 되는 날이 오프셋 사냥이 끝난 날이다. */
 int kofsp_unmeasured_count(void);
 
+/* ── 기술명 표시 (svcsp 와 같은 규약) ─────────────────────────────
+   버퍼를 **먼저** 채우고 그다음에 seq 를 올린다 — 프론트가 seq 엣지를 보고 버퍼를 읽으므로
+   순서가 뒤바뀌면 옛 문자열을 읽는다. UTF-8. 프론트는 복사하지 않으니 다음 발동 전까지만
+   유효하면 된다. */
+extern char kofsp_last_disp[64];  /* "↓↘→ + 펀치" — 표시용 */
+extern int  kofsp_disp_seq;       /* 새 발동마다 +1 */
+
 #ifdef __cplusplus
 }
 #endif
