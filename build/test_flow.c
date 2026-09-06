@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "ss2comm_lines.h"
-#include "ss2comm_duo.h"
 
 extern void        ss2comm_set_ram(void *p);
 extern void        ss2comm_set_enabled(int on);
@@ -13,7 +12,6 @@ extern void        ss2comm_set_speaker(int idx);
 extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
 extern int         ss2comm_speaker_count(void);
-extern void        ss2comm_set_duo(int on);
 extern const char *ss2comm_speaker_name(int);
 
 /* ss2sp 쪽 심볼 — 여기서는 안 쓴다 */
@@ -61,6 +59,7 @@ static void begin(const char *what)
     memset(ram, 0, sizeof(ram));
     ram[BLK1] = 8 * (2*2 + 0);      /* 하오마루 · 수라 */
     ram[BLK2] = 8 * (2*3 + 0);      /* 겐주로 · 수라 */
+    ram[0x17DF] = 3;                /* 상대 개체 번호 — 이제 정체는 이걸로 읽는다 */
     ram[SURV] = 0; ram[STG] = 0;
 }
 /* 낱말이 아니라 **그 이벤트의 대사표**와 대조한다.
@@ -224,6 +223,120 @@ int main(void)
         check("흐름 라인은 라운드당 한 번", n == 1);
     }
 
+    /* ── 연승 장부: 1라운드 패배(무한대전 꼴)에도 끊기고, 타임오버 승도 센다 ──
+       제보: 「연승 카운트가 끊기거나 줄지 않는 것 같다」. 원인은 정산이
+       「한 매치에서 KO 두 번」에만 걸려 있던 것 — 무한대전(1라운드제)과
+       타임오버는 그 길을 영영 안 지난다. */
+    {
+        extern int ss2comm_test_streak(void);
+        int s_pre, s0, s1, s2;
+        begin("streak");
+        s_pre = ss2comm_test_streak();
+        /* 매치 A: 2-0 KO 승 → 연승 +1 */
+        idle(200);
+        step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 128, 60, 8, 8); step(0xF1, 8, 128, 0, 8, 8);
+        idle(10);
+        step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 128, 50, 8, 8); step(0xF1, 8, 128, 0, 8, 8);
+        s0 = ss2comm_test_streak();
+        /* 매치 B: 상대 교체, 한 라운드만 KO 패 하고 결말 화면 없이 떠난다 */
+        ram[0x17DF] = 5; ram[BLK2] = 8 * (2*5 + 0);
+        idle(20);
+        step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 70, 128, 8, 8); step(0xF1, 8, 0, 128, 8, 8);
+        idle(200);
+        /* 매치 C 진입 — 경계 정산이 돌아 연승이 0으로 끊겨야 한다 */
+        ram[0x17DF] = 7; ram[BLK2] = 8 * (2*7 + 0);
+        step(0xF1, 8, 128, 128, 8, 8);
+        s1 = ss2comm_test_streak();
+        /* 매치 C: 두 판 모두 KO 없는 체력 우세(타임오버)로 이긴다 */
+        step(0xF1, 8, 128, 40, 8, 8);
+        idle(10);
+        step(0xF1, 8, 128, 128, 8, 8);       /* 라운드 재개 — 타임오버 1판이 여기서 정산 */
+        step(0xF1, 8, 128, 30, 8, 8);
+        step(0xF1, 2, 128, 30, 8, 8);        /* 결과 화면 — 2판째 타임오버 정산 */
+        s2 = ss2comm_test_streak();
+        check("연승: 1라운드 패배로 끊긴다", s0 == s_pre + 1 && s1 == 0);
+        check("연승: 타임오버 승도 센다", s2 == 1);
+        /* 매치 D·E: **같은 상대**가 75프레임 만에 다시 나오는 무한대전 리매치.
+           결판난 매치를 「라운드 재개」로 오판하면 정산 깃발이 안 풀려
+           연승이 그 자리에 얼어붙는다 (제보: 「계속 15연승이라고 나와」). */
+        {
+            int s3, i2;
+            for(i2 = 0; i2 < 2; i2++){
+                idle(20);
+                step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 128, 60, 8, 8); step(0xF1, 8, 128, 0, 8, 8);
+                idle(10);
+                step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 128, 50, 8, 8); step(0xF1, 8, 128, 0, 8, 8);
+            }
+            s3 = ss2comm_test_streak();
+            check("연승: 같은 상대 리매치도 새 매치로 센다", s3 == 3);
+        }
+    }
+
+    /* ── 무한대전 잔존 카운터: 스토리는 0x180B 를 안 지운다(실기 검증) —
+       잔존 15를 판마다 「15연승!」으로 읽었다(제보: 스토리에서도 계속 15연승).
+       이번 세션에서 값이 실제로 움직였을 때만 낭독한다. ── */
+    {
+        begin("stale surv");
+        dset(0xF1, 8, 128, 128);              /* 이전 시험의 드레인 상태를 청소 */
+        ram[SURV] = 15;                       /* 무한대전에서 남은 값 — 움직이지 않는다 */
+        idle(200);
+        step(0xF1, 8, 128, 128, 8, 8);
+        drain(400);
+        check("무한대전 잔존값: 낭독 안 한다", !sawEv(EV_SURV, 0));
+        /* 값이 움직이면(진짜 무한대전) 낭독한다 */
+        ram[SURV] = 16;                       /* 카운터가 움직였다 */
+        ram[0x17DF] = 5; ram[BLK2] = 8 * (2*5 + 0);
+        idle(600);                            /* 큐를 비우고 새 매치 진입 */
+        step(0xF1, 8, 128, 128, 8, 8);
+        drain(400);
+        check("무한대전 산 값: 낭독한다", sawEv(EV_SURV, 0));
+    }
+
+    /* ── 썰 화자 목소리(ANECV): 225칸 전부 차 있고, 전부 서로 다르다 ── */
+    {
+        int a2, b2, dup = 0, empty = 0;
+        for(a2 = 0; a2 < SS2COMM_SPK_N*15; a2++){
+            const char *x = ANECV[a2/15][a2%15];
+            if(!x){ empty++; continue; }
+            for(b2 = a2+1; b2 < SS2COMM_SPK_N*15; b2++){
+                const char *y = ANECV[b2/15][b2%15];
+                if(y && !strcmp(x,y)) dup++;
+            }
+        }
+        check("썰 화자 목소리 — 빈칸 없음", empty == 0);
+        check("썰 화자 목소리 — 복붙 없음", dup == 0);
+    }
+
+    /* ── 온오프 조합: 캐릭터챗과 심판을 따로 끈다 ── */
+    {
+        extern void ss2comm_set_chat(int);
+        extern void ss2comm_set_ref(int);
+        extern const char *ss2comm_test_ref_take(void);
+        const char *rl;
+        int refSeen, bandSeen;
+
+        /* 캐릭터챗 오프 — 심판 구령은 서고 밴드는 침묵 */
+        begin("chatOff"); ss2comm_set_chat(0);
+        idle(200); step(0xF1, 8, 128, 128, 8, 8);
+        refSeen = 0;
+        { int i2; for(i2=0;i2<200;i2++){ step(0xF1,8,128,120,8,8);
+            rl = ss2comm_test_ref_take(); if(rl && strstr(rl,"승부")) refSeen=1; } }
+        check("캐릭터챗 오프 — 밴드 침묵", nseen == 0);
+        check("캐릭터챗 오프 — 심판은 선다", refSeen == 1);
+        ss2comm_set_chat(1);
+
+        /* 심판 오프 — 구령 없음, 밴드는 산다 */
+        begin("refOff"); ss2comm_set_ref(0);
+        idle(200); step(0xF1, 8, 128, 128, 8, 8);
+        refSeen = 0;
+        { int i2; for(i2=0;i2<300;i2++){ step(0xF1,8,128,120,8,8);
+            rl = ss2comm_test_ref_take(); if(rl) refSeen=1; } }
+        bandSeen = nseen;
+        check("심판 오프 — 구령 없음", refSeen == 0);
+        check("심판 오프 — 캐릭터챗은 산다", bandSeen > 0);
+        ss2comm_set_ref(1);
+    }
+
     /* ── 열다섯 명이 서로 다른 말을 한다 (총평 기준) ── */
     {
         char lines[16][160];
@@ -247,41 +360,6 @@ int main(void)
         ss2comm_set_speaker(0);
     }
 
-    /* ── 짝꿍: 큰 장면에서 짝이 받아친다 ── */
-    {
-        int i2, got = 0, p;
-        ss2comm_set_speaker(0);              /* 하오마루 → 짝은 나코루루 */
-        p = 1;
-        begin("duo");
-        idle(200);
-        step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 120, 90, 8, 8); step(0xF1, 8, 120, 0, 8, 8);
-        dset(0xF1,8,120,0); drain(900);
-        for(i2 = 0; i2 < nseen; i2++){
-            int c, v;
-            for(c = 0; c < DC_N && !got; c++)
-                for(v = 0; v < DUOMAXV; v++)
-                    if(DUOLINE[p][c][v] && !strcmp(seen[i2], DUOLINE[p][c][v])){ got = 1; break; }
-        }
-        check("짝꿍: 큰 장면에서 받아친다", got);
-    }
-
-    /* ── 짝꿍 끔이면 조용하다 ── */
-    {
-        int i2, got = 0, p = 1;
-        ss2comm_set_duo(0);
-        begin("duooff");
-        idle(200);
-        step(0xF1, 8, 128, 128, 8, 8); step(0xF1, 8, 120, 90, 8, 8); step(0xF1, 8, 120, 0, 8, 8);
-        dset(0xF1,8,120,0); drain(900);
-        for(i2 = 0; i2 < nseen; i2++){
-            int c, v;
-            for(c = 0; c < DC_N && !got; c++)
-                for(v = 0; v < DUOMAXV; v++)
-                    if(DUOLINE[p][c][v] && !strcmp(seen[i2], DUOLINE[p][c][v])){ got = 1; break; }
-        }
-        check("짝꿍 끔이면 받는 말이 없다", !got);
-        ss2comm_set_duo(1);
-    }
 
     printf("\n==== %d passed / %d failed ====\n", pass, fail);
     return fail ? 1 : 0;

@@ -2147,13 +2147,11 @@ void ss2comm_overlay_bind(unsigned char *chat, unsigned char *spk, unsigned char
                           unsigned char *cap, unsigned char *sp){
   int n = 0;
   if(sp)   { ov_it[n].name="원버튼 필살기"; ov_it[n].v=sp; ov_it[n].max=1; ov_it[n].kind=0; n++; }
-  if(chat) { ov_it[n].name="캐릭터 해설"; ov_it[n].v=chat;  ov_it[n].max=1; ov_it[n].kind=0; n++; }
-  if(spk)  { ov_it[n].name="해설자";      ov_it[n].v=spk;   ov_it[n].max=SS2COMM_SPK_N-1; ov_it[n].kind=1; n++; }
-  if(ref)  { ov_it[n].name="심판 쿠로코"; ov_it[n].v=ref;   ov_it[n].max=1; ov_it[n].kind=0; n++; }
-  if(sides){ ov_it[n].name="기둥 아트";   ov_it[n].v=sides; ov_it[n].max=1; ov_it[n].kind=0; n++; }
-  if(sbg)  { ov_it[n].name="기둥 배경";   ov_it[n].v=sbg;   ov_it[n].max=7; ov_it[n].kind=2; n++; }
-  if(vib)  { ov_it[n].name="진동";        ov_it[n].v=vib;   ov_it[n].max=1; ov_it[n].kind=0; n++; }
-  if(cap)  { ov_it[n].name="장면 수집";   ov_it[n].v=cap;   ov_it[n].max=1; ov_it[n].kind=0; n++; }
+  /* ★ 해설·해설자·심판·기둥·기둥배경·진동·장면수집 **폐기** (유저 2026-09-07).
+     NULL 이면 안 붙으니 남겨 둬도 됐지만, **글자가 .so 에 남아 있으면 다음 사람이
+     「되나 보다」로 읽는다.** 오늘 죽은 줄 때문에 두 번 헛짚었다. 지운다.
+     인자는 그대로 둔다 — 부르는 쪽(libretro.c)을 안 건드리려는 것이고, 다들 0 을 넘긴다. */
+  (void)chat; (void)spk; (void)ref; (void)sides; (void)sbg; (void)vib; (void)cap;
   ov_n = n;
 }
 /* ── 오버레이 2페이지: SP 기술 배치 ──
