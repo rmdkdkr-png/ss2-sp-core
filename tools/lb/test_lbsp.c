@@ -25,8 +25,10 @@
 unsigned char CPUExRAM[16384];
 #define T_OFF_ACT   0x0370
 #define T_ACT_REST  4
+#define T_OFF_FACE  0x0386     /* 0 = 오른쪽 봄(앞=R) · 1 = 왼쪽 봄(앞=L) */
 
 static void ram_rest(void) { CPUExRAM[T_OFF_ACT] = T_ACT_REST; }
+static void ram_face(int left) { CPUExRAM[T_OFF_FACE] = (unsigned char)(left ? 1 : 0); }
 
 static int fails;
 
@@ -65,7 +67,7 @@ int main(void)
    int pad, y, x, l, r, n = 0, bad = 0;
    int engine;
 
-   ram_rest();
+   ram_rest(); ram_face(0);
    printf("lbsp 단위 시험 (M2 계약: 엔진 끔=순정 폴드 · 엔진 켬=R 은 트리거)\n");
 
    /* ── ① 롬 판별 진리표 ───────────────────────────────────── */
@@ -167,6 +169,41 @@ int main(void)
          lbsp_frame(0, (unsigned short)trigret);
       ck(lbsp_frame(0, (unsigned short)trigret) == 0,
          "트리거를 쥐고 있어도 두 번째가 저절로 안 나간다");
+      /* ★★ 반대편을 볼 때 — 앞이 R 이 아니라 **L** 이어야 한다.
+         반전을 못 박아 두면 여기서 딴 기술이 나간다. KOF 가 배포까지 낸 사고가
+         정확히 이 자리였다(한 라운드 두 번째 발동부터 좌우가 뒤집혔다). */
+      {
+         static const unsigned char WANT_L[] = {
+            0x02,0x02,0x02,0x02,              /* D     — 아래는 그대로 */
+            0x06,0x06,0x06,0x06,              /* D+L   — 앞이 L 로 뒤집힌다 */
+            0x04,0x04,0x04,0x04,              /* L */
+            0x10,0x10,0x10,0x10,0x10,0x10     /* A */
+         };
+         int j, m2 = 0;
+         lbsp_reset(); ram_rest(); ram_face(1);
+         for (j = 0; j < (int)(sizeof WANT_L); j++)
+         {
+            unsigned char g2 = lbsp_frame(0, (unsigned short)(j == 0 ? trigret : 0));
+            if (g2 != WANT_L[j])
+            {
+               if (m2 < 4)
+                  printf("  ★반대편 시간표 어긋남: f%d → %02X (기대 %02X)\n",
+                         j, g2, WANT_L[j]);
+               m2++;
+            }
+         }
+         ck(m2 == 0, "반대편(왼쪽 봄)에서 앞이 L 로 뒤집힌다");
+
+         /* ★ 매크로가 «도는 중»에 반전이 바뀌어도 시작할 때의 앞을 끝까지 쓴다.
+            안 그러면 커맨드가 중간에 꺾여 아무것도 안 나간다. */
+         lbsp_reset(); ram_rest(); ram_face(0);
+         lbsp_frame(0, (unsigned short)trigret);      /* 오른쪽 봄으로 시작 */
+         ram_face(1);                                  /* 도중에 뒤집힌다 */
+         lbsp_frame(0, 0); lbsp_frame(0, 0); lbsp_frame(0, 0);
+         ck(lbsp_frame(0, 0) == 0x0A, "도는 중에 반전이 바뀌어도 시작할 때의 앞을 쓴다");
+         ram_face(0);
+      }
+
       /* ★ 쉬는 중이 아니면 안 걸린다 — 이 시험이 없으면 조건이 사는지 모른다.
          (기술이 나가는 중에 또 꽂으면 커맨드가 이어 붙어 딴 게 나간다.) */
       lbsp_reset();

@@ -66,7 +66,19 @@ extern uint8_t CPUExRAM[16384];
    ⚠ **반전(좌우)이 제일 위험하다.** KOF 에서 0x0D4A 를 반전이라 잘못 잡았는데
      그건 「필살기를 한 번 쓰면 서고 안 내려오는 플래그」였고, 그 탓에 배포된 엔진이
      한 라운드 두 번째 발동부터 커맨드를 좌우로 뒤집었다. 이것을 못 확정하면 접는다. */
-#define OFF_FACE       LBSP_UNMEASURED   /* 좌우 반전 */
+/* ★ 승격됨 — 좌우 반전. **0 = 오른쪽 봄(앞=R) · 1 = 왼쪽 봄(앞=L).**
+   P2 는 +0x40 (P2 act 는 0x03B0, 쉼 4 로 확인). 승격 근거:
+     · 독립 시나리오 둘 — ⓐ 뛰어넘어 자리를 바꾼다 ⓑ 넘어간 뒤 걷는 방향이 뒤집힌다
+       (반전0: R=앞걷기20·L=뒤걷기24 / 반전1: R=24·L=20 — 네 칸 진리표가 딱 맞는다)
+     · 위상 2종 완전 일치 · 가만히 있으면 안 바뀜(대조군)
+     · 교차 증인 — P2(+0x40)가 «늘 반대 값»이다
+   ★ **되돌아온다**: 0 → 1 → 0. 되넘어오면 0 으로 복귀한다.
+     KOF 가 여기서 당했다 — 0x0D4A 는 한 번 서면 «안 내려오는» 플래그였는데
+     스냅숏 두 장만 보고 반전이라 불렀고, 배포된 엔진이 한 라운드
+     **두 번째 발동부터 커맨드를 좌우로 뒤집었다.** 그래서 복귀를 반드시 본다. */
+#define OFF_FACE       0x0386
+#define OFF_FACE2      (OFF_FACE + 0x40)  /* 교차 증인용 — 판정에는 안 쓴다 */
+#define LBSP_FACE_LEFT 1
 #define OFF_H1         LBSP_UNMEASURED   /* 지상/공중 */
 #define OFF_HP2        LBSP_UNMEASURED   /* 상대 체력 — 교차 증인 */
 #define OFF_COMBO      LBSP_UNMEASURED   /* 콤보 수 — 게임이 화면에도 띄운다 */
@@ -74,7 +86,7 @@ extern uint8_t CPUExRAM[16384];
 #define LBSP_CMD_WIN   LBSP_UNMEASURED   /* 커맨드 창(프레임) */
 
 static const int lb_consts[] = {
-   OFF_FACE, OFF_H1, OFF_HP2, OFF_COMBO, LBSP_TH_STRONG, LBSP_CMD_WIN
+   OFF_H1, OFF_HP2, OFF_COMBO, LBSP_TH_STRONG, LBSP_CMD_WIN
 };
 
 int lbsp_unmeasured_count(void)
@@ -103,19 +115,20 @@ int lbsp_unmeasured_count(void)
 /* ── 매크로 ──────────────────────────────────────────────────────
    M2 는 **하나**만 있다: 236+A (카에데 질풍). act 112 가 나오면 성공이다.
 
-   ⚠ **앞 = NGP_R 로 못 박았다.** 반전(좌우) 주소가 아직 미측정이라
-     「P1 이 왼쪽에서 오른쪽을 보는」 트레이닝 무대에서만 옳다.
-     M3 로 가기 전에 반드시 반전을 재라 — KOF 는 반전을 잘못 잡아
-     **한 라운드 두 번째 발동부터 커맨드가 좌우로 뒤집히는** 사고를 배포까지 냈다.
-
    ⚠ 프레임 수는 lb_moves.py 의 실측 그대로다(방향 4프레임씩, 버튼 6프레임).
-     링이 2프레임에 한 칸이니 4프레임이면 한 방향이 두 칸을 채운다. */
+     링이 2프레임에 한 칸이니 4프레임이면 한 방향이 두 칸을 채운다.
+
+   ★ 방향은 **`F`(앞)·`B`(뒤)로 적고** 나갈 때 반전을 보고 실제 비트로 바꾼다.
+     못 박아 두면 반대편에서 딴 기술이 나간다. */
+#define F 0x40                  /* 앞 — 실제 비트는 lb_fwd() 가 정한다 */
+#define B 0x80                  /* 뒤 */
+
 typedef struct { int frames; unsigned char pad; } LbMacStep;
 
 static const LbMacStep MAC_236A[] = {
    { 4, NGP_D },
-   { 4, (unsigned char)(NGP_D | NGP_R) },
-   { 4, NGP_R },
+   { 4, (unsigned char)(NGP_D | F) },
+   { 4, F },
    { 6, NGP_A }                 /* 버튼은 방향을 놓고 나서 — 실측이 그랬다 */
 };
 #define MAC_236A_N ((int)(sizeof MAC_236A / sizeof MAC_236A[0]))
@@ -124,6 +137,7 @@ static const LbMacStep MAC_236A[] = {
 static int  lb_engine_on;      /* 기본 꺼짐 */
 static int  lb_is_rom;
 static int  mac_step = -1;     /* -1 = 안 돎 */
+static uint8_t mac_fwd;        /* ★ 시작할 때의 «앞». 도는 중엔 안 바꾼다 */
 static int  mac_left;          /* 이번 칸에 남은 프레임 */
 static int  trig_prev;
 
@@ -135,7 +149,7 @@ int  lbsp_engine_on(void)    { return lb_engine_on; }
 
 void lbsp_reset(void)
 {
-   mac_step = -1; mac_left = 0; trig_prev = 0;
+   mac_step = -1; mac_left = 0; trig_prev = 0; mac_fwd = NGP_R;
    lbsp_last_disp[0] = 0;
    /* seq 는 **안 되돌린다** — 프론트가 엣지로 보므로 되돌리면 옛 값과 같아져 한 번 놓친다. */
 }
@@ -153,6 +167,26 @@ void lbsp_set_rom(const void *rom, unsigned len)
 }
 
 int lbsp_rom_ok(void) { return lb_is_rom; }
+
+/* 지금 «앞»이 어느 비트인가. 램을 못 읽으면 오른쪽 봄으로 둔다(트레이닝 기본). */
+static uint8_t lb_fwd(void)
+{
+#ifdef SS2SP_RAM_POINTER
+   if (!CPUExRAM) return NGP_R;
+#endif
+   return (CPUExRAM[OFF_FACE] == LBSP_FACE_LEFT) ? NGP_L : NGP_R;
+}
+
+/* 대본의 F/B 를 실제 방향 비트로 바꾼다. 한 프레임 안에서 값을 고정해 쓴다 —
+   매크로가 도는 중에 반전이 바뀌어도 «시작할 때의 앞»을 끝까지 쓰기 위해서다. */
+static uint8_t lb_bits(uint8_t p, uint8_t fwd)
+{
+   uint8_t back = (fwd == NGP_R) ? NGP_L : NGP_R;
+   uint8_t o = (uint8_t)(p & (NGP_U | NGP_D | NGP_A | NGP_B));
+   if (p & F) o |= fwd;
+   if (p & B) o |= back;
+   return o;
+}
 
 /* 기술명 — 프론트가 seq 엣지를 보고 버퍼를 읽는다. **버퍼 먼저, seq 나중.** */
 static void lb_disp(const char *t)
@@ -203,7 +237,7 @@ uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
       섞으면 사람이 잡고 있던 방향이 커맨드에 끼어들어 딴 기술이 나간다. */
    if (mac_step >= 0)
    {
-      pad = MAC_236A[mac_step].pad;
+      pad = lb_bits(MAC_236A[mac_step].pad, mac_fwd);
       if (--mac_left <= 0)
       {
          mac_step++;
@@ -219,7 +253,8 @@ uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
    {
       mac_step = 0;
       mac_left = MAC_236A[0].frames;
-      pad = MAC_236A[0].pad;
+      mac_fwd = lb_fwd();
+      pad = lb_bits(MAC_236A[0].pad, mac_fwd);
       if (--mac_left <= 0) { mac_step = 1; mac_left = MAC_236A[1].frames; }
       lb_disp("\u2193\u2198\u2192 + \ubca0\uae30");   /* ↓↘→ + 베기 */
       trig_prev = trig;
