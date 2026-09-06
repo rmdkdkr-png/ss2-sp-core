@@ -648,6 +648,13 @@ static void check_variables(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       kofsp_set_engine(strcmp(var.value, "disabled") != 0);
 
+   /* 월화 원버튼 엔진 — **기본 꺼짐**. 켜면 R 이 기술키가 된다.
+      ⚠ 조회에 실패하면 «아무 일 없어야» 한다 — 값이 없으면 그대로 꺼진 채다. */
+   var.key   = "ngp_lbsp_engine";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      lbsp_set_engine(strcmp(var.value, "disabled") != 0);
+
    var.key   = "ngp_ss2sp_comm_draw";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)

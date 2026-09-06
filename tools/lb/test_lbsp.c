@@ -19,8 +19,14 @@
 #define NGP_A (1 << 4)
 #define NGP_B (1 << 5)
 
-/* lbsp.c 가 extern 으로 쓰는 램. 시험에서는 우리가 준다. */
+/* lbsp.c 가 extern 으로 쓰는 램. 시험에서는 우리가 준다.
+   ⚠ 엔진은 act(0x0370)가 «쉼(4)»일 때만 매크로를 건다. 램을 0 으로 둔 채
+     「매크로가 안 나간다」고 읽으면 **없는 병을 고치러 간다.** 시험대가 상태를 준다. */
 unsigned char CPUExRAM[16384];
+#define T_OFF_ACT   0x0370
+#define T_ACT_REST  4
+
+static void ram_rest(void) { CPUExRAM[T_OFF_ACT] = T_ACT_REST; }
 
 static int fails;
 
@@ -29,14 +35,19 @@ static void ck(int cond, const char *what)
    if (!cond) { printf("  ★실패: %s\n", what); fails++; }
 }
 
-/* 기준 폴드 — **M1 계약**: 순정 롬 폴드와 완전히 같다.
-   ⚠ M2 에서 R 이 SP 트리거가 되면 이 계약이 «의도적으로» 깨진다.
-     그때 이 시험을 지우지 말고 **새 계약으로 고쳐라** (kofsp 가 그렇게 했다). */
-static unsigned char ref_fold(unsigned char pad, unsigned ret)
+/* 기준 폴드 — **M2 계약**. M1 때는 엔진 상태와 무관하게 순정과 같았는데,
+   M2 에서 R 이 SP 트리거가 되며 «엔진 켤 때만» 달라진다. 시험을 지우지 않고 고쳤다.
+
+   ★ 엔진 끔 = **순정 롬 폴드와 글자 그대로 동일**(R 도 접는다).
+     이건 kofsp 와 일부러 다르다(kofsp 는 R 을 무조건 뺀다). 이래야 「엔진 끔」이
+     **진짜 대조군**이 된다 — 대조군이 조금이라도 다르면 그건 대조군이 아니다.
+   ★ 엔진 켬 = R 은 트리거라 안 접힌다. L 은 그대로 A+B. */
+static unsigned char ref_fold(unsigned char pad, unsigned ret, int engine)
 {
    if (ret & (1u << RP_Y)) pad |= NGP_A;
    if (ret & (1u << RP_X)) pad |= NGP_B;
-   if ((ret & (1u << RP_L)) || (ret & (1u << RP_R)))
+   if (ret & (1u << RP_L)) pad |= (unsigned char)(NGP_A | NGP_B);
+   if (!engine && (ret & (1u << RP_R)))
       pad |= (unsigned char)(NGP_A | NGP_B);
    return pad;
 }
@@ -54,7 +65,8 @@ int main(void)
    int pad, y, x, l, r, n = 0, bad = 0;
    int engine;
 
-   printf("lbsp 단위 시험 (M1 계약: 순정 폴드와 동일)\n");
+   ram_rest();
+   printf("lbsp 단위 시험 (M2 계약: 엔진 끔=순정 폴드 · 엔진 켬=R 은 트리거)\n");
 
    /* ── ① 롬 판별 진리표 ───────────────────────────────────── */
    mkrom(rom, "LASTBLADE124");
@@ -98,8 +110,13 @@ int main(void)
                   {
                      unsigned ret = (unsigned)((y << RP_Y) | (x << RP_X)
                                              | (l << RP_L) | (r << RP_R));
-                     unsigned char got = lbsp_frame((unsigned char)pad, (unsigned short)ret);
-                     unsigned char want = ref_fold((unsigned char)pad, ret);
+                     unsigned char got, want;
+                     /* ★ 엔진 켬 + R 누름 = 트리거다. 매크로가 돌기 시작해
+                        폴드와 다른 값이 나오는 것이 **정상**이라 여기서 빼고
+                        아래 ③에서 따로 본다. 매번 리셋해 상태를 안 끌고 간다. */
+                     if (engine && r) { lbsp_reset(); continue; }
+                     got = lbsp_frame((unsigned char)pad, (unsigned short)ret);
+                     want = ref_fold((unsigned char)pad, ret, engine);
                      n++;
                      if (got != want)
                      {
@@ -109,11 +126,60 @@ int main(void)
                         bad++;
                      }
                   }
+      lbsp_reset();
    }
    ck(bad == 0, "폴드 전수 일치");
    printf("  폴드 %d조합 검사 · 어긋남 %d\n", n, bad);
 
-   /* ── ③ 안 잰 상수가 몇 개인지 스스로 말하는가 ────────────── */
+   /* ── ③ 매크로 시간표 — 트리거 한 번에 236+A 가 «그대로» 나오는가 ──
+      에뮬은 「기술이 나갔나」만 본다. 여기서는 **어느 프레임에 어떤 비트가
+      나가는지**를 본다 — 에뮬로는 못 가르는 것이다. */
+   {
+      static const unsigned char WANT[] = {
+         0x02,0x02,0x02,0x02,              /* D    4프레임 */
+         0x0A,0x0A,0x0A,0x0A,              /* D+R  4프레임 */
+         0x08,0x08,0x08,0x08,              /* R    4프레임 */
+         0x10,0x10,0x10,0x10,0x10,0x10     /* A    6프레임 */
+      };
+      int i, mis = 0;
+      unsigned trigret = (unsigned)(1u << RP_R);
+      lbsp_set_engine(1);
+      lbsp_reset();
+      ram_rest();
+      for (i = 0; i < (int)(sizeof WANT); i++)
+      {
+         /* 첫 프레임만 트리거를 누르고 그 뒤는 뗀다 — 엣지 발동을 확인한다. */
+         unsigned char got = lbsp_frame(0, (unsigned short)(i == 0 ? trigret : 0));
+         if (got != WANT[i])
+         {
+            if (mis < 4)
+               printf("  ★시간표 어긋남: f%d → %02X (기대 %02X)\n", i, got, WANT[i]);
+            mis++;
+         }
+      }
+      ck(mis == 0, "매크로 18프레임 시간표 일치");
+      /* 끝난 뒤에는 사람 입력이 그대로 통해야 한다 */
+      ck(lbsp_frame(0x01, 0) == 0x01, "매크로가 끝나면 사람 입력이 그대로 통한다");
+      /* ★ 누출 — 트리거를 «계속 쥐고» 있어도 되풀이 발동하면 안 된다 */
+      lbsp_reset();
+      ram_rest();
+      for (i = 0; i < (int)(sizeof WANT); i++)
+         lbsp_frame(0, (unsigned short)trigret);
+      ck(lbsp_frame(0, (unsigned short)trigret) == 0,
+         "트리거를 쥐고 있어도 두 번째가 저절로 안 나간다");
+      /* ★ 쉬는 중이 아니면 안 걸린다 — 이 시험이 없으면 조건이 사는지 모른다.
+         (기술이 나가는 중에 또 꽂으면 커맨드가 이어 붙어 딴 게 나간다.) */
+      lbsp_reset();
+      CPUExRAM[T_OFF_ACT] = 96;      /* 서서 베기 중 */
+      ck(lbsp_frame(0, (unsigned short)trigret) == 0,
+         "기술이 나가는 중에는 트리거가 안 먹는다");
+      ram_rest();
+
+      lbsp_reset();
+      lbsp_set_engine(0);
+   }
+
+   /* ── ④ 안 잰 상수가 몇 개인지 스스로 말하는가 ────────────── */
    printf("  미측정 상수 %d개 (0 이 되는 날이 오프셋 사냥이 끝난 날이다)\n",
           lbsp_unmeasured_count());
    ck(lbsp_unmeasured_count() > 0, "M1 이니 미측정이 남아 있는 것이 정상");

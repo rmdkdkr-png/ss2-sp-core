@@ -139,6 +139,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "above",
    },
    {
+      "ngp_lbsp_engine",
+      "월화의 검사 모던 조작 (원버튼 필살기)",
+      NULL,
+      "월화의 검사(The Last Blade) 전용. 켜면 R가 기술키가 됩니다. 끄면 R=A+B (순정과 같음). ※ 아직 만드는 중입니다 - 지금은 카에데의 236+베기 하나만 나갑니다.",
+      NULL,
+      "system",
+      {
+         { "enabled",  "켬" },
+         { "disabled", "끔" },
+         { NULL, NULL },
+      },
+      "disabled"
+   },
+   {
       "ngp_kofsp_engine",
       "KOF R-2 모던 조작 (원버튼 필살기)",
       NULL,
