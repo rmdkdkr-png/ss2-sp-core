@@ -413,6 +413,20 @@ static bool    svcsp_toast_on = true;
 extern char    kofsp_last_disp[64];   /* KOF 기술 표기(UTF-8) — 이식소 6c049fb */
 extern int     kofsp_disp_seq;
 static bool    kofsp_toast_on = true; /* KOF 기술명 표시 — 옵션 ngp_kofsp_toast */
+
+/* ── 월화의 검사(The Last Blade) 원버튼 엔진 — src/lbsp.c ───────────
+   ★ 지금은 M1(배관만)이다. lbsp_frame 은 순정 롬 폴드와 **글자 그대로 똑같이**
+     접으므로(Y=A·X=B·L·R=A+B) 이 가지가 생겨도 월화의 출력은 한 비트도 안 바뀐다.
+     M2 에서 R 이 트리거가 되며 폴드에서 빠질 때 처음 달라진다. */
+extern uint8_t lbsp_frame(uint8_t pad, uint16_t ret);
+extern void    lbsp_set_engine(int on);
+extern int     lbsp_engine_on(void);
+extern void    lbsp_reset(void);
+extern void    lbsp_set_rom(const void *rom, unsigned len);
+extern int     lbsp_rom_ok(void);
+extern char    lbsp_last_disp[64];
+extern int     lbsp_disp_seq;
+static bool    lbsp_toast_on = true;  /* 월화 기술명 표시 — 옵션 ngp_lbsp_toast */
 static unsigned char ov_ktoast = 1, ov_ktoast_p = 1;
 static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
 static unsigned char ov_band = 1, ov_band_p = 1;     /* 기술명 띠(화면 밖) 온오프 */
@@ -730,10 +744,12 @@ void retro_reset(void)
    ss2sp_reset();
    svcsp_reset();
    kofsp_reset();
+   lbsp_reset();
    ss2comm_set_ram(&CPUExRAM[0]);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
    kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
+   lbsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2_overlay_rebind();
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
@@ -798,6 +814,7 @@ bool retro_load_game(const struct retro_game_info *info)
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
+   lbsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2_overlay_rebind();
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
@@ -1011,6 +1028,23 @@ static void update_input(void)
                kdisp_seen = kofsp_disp_seq;
                if (kofsp_toast_on && kofsp_last_disp[0])
                   ss2comm_toast(kofsp_last_disp, 80);
+            }
+         }
+      }
+      else if (lbsp_rom_ok())
+         /* 월화의 검사 — 원버튼 엔진. ★ M1 에서는 lbsp_frame 이 아래 순정 폴드와
+            **글자 그대로 똑같이** 접는다. 그래서 이 가지가 생겨도 월화의 출력은
+            한 비트도 안 바뀐다 — 그것이 M1 의 통과 조건이다.
+            ⚠ 순정 폴드보다 **앞**에 있어야 한다. 뒤에 두면 영영 안 불린다. */
+      {
+         input_buf = lbsp_frame(input_buf, (uint16_t)ret);
+         {                                        /* 기술 표기 토스트 — 먼저 버퍼, 그다음 seq */
+            static int ldisp_seen;
+            if (lbsp_disp_seq != ldisp_seen)
+            {
+               ldisp_seen = lbsp_disp_seq;
+               if (lbsp_toast_on && lbsp_last_disp[0])
+                  ss2comm_toast(lbsp_last_disp, 80);
             }
          }
       }
@@ -1298,6 +1332,7 @@ bool retro_unserialize(const void *data, size_t size)
    ss2sp_reset();
    svcsp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
    kofsp_reset();
+   lbsp_reset();
    StateMem st;
 
    st.data           = (uint8_t*)data;

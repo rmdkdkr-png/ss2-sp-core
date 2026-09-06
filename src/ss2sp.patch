@@ -1,8 +1,8 @@
 diff --git a/Makefile.common b/Makefile.common
-index b61e812..87fad1b 100644
+index b61e812..a6f9fe6 100644
 --- a/Makefile.common
 +++ b/Makefile.common
-@@ -82,7 +82,11 @@ SOURCES_CXX += \
+@@ -82,7 +82,12 @@ SOURCES_CXX += \
  
  SOURCES_C   += \
  	$(MEDNAFEN_DIR)/state.c \
@@ -11,12 +11,13 @@ index b61e812..87fad1b 100644
 +	$(CORE_DIR)/ss2sp.c \
 +	$(CORE_DIR)/svcsp.c \
 +	$(CORE_DIR)/kofsp.c \
++	$(CORE_DIR)/lbsp.c \
 +	$(CORE_DIR)/ss2comm.c
  
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..2d8e3bd 100644
+index ef01e22..b25764b 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -33,7 +34,7 @@ index ef01e22..2d8e3bd 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,125 @@ static void check_color_depth(void)
+@@ -377,6 +379,177 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -47,6 +48,8 @@ index ef01e22..2d8e3bd 100644
 +extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 +extern void    svcsp_set_engine(int on);
 +extern void    svcsp_set_basics(int on);
++extern void    svcsp_set_land(int on);
++extern void    svcsp_set_holdsync(int v);
 +extern int     svcsp_engine_on(void);
 +extern void    svcsp_reset(void);
 +extern void    svcsp_set_rom(const void *rom, unsigned len);
@@ -66,6 +69,24 @@ index ef01e22..2d8e3bd 100644
 +extern void    kofsp_set_rom(const void *rom, unsigned len);
 +extern int     kofsp_rom_ok(void);
 +static bool    svcsp_toast_on = true;
++extern char    kofsp_last_disp[64];   /* KOF 기술 표기(UTF-8) — 이식소 6c049fb */
++extern int     kofsp_disp_seq;
++static bool    kofsp_toast_on = true; /* KOF 기술명 표시 — 옵션 ngp_kofsp_toast */
++
++/* ── 월화의 검사(The Last Blade) 원버튼 엔진 — src/lbsp.c ───────────
++   ★ 지금은 M1(배관만)이다. lbsp_frame 은 순정 롬 폴드와 **글자 그대로 똑같이**
++     접으므로(Y=A·X=B·L·R=A+B) 이 가지가 생겨도 월화의 출력은 한 비트도 안 바뀐다.
++     M2 에서 R 이 트리거가 되며 폴드에서 빠질 때 처음 달라진다. */
++extern uint8_t lbsp_frame(uint8_t pad, uint16_t ret);
++extern void    lbsp_set_engine(int on);
++extern int     lbsp_engine_on(void);
++extern void    lbsp_reset(void);
++extern void    lbsp_set_rom(const void *rom, unsigned len);
++extern int     lbsp_rom_ok(void);
++extern char    lbsp_last_disp[64];
++extern int     lbsp_disp_seq;
++static bool    lbsp_toast_on = true;  /* 월화 기술명 표시 — 옵션 ngp_lbsp_toast */
++static unsigned char ov_ktoast = 1, ov_ktoast_p = 1;
 +static unsigned char ov_toast = 1, ov_toast_p = 1;   /* 오버레이의 기술명 표시 토글 */
 +static unsigned char ov_band = 1, ov_band_p = 1;     /* 기술명 띠(화면 밖) 온오프 */
 +extern const char *ss2sp_last_name;
@@ -131,6 +152,36 @@ index ef01e22..2d8e3bd 100644
 +
 +static char svc_slots_file[560];   /* <system>/ngpsvc_slots.bin — 비면 저장 안 함 */
 +
++/* ★ 게임별 오버레이 항목 (유저 2026-09-04 「게임별 오버레이메뉴 … 손 좀 봐」).
++   전에는 SvC 가 아니면 **무조건 SS2 항목**을 띄웠다 — KOF R-2·메탈슬러그·월화에서 해설·쿠로코·기둥이
++   떠 있고 아무 일도 안 했다. 게다가 「원버튼 필살기」 칸이 늘 ss2sp_enable 로 가서 KOF 엔진은 못 켰다.
++   순정 롬은 **항목 0** — ss2comm_overlay_toggle 이 그때 아예 안 열어 준다(빈 창이 입력을 먹던 것도 같이 막힌다). */
++static void ss2_overlay_rebind(void)
++{
++   ss2comm_overlay_spmode(svcsp_rom_ok());
++   if (svcsp_rom_ok())
++   {  /* SvC — 원버튼 + 기술명 표시/띠 */
++      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
++      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
++      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
++      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
++   }
++   else if (ss2comm_rom_is_ss2())
++   {  /* SS2 — 해설 일습 + 간이입력 */
++      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
++      ov_sp = ov_sp_p = ss2sp_enable ? 1 : 0;
++   }
++   else if (kofsp_rom_ok())
++   {  /* KOF R-2 — 원버튼 + 기술명 표시. 해설·기둥은 SS2 것이라 안 띄운다 */
++      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
++      ss2comm_overlay_bind_extra("기술명 표시", &ov_ktoast);
++      ov_sp = ov_sp_p = kofsp_engine_on() ? 1 : 0;
++      ov_ktoast = ov_ktoast_p = kofsp_toast_on ? 1 : 0;
++   }
++   else
++      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, 0);   /* 순정 롬 — 띄울 것이 없다 */
++}
++
 +static void ss2_overlay_apply(void)
 +{
 +   if (ov_spk   != ov_spk_p)   { ss2comm_set_speaker(ov_spk);  ov_spk_p   = ov_spk; }
@@ -138,11 +189,13 @@ index ef01e22..2d8e3bd 100644
 +   if (ov_ref   != ov_ref_p)   { ss2comm_set_ref(ov_ref);      ov_ref_p   = ov_ref; }
 +   if (ov_sp    != ov_sp_p)
 +   {
-+      if (svcsp_rom_ok()) svcsp_set_engine(ov_sp != 0);   /* SvC: 원버튼 엔진만 토글 */
-+      else                ss2sp_enable = ov_sp != 0;
++      if      (svcsp_rom_ok())      svcsp_set_engine(ov_sp != 0);   /* SvC */
++      else if (kofsp_rom_ok())      kofsp_set_engine(ov_sp != 0);   /* KOF R-2 — 전에는 여기로 못 왔다 */
++      else                          ss2sp_enable = ov_sp != 0;      /* SS2 간이입력 */
 +      ov_sp_p = ov_sp;
 +   }
 +   if (ov_toast != ov_toast_p) { svcsp_toast_on = ov_toast != 0; ov_toast_p = ov_toast; }
++   if (ov_ktoast != ov_ktoast_p) { kofsp_toast_on = ov_ktoast != 0; ov_ktoast_p = ov_ktoast; }
 +   if (ov_band  != ov_band_p)
 +   {  /* 띠는 화면 세로를 바꾼다 — 지오메트리를 다시 알려야 프론트가 안 깨진다 */
 +      if (!ss2comm_rom_is_ss2()) { ss2comm_sp_band(ov_band); ss2_set_geometry(); }
@@ -159,7 +212,7 @@ index ef01e22..2d8e3bd 100644
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +513,116 @@ static void check_variables(void)
+@@ -392,6 +565,138 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -209,6 +262,28 @@ index ef01e22..2d8e3bd 100644
 +   var.value = NULL;
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 +      svcsp_set_basics(strcmp(var.value, "disabled") != 0);   /* 끄면 순정 2버튼 */
++
++   /* 강 발동 맞춤 — 기본 켬(mid). 값 "off" 일 때만 순정(즉발 18·홀드 24). */
++   var.key   = "ngp_svcsp_holdsync";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      svcsp_set_holdsync(!strcmp(var.value, "off") ? 0 : !strcmp(var.value, "max") ? 2 : 1);
++   else
++      svcsp_set_holdsync(1);
++
++   /* 착지 선입력 — **기본 꺼짐**. 조회에 실패해도 꺼진 채여야 한다(kofsp 와 같은 성질). */
++   var.key   = "ngp_kofsp_toast";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      kofsp_toast_on = strcmp(var.value, "disabled") ? true : false;
++   ov_ktoast = ov_ktoast_p = kofsp_toast_on ? 1 : 0;
++
++   var.key   = "ngp_svcsp_land";
++   var.value = NULL;
++   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
++      svcsp_set_land(strcmp(var.value, "enabled") == 0);
++   else
++      svcsp_set_land(0);
 +
 +   var.key   = "ngp_svcsp_toast";
 +   var.value = NULL;
@@ -276,27 +351,20 @@ index ef01e22..2d8e3bd 100644
  }
  
  void retro_init(void)
-@@ -436,6 +667,30 @@ void retro_init(void)
+@@ -436,6 +741,23 @@ void retro_init(void)
  
  void retro_reset(void)
  {
 +   ss2sp_reset();
 +   svcsp_reset();
 +   kofsp_reset();
++   lbsp_reset();
 +   ss2comm_set_ram(&CPUExRAM[0]);
 +   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
 +   kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
-+   ss2comm_overlay_spmode(svcsp_rom_ok());
-+   if (svcsp_rom_ok())
-+   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
-+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
-+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-+      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
-+      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
-+   }
-+   else
-+      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
++   lbsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
++   ss2_overlay_rebind();
 +   if (svcsp_rom_ok())
 +   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
 +      static char ver_toast[48];
@@ -307,7 +375,7 @@ index ef01e22..2d8e3bd 100644
     neopop_reset();
  }
  
-@@ -448,6 +703,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +770,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -315,7 +383,7 @@ index ef01e22..2d8e3bd 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +714,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +781,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -329,7 +397,7 @@ index ef01e22..2d8e3bd 100644
  
        { 0 },
     };
-@@ -479,6 +742,46 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +809,38 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -338,16 +406,8 @@ index ef01e22..2d8e3bd 100644
 +   ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
-+   ss2comm_overlay_spmode(svcsp_rom_ok());
-+   if (svcsp_rom_ok())
-+   {  /* SvC — 해설·심판·기둥은 SS2 전용이라 감춘다 */
-+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
-+      ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-+      ss2comm_overlay_bind_extra("기술명 띠", &ov_band);
-+      ov_sp = ov_sp_p = svcsp_engine_on() ? 1 : 0;
-+   }
-+   else
-+      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
++   lbsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
++   ss2_overlay_rebind();
 +   if (svcsp_rom_ok())
 +   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
 +      static char ver_toast[48];
@@ -376,7 +436,7 @@ index ef01e22..2d8e3bd 100644
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +859,123 @@ static void update_input(void)
+@@ -556,6 +918,151 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -481,7 +541,35 @@ index ef01e22..2d8e3bd 100644
 +            **똑같이** 접기만 한다(Y=A·X=B·L·R=A+B). 그래서 이 가지가 생겨도
 +            KOF 의 출력은 한 비트도 안 바뀐다 — 그것이 M1 의 통과 조건이다.
 +            ⚠ 순정 폴드보다 **앞**에 있어야 한다. 뒤에 두면 영영 안 불린다. */
++      {
 +         input_buf = kofsp_frame(input_buf, (uint16_t)ret);
++         {                                        /* 기술 표기 토스트 — SvC 와 같은 규약(먼저 버퍼, 그다음 seq) */
++            static int kdisp_seen;
++            if (kofsp_disp_seq != kdisp_seen)
++            {
++               kdisp_seen = kofsp_disp_seq;
++               if (kofsp_toast_on && kofsp_last_disp[0])
++                  ss2comm_toast(kofsp_last_disp, 80);
++            }
++         }
++      }
++      else if (lbsp_rom_ok())
++         /* 월화의 검사 — 원버튼 엔진. ★ M1 에서는 lbsp_frame 이 아래 순정 폴드와
++            **글자 그대로 똑같이** 접는다. 그래서 이 가지가 생겨도 월화의 출력은
++            한 비트도 안 바뀐다 — 그것이 M1 의 통과 조건이다.
++            ⚠ 순정 폴드보다 **앞**에 있어야 한다. 뒤에 두면 영영 안 불린다. */
++      {
++         input_buf = lbsp_frame(input_buf, (uint16_t)ret);
++         {                                        /* 기술 표기 토스트 — 먼저 버퍼, 그다음 seq */
++            static int ldisp_seen;
++            if (lbsp_disp_seq != ldisp_seen)
++            {
++               ldisp_seen = lbsp_disp_seq;
++               if (lbsp_toast_on && lbsp_last_disp[0])
++                  ss2comm_toast(lbsp_last_disp, 80);
++            }
++         }
++      }
 +      else
 +      {  /* 순정 NGPC 롬 — 매크로 엔진이 없다. 강/기술 자리 버튼을 NGP 로 접어
 +            SVC 6키 배치·물리 패드가 그대로 통하게 한다: Y=A, X=B, L·R=A+B. */
@@ -500,23 +588,24 @@ index ef01e22..2d8e3bd 100644
  }
  
  void retro_run(void)
-@@ -598,12 +1018,68 @@ void retro_run(void)
+@@ -598,12 +1105,68 @@ void retro_run(void)
        update_video = false;
     }
  
 -   Emulate(&spec, sound_buf);
 +   {
 +   int ss2_paused = ss2comm_overlay_active();
-+
-+   if (!ss2_paused)
-+   {
-+      Emulate(&spec, sound_buf);
-+
-+      width  = spec.DisplayRect.w;
-+      height = spec.DisplayRect.h;
  
 -   width  = spec.DisplayRect.w;
 -   height = spec.DisplayRect.h;
++   if (!ss2_paused)
++   {
++      Emulate(&spec, sound_buf);
+ 
+-   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++      width  = spec.DisplayRect.w;
++      height = spec.DisplayRect.h;
++
 +      {
 +         const char *cline = ss2comm_frame();
 +         int band = ss2comm_band_h();
@@ -546,8 +635,7 @@ index ef01e22..2d8e3bd 100644
 +      height = ss2_last_h;
 +      spec.SoundBufSize = 0;
 +   }
- 
--   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++
 +   if (sides_on())
 +   {
 +      /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
@@ -573,7 +661,7 @@ index ef01e22..2d8e3bd 100644
  
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-@@ -629,11 +1105,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+@@ -629,11 +1192,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -594,17 +682,18 @@ index ef01e22..2d8e3bd 100644
  
     check_color_depth();
  }
-@@ -762,6 +1242,9 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1329,10 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
 +   ss2sp_reset();
 +   svcsp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
 +   kofsp_reset();
++   lbsp_reset();
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1265,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1353,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  
@@ -634,7 +723,7 @@ index ef01e22..2d8e3bd 100644
  {
     if(type == RETRO_MEMORY_SYSTEM_RAM)
 diff --git a/libretro_core_options.h b/libretro_core_options.h
-index a0dc3ec..b11324d 100644
+index a0dc3ec..62e07b0 100644
 --- a/libretro_core_options.h
 +++ b/libretro_core_options.h
 @@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
@@ -646,7 +735,7 @@ index a0dc3ec..b11324d 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -52,6 +52,162 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -52,6 +52,205 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
        },
        "english",
     },
@@ -768,7 +857,7 @@ index a0dc3ec..b11324d 100644
 +      "ngp_svcsp_basics",
 +      "SvC 강약 버튼 구분",
 +      NULL,
-+      "켬 = 약P/약K/강P/강K 4버튼(약은 짧게 고정, 강은 즉발). 끔 = 순정 2버튼(B/A 탭=약, 꾹=강 - 게임 원판정). 끔에서도 Y/X는 즉발 강으로 살아 있습니다. (SNK vs. Capcom MotM 전용)",
++      "켬 = 약P/약K/강P/강K 4버튼(약은 짧게 고정, 강은 즉발). 끔 = 순정 2버튼(B/A 탭=약, 8프레임부터 꾹=강 - 게임 원판정). 끔에서도 Y/X는 즉발 강으로 살아 있습니다. (SNK vs. Capcom MotM 전용)",
 +      NULL,
 +      "system",
 +      {
@@ -777,6 +866,49 @@ index a0dc3ec..b11324d 100644
 +         { NULL, NULL },
 +      },
 +      "enabled"
++   },
++   {
++      "ngp_kofsp_toast",
++      "KOF 기술 표기 표시",
++      NULL,
++      "KOF R-2 원버튼으로 기술이 나갈 때 커맨드 표기(↓↘→ + 펀치)를 띄웁니다. 슬롯마다 나가는 기술이 캐릭터별로 달라 이름 대신 표기를 적습니다 — 손으로 치는 법이 그대로 보입니다. (KOF R-2 전용)",
++      NULL,
++      "system",
++      {
++         { "enabled",  "켬" },
++         { "disabled", "끔" },
++         { NULL, NULL },
++      },
++      "enabled"
++   },
++   {
++      "ngp_svcsp_holdsync",
++      "SvC 강 발동 당김",
++      NULL,
++      "강약 구분 끔(2버튼)에서 A/B 를 꾹 눌러 내는 강이 언제 시작하는지. 게임은 문턱에 닿고도 2프레임을 더 끄는데 그 슬랙을 돌려받는 것입니다. 쥐는 시간(8프레임)도 강 모션 길이(캐릭터별)도 그대로입니다. 보통 = 2프레임 당김, 약으로 남는 탭 6프레임 유지. 최대 = 4프레임 당김, 약 탭이 4프레임으로 줄어듭니다. 강 자체가 굼뜬 캐릭터는 「빠른 기본기(FastCD)」가 모션을 줄입니다. (SNK vs. Capcom MotM 전용)",
++      NULL,
++      "system",
++      {
++         { "mid", "보통 (약 창 유지)" },
++         { "max", "최대 (약 창 4프레임)" },
++         { "off", "순정" },
++         { NULL, NULL },
++      },
++      "mid"
++   },
++   {
++      "ngp_svcsp_land",
++      "SvC 착지 선입력",
++      NULL,
++      "켬 = 점프 공격 뒤 착지 직전에 누른 기본기를 엔진이 기억했다가 착지하는 순간 대신 눌러 줍니다(강P/강K=강. A/B 는 강약 구분 끔일 때 쥔 채 착지=강·탭=약, 켬이면 약 고정). 끔(기본) = 순정 그대로 — 공중에서 누른 건 공중기로만 쓰이고 지상기는 착지 뒤 다시 눌러야 나갑니다. (SNK vs. Capcom MotM 전용)",
++      NULL,
++      "system",
++      {
++         { "disabled", "끔" },
++         { "enabled",  "켬" },
++         { NULL, NULL },
++      },
++      "disabled"
 +   },
 +   {
 +      "ngp_svcsp_toast",
@@ -809,7 +941,7 @@ index a0dc3ec..b11324d 100644
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
  };
  
-@@ -72,6 +228,17 @@ struct retro_core_option_definition option_defs_us[] = {
+@@ -72,6 +271,17 @@ struct retro_core_option_definition option_defs_us[] = {
        },
        "english",
     },
