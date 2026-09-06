@@ -28,10 +28,12 @@ NOISE_CAP = 200
 GAMES = [
     ('svc',    HOME + '/ss2/rom/svc.ngc'),
     ('ss2',    HOME + '/ss2/rom/ss2.ngc'),
-    ('mslug1', KROM + '/_mslug1.ngc'),
-    ('mslug2', KROM + '/_mslug2.ngc'),
-    ('ffury',  KROM + '/_fatalfury.ngc'),
+    ('mslug1', HOME + '/ss2/rom/pristine/Metal Slug - 1st Mission (JUE).ngc'),
+    ('mslug2', HOME + '/ss2/rom/pristine/Metal Slug - 2nd Mission (JUE) [!].ngc'),
+    ('ffury',  HOME + '/ss2/rom/pristine/Fatal Fury F-Contact (JUE) [!].ngc'),
     ('kofr2',  HOME + '/ss2/rom/kofr2.ngc'),
+    # 월화의 검사 — 대조군은 **순정**이다(한글판 lastblade.ngc 아님)
+    ('lb',     HOME + '/ss2/rom/pristine/Last Blade, The (UE) [!].ngc'),
 ]
 
 

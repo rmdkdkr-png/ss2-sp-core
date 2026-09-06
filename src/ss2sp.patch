@@ -17,7 +17,7 @@ index b61e812..a6f9fe6 100644
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..b25764b 100644
+index ef01e22..82c20d7 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -60,8 +60,8 @@ index ef01e22..b25764b 100644
 +extern char    svcsp_last_disp[64];
 +extern int     svcsp_disp_seq;
 +/* ── KOF R-2 원버튼 엔진 (kofsp.c) — 롬 헤더 0x24 "KOF R2" 로 자동 판별 ──
-+   ★ 지금은 M1(배관만)이다. kofsp_frame 은 순정 롬 폴드와 **똑같이** 동작하므로
-+     이 가지가 들어와도 KOF 의 조작은 한 비트도 안 바뀐다. 엔진은 오프셋을 재고 나서 얹는다. */
++   ⚠ 「지금은 M1(배관만)」이라고 적혀 있던 자리다 — **이미 거짓**이라 지웠다.
++     KOF 엔진은 링 주입까지 갔고 R 은 SP 트리거다(폴드에서 빠졌다). */
 +extern uint8_t kofsp_frame(uint8_t pad, uint16_t ret);
 +extern void    kofsp_set_engine(int on);
 +extern int     kofsp_engine_on(void);
