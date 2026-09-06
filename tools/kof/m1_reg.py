@@ -19,7 +19,11 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUN = os.path.join(HERE, 'ngprun')
+# ★ 하네스는 «옵션을 넘기는» 것이어야 한다. 저장소 안의 tools/kof/ngprun 은
+#   한동안 NGP_OPTS 를 통째로 무시하는 낡은 바이너리였고, 그 탓에 이 도구가
+#   **입력 분기 블록이 꺼진 채**로 돌면서 「0바이트」를 남발했다.
+#   NGPRUN 환경변수로 덮을 수 있다.
+RUN = os.environ.get('NGPRUN') or os.path.join(HERE, 'ngprun')
 HOME = os.path.expanduser('~')
 KROM = os.path.join(os.path.dirname(HERE), 'rom')
 TAGS = ('r1', 'r2', 'end')
@@ -60,6 +64,34 @@ def unstable(p1, p2, tag, ext):
     return {i for i, (x, y) in enumerate(zip(a, b)) if x != y}
 
 
+def optcheck(core):
+    """하네스가 NGP_OPTS 를 코어에 넘기나 — 넘기면 켬/끔이 «달라야» 한다.
+
+    ⚠ 이 검사는 **주어진 코어가 그 옵션에 반응할 때만** 뜻이 있다.
+      SS2 의 마스터 스위치를 가른 뒤로는 새 코어가 옵션과 무관하게 폴드를 돌리므로,
+      **기준 코어(옛것)** 로 재야 한다. 그래도 「모른다」가 나올 수 있으니
+      결과를 세 갈래(넘긴다 / 안 넘긴다 / 모른다)로 낸다.
+    """
+    import hashlib
+    rom = None
+    for _, r in GAMES:
+        if os.path.exists(r): rom = r; break
+    if not rom:
+        return '모른다(롬 없음)'
+    t = tempfile.mkdtemp()
+    h = []
+    for v in ('enabled', 'disabled'):
+        env = dict(os.environ); env['NGP_OPTS'] = 'ngp_ss2sp=' + v
+        pref = os.path.join(t, v) + '_'
+        subprocess.run([RUN, core, rom, os.path.join(HERE, 'm1_reg.txt'), pref],
+                       capture_output=True, text=True, env=env)
+        f = '%s_r1.ram' % pref
+        h.append(hashlib.md5(open(f, 'rb').read()).hexdigest() if os.path.exists(f) else None)
+    if None in h:
+        return '모른다(덤프 없음)'
+    return '넘긴다' if h[0] != h[1] else '안 넘긴다(또는 코어가 그 옵션에 무관)'
+
+
 def main():
     base, new = sys.argv[1], sys.argv[2]
     script = (sys.argv[3] if (len(sys.argv) > 3 and not sys.argv[3].startswith('-'))
@@ -73,6 +105,13 @@ def main():
         return 2
     tmp = tempfile.mkdtemp()
 
+    oc = optcheck(base)
+    print('하네스 %s' % RUN)
+    print('옵션 전달 검사(기준 코어) — **%s**' % oc)
+    if oc.startswith('안 넘긴다'):
+        print('  ⚠ 하네스가 NGP_OPTS 를 코어에 못 넘기면 «입력 분기 블록이 꺼진 채»로 돈다.')
+        print('    그 상태의 「0바이트」는 «같다»가 아니라 «아무것도 안 쟀다»다.')
+        print('    NGPRUN=<옵션을 넘기는 ngprun> 로 다시 돌려라.')
     print('기준 %s' % base)
     print('새   %s' % new)
     print('대본 %s\n' % script)
