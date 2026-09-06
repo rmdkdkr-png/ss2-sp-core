@@ -626,8 +626,18 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
    else
       kof_quiet = (pad & (NGP_U | NGP_D | NGP_L | NGP_R)) ? 0 : kof_quiet + 1;
 
-   /* 순정 폴드 — 트리거로 돌린 R 은 빼고 그대로 둔다.
-      M1 에서 「출력 비트 동일」을 지키던 그 접기다. L 은 계속 A+B. */
+   /* 버튼 계약 — **월화(lbsp.c)와 글자 그대로 같다.** 유저 지시:
+        「a+b는 a+b의 역할이고 SP는 SP다」 — 한 버튼이 두 얼굴을 갖지 않는다.
+
+        Y=A · X=B · L=A+B      언제나, 엔진과 무관
+        R = SP                  엔진 켤 때만
+        R = 아무것도 안 함        엔진 끄면
+
+      ⚠ **원래부터 R 은 여기서 안 접혔다.** 그런데 코어 옵션 설명에는
+        「끄면 R=A+B (순정과 같음)」이라 적혀 있었다 — **코드가 안 하는 일을 적어 둔 것**이다.
+        문구를 코드에 맞췄다. 아래 단위 시험이 앞으로 이 계약을 지킨다.
+      ⚠ NGPC 실기에는 A·B 두 버튼뿐이라 Y/X/L/R 로 접는 것 자체가 우리 규약이다.
+        R 을 안 접어도 끔 상태에서 못 내는 입력은 없다(L 이 A+B 를 낸다). */
    if (ret & (1u << RP_Y)) pad |= NGP_A;
    if (ret & (1u << RP_X)) pad |= NGP_B;
    if (ret & (1u << RP_L)) pad |= (uint8_t)(NGP_A | NGP_B);
