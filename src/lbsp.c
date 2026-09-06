@@ -82,11 +82,18 @@ extern uint8_t CPUExRAM[16384];
 #define OFF_H1         LBSP_UNMEASURED   /* 지상/공중 */
 #define OFF_HP2        LBSP_UNMEASURED   /* 상대 체력 — 교차 증인 */
 #define OFF_COMBO      LBSP_UNMEASURED   /* 콤보 수 — 게임이 화면에도 띄운다 */
-#define LBSP_TH_STRONG LBSP_UNMEASURED   /* 강약 문턱(프레임) */
+/* ★ 강약 문턱 — 버튼을 **8프레임 이상** 쥐면 강이 된다(질풍 지속 62 → 70).
+   ⚠ **7 은 금지구역이다.** 위상 0 에서는 약, 위상 1 에서는 강으로 «갈린다».
+     KOF 의 「5프레임은 위상에 따라 갈림 → 금지구역」과 똑같은 꼴이다.
+     안전한 약 구역은 ≤6, 안전한 강 구역은 ≥8. 그래서 기본 버튼을 4 로 둔다.
+   ⚠ 성질이 다른 증인으로도 확인했다 — **엔진을 끄고 손으로 베기를 쥐어도** 같은 문턱에서
+     act 96(약) → 112(강) 로 넘어간다. */
+#define LBSP_TH_STRONG 8
+#define LBSP_TH_TAPMAX 6                 /* 여기까지는 확실히 약 */
 #define LBSP_CMD_WIN   LBSP_UNMEASURED   /* 커맨드 창(프레임) */
 
 static const int lb_consts[] = {
-   OFF_H1, OFF_HP2, OFF_COMBO, LBSP_TH_STRONG, LBSP_CMD_WIN
+   OFF_H1, OFF_HP2, OFF_COMBO, LBSP_CMD_WIN
 };
 
 int lbsp_unmeasured_count(void)
@@ -123,6 +130,10 @@ int lbsp_unmeasured_count(void)
 #define F 0x40                  /* 앞 — 실제 비트는 lb_fwd() 가 정한다 */
 #define B 0x80                  /* 뒤 */
 
+/* 아래 링 도우미들의 앞선언 — 대본 표가 먼저 와야 읽기 좋아서 여기 둔다. */
+static int lb_env(const char *k, int dflt);
+static int lb_ring_on(void);
+
 typedef struct { int frames; unsigned char pad; } LbMacStep;
 
 static const LbMacStep MAC_236A[] = {
@@ -132,6 +143,25 @@ static const LbMacStep MAC_236A[] = {
    { 6, NGP_A }                 /* 버튼은 방향을 놓고 나서 — 실측이 그랬다 */
 };
 #define MAC_236A_N ((int)(sizeof MAC_236A / sizeof MAC_236A[0]))
+
+/* 링을 쓸 때의 짧은 꼬리 — D·DF 는 박고 **F 와 버튼만 실제로 누른다.**
+   프레임 수는 lb_env() 로 흔들 수 있다(다시 안 굽고 쓸어 보려고). */
+static LbMacStep mac_ring[2];
+static int mac_ring_n;
+
+static void lb_build_ring_macro(void)
+{
+   mac_ring[0].frames = lb_env("LBSP_RING_F", 2);
+   mac_ring[0].pad = F;
+   mac_ring[1].frames = lb_env("LBSP_RING_BTN", 4);
+   mac_ring[1].pad = NGP_A;
+   mac_ring_n = (mac_ring[0].frames > 0) ? 2 : 1;
+   if (mac_ring[0].frames <= 0) { mac_ring[0] = mac_ring[1]; }
+}
+
+/* 지금 도는 대본이 무엇인지 — 링을 썼으면 짧은 꼬리, 아니면 원래 18프레임. */
+static const LbMacStep *mac_cur;
+static int mac_cur_n;
 
 /* ── 상태 ────────────────────────────────────────────────────── */
 static int  lb_engine_on;      /* 기본 꺼짐 */
@@ -150,6 +180,7 @@ int  lbsp_engine_on(void)    { return lb_engine_on; }
 void lbsp_reset(void)
 {
    mac_step = -1; mac_left = 0; trig_prev = 0; mac_fwd = NGP_R;
+   mac_cur = MAC_236A; mac_cur_n = MAC_236A_N;
    lbsp_last_disp[0] = 0;
    /* seq 는 **안 되돌린다** — 프론트가 엣지로 보므로 되돌리면 옛 값과 같아져 한 번 놓친다. */
 }
@@ -167,6 +198,33 @@ void lbsp_set_rom(const void *rom, unsigned len)
 }
 
 int lbsp_rom_ok(void) { return lb_is_rom; }
+
+/* ── 링 주입 ─────────────────────────────────────────────────────
+   기본 **켬**. 끄려면 LBSP_RING=0 — 대조군을 돌릴 길은 남겨 둔다. */
+static int lb_ring_on(void)
+{
+   static int v = -1;
+   if (v < 0) { const char *e = getenv("LBSP_RING"); v = !(e && *e == '0'); }
+   return v;
+}
+
+static int lb_env(const char *k, int dflt)
+{
+   const char *e = getenv(k);
+   if (!e || !*e) return dflt;
+   return atoi(e);
+}
+
+/* 머리에서 back 칸 뒤에 값을 박는다. back=1 이 «가장 최근 칸»이다.
+   ⚠ 머리(0x1312)는 «다음에 쓸 칸»의 색인이다 — 최근 칸은 머리−1 이다.
+   ⚠ 한 칸만 붙잡아 두고 증명하려 하지 마라. KOF 에서 링을 정적으로 붙잡았더니
+     게임이 읽는 시작점이 돌아 사실상 모든 회전을 시도하게 돼 증명이 안 됐다.
+     **한 번만 쓰는 것**이 본질이다. */
+static void lb_ring_put(int back, uint8_t v)
+{
+   int h = CPUExRAM[OFF_RING_HEAD];
+   CPUExRAM[OFF_RING + ((h - back) & (LBSP_RING_N - 1))] = v;
+}
 
 /* 지금 «앞»이 어느 비트인가. 램을 못 읽으면 오른쪽 봄으로 둔다(트레이닝 기본). */
 static uint8_t lb_fwd(void)
@@ -237,12 +295,12 @@ uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
       섞으면 사람이 잡고 있던 방향이 커맨드에 끼어들어 딴 기술이 나간다. */
    if (mac_step >= 0)
    {
-      pad = lb_bits(MAC_236A[mac_step].pad, mac_fwd);
+      pad = lb_bits(mac_cur[mac_step].pad, mac_fwd);
       if (--mac_left <= 0)
       {
          mac_step++;
-         if (mac_step >= MAC_236A_N) mac_step = -1;
-         else mac_left = MAC_236A[mac_step].frames;
+         if (mac_step >= mac_cur_n) mac_step = -1;
+         else mac_left = mac_cur[mac_step].frames;
       }
       trig_prev = trig;
       return pad;
@@ -251,11 +309,29 @@ uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
    /* 엣지에서만 시작한다. 누르고 있는 동안 되풀이 발동하면 그게 누출이다. */
    if (trig && !trig_prev && lb_can_start())
    {
-      mac_step = 0;
-      mac_left = MAC_236A[0].frames;
       mac_fwd = lb_fwd();
-      pad = lb_bits(MAC_236A[0].pad, mac_fwd);
-      if (--mac_left <= 0) { mac_step = 1; mac_left = MAC_236A[1].frames; }
+      if (lb_ring_on())
+      {
+         /* ★ 마지막 F 는 카디널이니 **박지 않는다.** D·DF 만 박고 F 는 진짜로 누른다.
+            최근 칸(머리−1)이 DF, 그 앞(머리−2)이 D 다 — 시간 순서가 뒤집히면 안 된다. */
+         lb_ring_put(1, (uint8_t)(NGP_D | mac_fwd));
+         lb_ring_put(2, NGP_D);
+         lb_build_ring_macro();
+         mac_cur = mac_ring; mac_cur_n = mac_ring_n;
+      }
+      else
+      {
+         mac_cur = MAC_236A; mac_cur_n = MAC_236A_N;
+      }
+      mac_step = 0;
+      mac_left = mac_cur[0].frames;
+      pad = lb_bits(mac_cur[0].pad, mac_fwd);
+      if (--mac_left <= 0)
+      {
+         mac_step = 1;
+         if (mac_step >= mac_cur_n) mac_step = -1;
+         else mac_left = mac_cur[1].frames;
+      }
       lb_disp("\u2193\u2198\u2192 + \ubca0\uae30");   /* ↓↘→ + 베기 */
       trig_prev = trig;
       return pad;

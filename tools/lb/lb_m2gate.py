@@ -23,8 +23,17 @@ ST = os.path.expanduser("~/ss2/saves/lb/lb_train.st")
 
 ACT = 0x0370
 ACT_REST = 4
-WANT = 112          # 236+A — lb_moves.py 실측
-BASIC = 96          # 서서 베기. 이게 나오면 «커맨드가 안 먹고 평타만» 나간 것이다
+WANT = 112
+TAIL = 144
+BASIC = 96          # 서서 베기(약). 이게 나오면 «커맨드가 안 먹고 평타만» 나간 것이다
+
+# ★★ act 112 는 «질풍»만의 것이 아니다 — **평타를 8프레임 이상 쥐어도 112** 다(강베기).
+#    갈리는 것은 **뒤따르는 144**:
+#        질풍   112 → 144 → 4
+#        강베기 112 →        4
+#    그러니 「112 가 나왔다」로 판정하면 안 된다. **쌍으로 본다.**
+#    지금 기본값(버튼 4)에서는 강베기가 안 나오지만, 버튼 프레임을 건드리는 순간
+#    이 잣대는 조용히 거짓이 된다. 계획서가 「슬롯끼리 지문이 겹치면 경고」라 적어 둔 그것이다.
 
 
 def run(script, opts):
@@ -67,7 +76,11 @@ def verdict(vals):
         return "못잼"
     s = set(vals)
     if WANT in s:
-        return "기술"
+        # 112 뒤에 144 가 «따라와야» 필살기다
+        i = vals.index(WANT)
+        if TAIL in vals[i:]:
+            return "기술"
+        return "강베기"          # 커맨드가 아니라 «오래 쥔 평타»가 나갔다
     if BASIC in s:
         return "평타"
     if s - {ACT_REST}:
@@ -131,10 +144,16 @@ def main():
     print("     엔진 끔 대조군: %2d/%d%s" % (ctrl, N, cextra))
 
     # 연속 발동 — 세이브를 «다시 안 불러온다»
+    # ★ 간격을 «기술이 다 끝나고도 남게» 잡는다.
+    #   전에는 70프레임이었는데, 링으로 발동이 빨라지자 기술(112 62프레임 + 144)이
+    #   창을 넘겨 **다음 창이 앞 기술의 꼬리를 세고 있었다.** 그때는 「112 가 보이면 기술」이라
+    #   느슨하게 재서 5/5 로 «통과»했다 — 지문을 쌍으로 바꾸자마자 드러났다.
+    #   느슨한 잣대는 이렇게 실패를 통과로 바꾼다.
+    GAP = 120
     sc = ["!load %s" % ST, "!w t %X" % ACT, "30 -"]
     REP = 5
     for _ in range(REP):
-        sc += ["1 R1", "70 -"]
+        sc += ["1 R1", "%d -" % GAP]
     sc += ["!w off"]
     vals = run(sc, ON)
     unmeasured = len(UNMEASURED)
@@ -143,8 +162,8 @@ def main():
         UNMEASURED.append(1); vals = []
     seq = []
     for k in range(REP):
-        a = 30 + k * 71
-        seq.append(verdict(vals[a:a + 71]))
+        a = 30 + k * (GAP + 1)
+        seq.append(verdict(vals[a:a + GAP + 1]))
     rep_ok = sum(1 for v in seq if v == "기술")
     print("연속 발동(세이브 안 불러옴) %d/%d : %s" % (rep_ok, REP, " ".join(seq)))
 

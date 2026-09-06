@@ -26,6 +26,8 @@ unsigned char CPUExRAM[16384];
 #define T_OFF_ACT   0x0370
 #define T_ACT_REST  4
 #define T_OFF_FACE  0x0386     /* 0 = 오른쪽 봄(앞=R) · 1 = 왼쪽 봄(앞=L) */
+#define T_RING_HEAD 0x1312     /* «다음에 쓸» 칸의 색인 */
+#define T_RING      0x1313     /* 128칸, 한 칸 2프레임 */
 
 static void ram_rest(void) { CPUExRAM[T_OFF_ACT] = T_ACT_REST; }
 static void ram_face(int left) { CPUExRAM[T_OFF_FACE] = (unsigned char)(left ? 1 : 0); }
@@ -98,6 +100,23 @@ int main(void)
    lbsp_set_rom(NULL, 0);
    ck(lbsp_rom_ok() == 0, "NULL 롬은 안 문다");
 
+   /* ── ①-2 A+B 는 «엔진을 켜도» L 에 그대로 남는다 ─────────────
+      유저 요구: 「A+B 도 있고 SP 도 필요하다」. L 이 그 자리다.
+      ★ 두 버튼을 «동시에 누른 척»하는 것이 아니라 **한 프레임에 한 바이트로**
+        두 비트를 함께 세운다 — 그래서 폴링 사이로 새는 함정이 원리상 없다. */
+   mkrom(rom, "LASTBLADE124");
+   lbsp_set_rom(rom, sizeof rom);
+   ram_rest(); ram_face(0);
+   lbsp_set_engine(0); lbsp_reset();
+   ck(lbsp_frame(0, (unsigned short)(1u << RP_L)) == (NGP_A | NGP_B),
+      "엔진 끔: L 한 프레임에 A+B 두 비트가 함께 선다");
+   lbsp_set_engine(1); lbsp_reset();
+   ck(lbsp_frame(0, (unsigned short)(1u << RP_L)) == (NGP_A | NGP_B),
+      "엔진 켬: L 한 프레임에 A+B 두 비트가 함께 선다");
+   ck(lbsp_frame(0, (unsigned short)((1u << RP_L) | (1u << RP_Y))) == (NGP_A | NGP_B),
+      "엔진 켬: L 과 Y 를 같이 눌러도 A+B 가 산다");
+   lbsp_set_engine(0); lbsp_reset();
+
    /* ── ② 폴드 4,096조합 전수 — 엔진 켬/끔 둘 다 ───────────── */
    mkrom(rom, "LASTBLADE124");
    lbsp_set_rom(rom, sizeof rom);
@@ -135,20 +154,37 @@ int main(void)
 
    /* ── ③ 매크로 시간표 — 트리거 한 번에 236+A 가 «그대로» 나오는가 ──
       에뮬은 「기술이 나갔나」만 본다. 여기서는 **어느 프레임에 어떤 비트가
-      나가는지**를 본다 — 에뮬로는 못 가르는 것이다. */
+      나가는지**, 그리고 **링에 무엇이 박혔는지**를 본다 — 둘 다 에뮬로는 못 본다.
+
+      ★ 링이 켜져 있으면 대본이 다르다(D·DF 는 박고 F·버튼만 실제로 누른다).
+        그래서 시험도 «모드에 따라» 기대표를 바꾼다. 두 모드를 다 돌리려면
+        LBSP_RING=0 으로 한 번 더 실행해라. */
    {
-      static const unsigned char WANT[] = {
+      static const unsigned char WANT_LONG[] = {
          0x02,0x02,0x02,0x02,              /* D    4프레임 */
          0x0A,0x0A,0x0A,0x0A,              /* D+R  4프레임 */
          0x08,0x08,0x08,0x08,              /* R    4프레임 */
          0x10,0x10,0x10,0x10,0x10,0x10     /* A    6프레임 */
       };
+      static const unsigned char WANT_RING[] = {
+         0x08,0x08,                        /* R  2프레임 (LBSP_RING_F 기본) */
+         0x10,0x10,0x10,0x10               /* A  4프레임 (LBSP_RING_BTN 기본)
+                                              ★ 4 인 이유: 7 은 «위상에 따라 강약이 갈리는»
+                                                금지구역이라 확실한 약 구역(≤6)에 둔다. */
+      };
+      const char *e = getenv("LBSP_RING");
+      int ring = !(e && *e == '0');
+      const unsigned char *WANT = ring ? WANT_RING : WANT_LONG;
+      int WN = ring ? (int)(sizeof WANT_RING) : (int)(sizeof WANT_LONG);
       int i, mis = 0;
       unsigned trigret = (unsigned)(1u << RP_R);
+
+      printf("  모드: 링 %s\n", ring ? "켬" : "끔");
       lbsp_set_engine(1);
       lbsp_reset();
-      ram_rest();
-      for (i = 0; i < (int)(sizeof WANT); i++)
+      ram_rest(); ram_face(0);
+      CPUExRAM[T_RING_HEAD] = 40;          /* 아무 자리나 — 상대 위치가 본질이다 */
+      for (i = 0; i < WN; i++)
       {
          /* 첫 프레임만 트리거를 누르고 그 뒤는 뗀다 — 엣지 발동을 확인한다. */
          unsigned char got = lbsp_frame(0, (unsigned short)(i == 0 ? trigret : 0));
@@ -159,53 +195,59 @@ int main(void)
             mis++;
          }
       }
-      ck(mis == 0, "매크로 18프레임 시간표 일치");
+      ck(mis == 0, "매크로 시간표 일치");
+
+      if (ring)
+      {
+         /* ★ 머리 40 이면 최근 칸은 39(DF), 그 앞이 38(D). 시간 순서가 뒤집히면
+            게임이 «F,D» 로 읽어 아무것도 안 나간다. */
+         ck(CPUExRAM[T_RING + 39] == (0x02 | 0x08), "링 머리-1 칸에 DF 가 박힌다");
+         ck(CPUExRAM[T_RING + 38] == 0x02,          "링 머리-2 칸에 D 가 박힌다");
+         ck(CPUExRAM[T_RING + 40] == 0,             "머리 «자신»은 안 건드린다");
+      }
+
       /* 끝난 뒤에는 사람 입력이 그대로 통해야 한다 */
       ck(lbsp_frame(0x01, 0) == 0x01, "매크로가 끝나면 사람 입력이 그대로 통한다");
+
       /* ★ 누출 — 트리거를 «계속 쥐고» 있어도 되풀이 발동하면 안 된다 */
-      lbsp_reset();
-      ram_rest();
-      for (i = 0; i < (int)(sizeof WANT); i++)
+      lbsp_reset(); ram_rest();
+      for (i = 0; i < WN; i++)
          lbsp_frame(0, (unsigned short)trigret);
       ck(lbsp_frame(0, (unsigned short)trigret) == 0,
          "트리거를 쥐고 있어도 두 번째가 저절로 안 나간다");
-      /* ★★ 반대편을 볼 때 — 앞이 R 이 아니라 **L** 이어야 한다.
-         반전을 못 박아 두면 여기서 딴 기술이 나간다. KOF 가 배포까지 낸 사고가
-         정확히 이 자리였다(한 라운드 두 번째 발동부터 좌우가 뒤집혔다). */
+
+      /* ★★ 반대편을 볼 때 — 앞이 R 이 아니라 **L** 이어야 한다. */
       {
-         static const unsigned char WANT_L[] = {
-            0x02,0x02,0x02,0x02,              /* D     — 아래는 그대로 */
-            0x06,0x06,0x06,0x06,              /* D+L   — 앞이 L 로 뒤집힌다 */
-            0x04,0x04,0x04,0x04,              /* L */
-            0x10,0x10,0x10,0x10,0x10,0x10     /* A */
-         };
          int j, m2 = 0;
          lbsp_reset(); ram_rest(); ram_face(1);
-         for (j = 0; j < (int)(sizeof WANT_L); j++)
+         CPUExRAM[T_RING_HEAD] = 40;
+         for (j = 0; j < WN; j++)
          {
             unsigned char g2 = lbsp_frame(0, (unsigned short)(j == 0 ? trigret : 0));
-            if (g2 != WANT_L[j])
+            unsigned char w2 = WANT[j];
+            /* 기대표의 R(0x08) 을 L(0x04) 로 뒤집어 본다 */
+            if (w2 & 0x08) w2 = (unsigned char)((w2 & ~0x08) | 0x04);
+            if (g2 != w2)
             {
                if (m2 < 4)
-                  printf("  ★반대편 시간표 어긋남: f%d → %02X (기대 %02X)\n",
-                         j, g2, WANT_L[j]);
+                  printf("  ★반대편 시간표 어긋남: f%d → %02X (기대 %02X)\n", j, g2, w2);
                m2++;
             }
          }
          ck(m2 == 0, "반대편(왼쪽 봄)에서 앞이 L 로 뒤집힌다");
-
-         /* ★ 매크로가 «도는 중»에 반전이 바뀌어도 시작할 때의 앞을 끝까지 쓴다.
-            안 그러면 커맨드가 중간에 꺾여 아무것도 안 나간다. */
-         lbsp_reset(); ram_rest(); ram_face(0);
-         lbsp_frame(0, (unsigned short)trigret);      /* 오른쪽 봄으로 시작 */
-         ram_face(1);                                  /* 도중에 뒤집힌다 */
-         lbsp_frame(0, 0); lbsp_frame(0, 0); lbsp_frame(0, 0);
-         ck(lbsp_frame(0, 0) == 0x0A, "도는 중에 반전이 바뀌어도 시작할 때의 앞을 쓴다");
-         ram_face(0);
+         if (ring)
+            ck(CPUExRAM[T_RING + 39] == (0x02 | 0x04), "반대편에선 링에 DB 가 박힌다");
       }
 
-      /* ★ 쉬는 중이 아니면 안 걸린다 — 이 시험이 없으면 조건이 사는지 모른다.
-         (기술이 나가는 중에 또 꽂으면 커맨드가 이어 붙어 딴 게 나간다.) */
+      /* ★ 매크로가 «도는 중»에 반전이 바뀌어도 시작할 때의 앞을 끝까지 쓴다. */
+      lbsp_reset(); ram_rest(); ram_face(0);
+      lbsp_frame(0, (unsigned short)trigret);
+      ram_face(1);
+      ck((lbsp_frame(0, 0) & (0x04 | 0x08)) != 0x04,
+         "도는 중에 반전이 바뀌어도 시작할 때의 앞을 쓴다");
+      ram_face(0);
+
+      /* ★ 쉬는 중이 아니면 안 걸린다 */
       lbsp_reset();
       CPUExRAM[T_OFF_ACT] = 96;      /* 서서 베기 중 */
       ck(lbsp_frame(0, (unsigned short)trigret) == 0,
