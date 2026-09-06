@@ -131,6 +131,20 @@ void svcsp_set_basics(int on) { svc_basics_split = !!on; }
    4버튼 모드(강약 구분 켬)는 홀드 강이 없으므로 무관. 롤백 지점: 태그 stake-3.75. */
 static int svc_hold_sync = 1;                   /* 0=off · 1=mid(기본) · 2=max */
 void svcsp_set_holdsync(int v) { svc_hold_sync = v < 0 ? 0 : (v > 2 ? 2 : v); }
+/* ★ 착지 선입력 창 — 재려고 env 로 흔들 수 있게 뺐다(기본값은 SVC_LAND_WIN 그대로).
+   다시 굽지 않고 문턱을 이분법으로 찾기 위한 것이다. SVCSP_LAND_WIN=<프레임>. */
+static int svc_land_win(void)
+{
+   static int v = -1;
+   if (v < 0)
+   {
+      const char *e = getenv("SVCSP_LAND_WIN");
+      v = (e && *e) ? atoi(e) : SVC_LAND_WIN;
+      if (v < 0) v = 0;
+   }
+   return v;
+}
+
 static int svc_land_on = 0;                     /* 옵션 — 착지 선입력. 기본 끔(유저 결정 2026-09-04) */
 void svcsp_set_land(int on) { svc_land_on = !!on; }
 /* 착지 선입력 상태 — 파일 스코프. 리뷰 지적(2026-09-04): 블록 안 static 이면 svcsp_reset(리셋·스테이트 로드)이
@@ -1293,10 +1307,10 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
       }
       else if (air)
       {  /* 공중에서 새로 누른 기본기를 기억한다. 나중 누름이 앞 누름을 덮어쓴다 (air_hold/air_acte 는 파일 스코프) */
-         if      (bedge & (1u << 1)) { land_btn = 0x10; land_str = 1; land_wait = SVC_LAND_WIN; air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (bedge & (1u << 9)) { land_btn = 0x20; land_str = 1; land_wait = SVC_LAND_WIN; air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (bedge & (1u << 0)) { land_btn = 0x10; land_str = 0; land_wait = SVC_LAND_WIN; air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (bedge & (1u << 8)) { land_btn = 0x20; land_str = 0; land_wait = SVC_LAND_WIN; air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
+         if      (bedge & (1u << 1)) { land_btn = 0x10; land_str = 1; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
+         else if (bedge & (1u << 9)) { land_btn = 0x20; land_str = 1; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
+         else if (bedge & (1u << 0)) { land_btn = 0x10; land_str = 0; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
+         else if (bedge & (1u << 8)) { land_btn = 0x20; land_str = 0; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
          else if (land_wait > 0)     land_wait--;
          /* ★ 버튼 하나 = 기술 하나. 이 누름이 **공중 기술로 이미 소비**됐으면 착지 무장을
             푼다 — 빈 점프에서 Y 한 번에 공중강+착지강 두 방 나가는 오발 방지.
