@@ -51,6 +51,13 @@ extern uint8_t CPUExRAM[16384];
    표에 없는 커맨드(421+A)는 평타만 나오는 대조군이 섰다. (tools/lb/MOVES.md) */
 #define OFF_ACT        0x0370
 #define LBSP_ACT_REST  4
+/* ★ «걸 수 있는» 상태는 서기 하나가 아니다. 방향을 잡으면 act 가 바뀐다:
+     4 서기 · 12 웅크림 · 20 앞걷기 · 24 뒤걷기 (MOVES.md 실측).
+   서기만 받았더니 **방향 슬롯이 전부 무반응**이었다 — 슬롯을 고르려면
+   방향을 잡아야 하는데, 잡는 순간 조건이 깨지는 자가당착이었다. */
+#define LBSP_ACT_CROUCH 12
+#define LBSP_ACT_WALKF  20
+#define LBSP_ACT_WALKB  24
 
 /* ★ 승격됨 — 방향이력 링. **SvC·KOF 와 구조가 다르다.**
    그 둘은 값이 «밀린다»(간격 2). 월화는 **값이 안 움직이고 머리만 나아간다**(간격 1).
@@ -327,7 +334,11 @@ static int lb_can_start(void)
 #ifdef SS2SP_RAM_POINTER
    if (!CPUExRAM) return 1;      /* 포인터 빌드에서만 널일 수 있다 */
 #endif
-   return CPUExRAM[OFF_ACT] == LBSP_ACT_REST;
+   {
+      uint8_t a = CPUExRAM[OFF_ACT];
+      return a == LBSP_ACT_REST || a == LBSP_ACT_CROUCH
+          || a == LBSP_ACT_WALKF || a == LBSP_ACT_WALKB;
+   }
 }
 
 /* ── 매 프레임 ─────────────────────────────────────────────────── */
