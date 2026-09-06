@@ -62,7 +62,15 @@ def unstable(p1, p2, tag, ext):
 
 def main():
     base, new = sys.argv[1], sys.argv[2]
-    script = sys.argv[3] if len(sys.argv) > 3 else os.path.join(HERE, 'm1_reg.txt')
+    script = (sys.argv[3] if (len(sys.argv) > 3 and not sys.argv[3].startswith('-'))
+              else os.path.join(HERE, 'm1_reg.txt'))
+    # ★ 대본이 없으면 «여기서 멈춘다». 없는 대본으로 돌리면 모든 게임이
+    #   「덤프없음」이 되는데, 그건 「달라졌다」가 아니라 «못 쟀다»다.
+    #   (--expect 를 대본 자리에 넣었다가 그 꼴을 봤다.)
+    if not os.path.exists(script):
+        print('★ 대본 파일이 없다: %s' % script)
+        print('  — 이건 회귀가 아니라 «못 쟀다»다. 경로를 고쳐라.')
+        return 2
     tmp = tempfile.mkdtemp()
 
     print('기준 %s' % base)

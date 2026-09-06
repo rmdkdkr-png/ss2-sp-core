@@ -39,21 +39,23 @@ static void ck(int cond, const char *what)
    if (!cond) { printf("  ★실패: %s\n", what); fails++; }
 }
 
-/* 기준 폴드 — **M2 계약**. M1 때는 엔진 상태와 무관하게 순정과 같았는데,
-   M2 에서 R 이 SP 트리거가 되며 «엔진 켤 때만» 달라진다. 시험을 지우지 않고 고쳤다.
+/* 기준 폴드 — **M3 계약**. 계약이 두 번 바뀌었고 그때마다 시험을 «지우지 않고 고쳤다».
+     M1: 엔진과 무관하게 순정 폴드와 동일.
+     M2: 엔진을 켜면 R 이 트리거가 되어 안 접힘.
+     M3: **R 은 아예 겸업하지 않는다** — 꺼도 A+B 로 안 접힌다.
+         유저 지시 「a+b는 a+b의 역할이고 SP는 SP다」.
 
-   ★ 엔진 끔 = **순정 롬 폴드와 글자 그대로 동일**(R 도 접는다).
-     이건 kofsp 와 일부러 다르다(kofsp 는 R 을 무조건 뺀다). 이래야 「엔진 끔」이
-     **진짜 대조군**이 된다 — 대조군이 조금이라도 다르면 그건 대조군이 아니다.
-   ★ 엔진 켬 = R 은 트리거라 안 접힌다. L 은 그대로 A+B. */
+   ★ 지금 계약: **Y=A · X=B · L=A+B 는 언제나. R 은 엔진을 켤 때만 트리거이고,
+     끄면 아무것도 안 한다.** 한 버튼이 두 얼굴을 갖지 않는다.
+   ★ A+B 를 쓰는 길은 **L** 이다 — 엔진과 무관하게 한 프레임에 두 비트를 세운다.
+     아래 ①-2 가 그것을 이름 붙여 지킨다. */
 static unsigned char ref_fold(unsigned char pad, unsigned ret, int engine)
 {
+   (void)engine;
    if (ret & (1u << RP_Y)) pad |= NGP_A;
    if (ret & (1u << RP_X)) pad |= NGP_B;
    if (ret & (1u << RP_L)) pad |= (unsigned char)(NGP_A | NGP_B);
-   if (!engine && (ret & (1u << RP_R)))
-      pad |= (unsigned char)(NGP_A | NGP_B);
-   return pad;
+   return pad;               /* ⚠ R 은 어느 쪽에서도 안 접는다 */
 }
 
 /* 롬 머리 흉내 — 0x24 에 표식을 박는다. */
@@ -70,7 +72,7 @@ int main(void)
    int engine;
 
    ram_rest(); ram_face(0);
-   printf("lbsp 단위 시험 (M2 계약: 엔진 끔=순정 폴드 · 엔진 켬=R 은 트리거)\n");
+   printf("lbsp 단위 시험 (M3 계약: L=A+B 언제나 · R 은 엔진 켤 때만 SP, 끄면 죽음)\n");
 
    /* ── ① 롬 판별 진리표 ───────────────────────────────────── */
    mkrom(rom, "LASTBLADE124");
@@ -115,7 +117,13 @@ int main(void)
       "엔진 켬: L 한 프레임에 A+B 두 비트가 함께 선다");
    ck(lbsp_frame(0, (unsigned short)((1u << RP_L) | (1u << RP_Y))) == (NGP_A | NGP_B),
       "엔진 켬: L 과 Y 를 같이 눌러도 A+B 가 산다");
+   /* ★ 엔진을 끄면 R 은 «아무것도 안 한다» — 겸업 금지. */
    lbsp_set_engine(0); lbsp_reset();
+   ck(lbsp_frame(0, (unsigned short)(1u << RP_R)) == 0,
+      "엔진 끔: R 은 아무것도 안 한다(A+B 로 안 접힌다)");
+   ck(lbsp_frame(0, (unsigned short)((1u << RP_R) | (1u << RP_L))) == (NGP_A | NGP_B),
+      "엔진 끔: R+L 을 같이 눌러도 A+B 는 L 것만");
+   lbsp_reset();
 
    /* ── ② 폴드 4,096조합 전수 — 엔진 켬/끔 둘 다 ───────────── */
    mkrom(rom, "LASTBLADE124");

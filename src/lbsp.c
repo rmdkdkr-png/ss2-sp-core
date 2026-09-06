@@ -272,20 +272,27 @@ uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
 {
    int trig;
 
-   /* ★ 엔진이 꺼져 있으면 **순정 폴드 그대로**다 — R 까지 접는다.
-      이것이 대조군의 정의다. 여기서 한 비트라도 다르면 대조군이 아니다. */
+   /* ★ **R 은 겸업하지 않는다.** 엔진을 꺼도 R 은 A+B 로 안 접힌다.
+      유저 지시: 「a+b는 a+b의 역할이고 SP는 SP다」.
+      화면에 「SP」라 적힌 버튼이 때에 따라 A+B 를 내면 그건 거짓말이다.
+
+      잃는 것은 없다 — NGPC 실기에는 A·B 두 버튼뿐이라 **R 을 A+B 로 접는 것 자체가
+      우리가 만든 규약**이었고, 끔일 때도 Y=A · X=B · **L=A+B** 로 다 낼 수 있다.
+      「끔이 순정 대조군」이라는 구실은 **L 이 그대로 이어받는다** — L 은 엔진과
+      무관하게 A+B 를 내고 그것을 끔·켬 둘 다에서 실측했다(act 128, 위상 2종).
+
+      ⚠ KOF R-2(`kofsp.c`)는 아직 겸업한다. 거기는 유저에게 물어 정할 일이라 안 건드렸다. */
    if (!lb_engine_on || !lb_is_rom)
    {
       if (ret & (1u << RP_Y)) pad |= NGP_A;
       if (ret & (1u << RP_X)) pad |= NGP_B;
-      if ((ret & (1u << RP_L)) || (ret & (1u << RP_R)))
-         pad |= (uint8_t)(NGP_A | NGP_B);
+      if (ret & (1u << RP_L)) pad |= (uint8_t)(NGP_A | NGP_B);
       mac_step = -1;
       trig_prev = 0;
       return pad;
    }
 
-   /* 엔진 켬 — R 은 트리거라 접지 않는다. L 은 그대로 A+B(사람의 동시입력 수단). */
+   /* 엔진 켬 — R 은 트리거. L 은 그대로 A+B(사람의 동시입력 수단). */
    trig = (ret & (1u << RP_R)) ? 1 : 0;
    if (ret & (1u << RP_Y)) pad |= NGP_A;
    if (ret & (1u << RP_X)) pad |= NGP_B;
