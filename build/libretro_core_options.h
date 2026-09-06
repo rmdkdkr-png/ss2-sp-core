@@ -180,18 +180,6 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       },
       "enabled"
    },
-   {
-      "ngp_svcsp_basics",
-      "SvC 강약 버튼 구분",
-      NULL,
-      "켬 = 약P/약K/강P/강K 4버튼(약은 짧게 고정, 강은 즉발). 끔 = 순정 2버튼(B/A 탭=약, 8프레임부터 꾹=강 - 게임 원판정). 끔에서도 Y/X는 즉발 강으로 살아 있습니다. (SNK vs. Capcom MotM 전용)",
-      NULL,
-      "system",
-      {
-         { "enabled",  "켬" },
-         { "disabled", "끔" },
-         { NULL, NULL },
-      },
       "enabled"
    },
    {
@@ -223,18 +211,6 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       },
       "mid"
    },
-   {
-      "ngp_svcsp_land",
-      "SvC 착지 선입력",
-      NULL,
-      "켬 = 점프 공격 뒤 착지 직전에 누른 기본기를 엔진이 기억했다가 착지하는 순간 대신 눌러 줍니다(강P/강K=강. A/B 는 강약 구분 끔일 때 쥔 채 착지=강·탭=약, 켬이면 약 고정). 끔(기본) = 순정 그대로 — 공중에서 누른 건 공중기로만 쓰이고 지상기는 착지 뒤 다시 눌러야 나갑니다. (SNK vs. Capcom MotM 전용)",
-      NULL,
-      "system",
-      {
-         { "disabled", "끔" },
-         { "enabled",  "켬" },
-         { NULL, NULL },
-      },
       "disabled"
    },
    {

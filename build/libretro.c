@@ -388,8 +388,6 @@ extern void    ss2sp_set_layout(int sp);
 /* ── SvC MotM 원버튼 엔진 (svcsp.c) — 롬 헤더로 자동 판별, SvC 때만 이쪽이 받는다 ── */
 extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 extern void    svcsp_set_engine(int on);
-extern void    svcsp_set_basics(int on);
-extern void    svcsp_set_land(int on);
 extern void    svcsp_set_holdsync(int v);
 extern int     svcsp_engine_on(void);
 extern void    svcsp_reset(void);
@@ -607,10 +605,6 @@ static void check_variables(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       svcsp_set_engine(strcmp(var.value, "disabled") != 0);
 
-   var.key   = "ngp_svcsp_basics";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      svcsp_set_basics(strcmp(var.value, "disabled") != 0);   /* 끄면 순정 2버튼 */
 
    /* 강 발동 맞춤 — 기본 켬(mid). 값 "off" 일 때만 순정(즉발 18·홀드 24). */
    var.key   = "ngp_svcsp_holdsync";
@@ -627,12 +621,6 @@ static void check_variables(void)
       kofsp_toast_on = strcmp(var.value, "disabled") ? true : false;
    ov_ktoast = ov_ktoast_p = kofsp_toast_on ? 1 : 0;
 
-   var.key   = "ngp_svcsp_land";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      svcsp_set_land(strcmp(var.value, "enabled") == 0);
-   else
-      svcsp_set_land(0);
 
    var.key   = "ngp_svcsp_toast";
    var.value = NULL;
@@ -758,12 +746,6 @@ void retro_reset(void)
    kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    lbsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2_overlay_rebind();
-   if (svcsp_rom_ok())
-   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
-      static char ver_toast[48];
-      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
-      ss2comm_toast(ver_toast, 180);
-   }
    ss2comm_reset();
    neopop_reset();
 }
@@ -823,12 +805,6 @@ bool retro_load_game(const struct retro_game_info *info)
    kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    lbsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2_overlay_rebind();
-   if (svcsp_rom_ok())
-   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
-      static char ver_toast[48];
-      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
-      ss2comm_toast(ver_toast, 180);
-   }
    if (svcsp_rom_ok())
    {  /* SvC 슬롯 배치 복원 — <시스템>/ngpsvc_slots.bin (없으면 기본 배치) */
       const char *sd2 = NULL;

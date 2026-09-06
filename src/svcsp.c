@@ -109,14 +109,9 @@ static int svc_sp_strong(void)
   return v > 0 ? v : svc_btn_strong(); }
 #define SVC_STRONG_MIN  svc_btn_strong()
 #define SVC_SP_STRONG   svc_sp_strong()
-#define SVC_LAND_WIN    32      /* 착지 선입력 창 — 점프 정점(착지 −28f)에 눌러도 산다.
-                                   18 이던 시절 정점 입력이 창 만료로 죽었다(실측) */
 #define SVC_WEAK_MAX    svc_btn_weak()   /* 강판이 없는 기술의 버튼 상한 — 길게 잡으면 불발 */
 #define SVC_HOLD_MIN    2       /* 1프레임은 위상에 따라 씹힌다 */
 static int svc_engine = -1;                     /* 원버튼 엔진 — 메뉴에서만 켠다 */
-static int svc_native_basics;                   /* 앱 모드 — 기본기는 순정 통과(탭 약/홀드 강) */
-static int svc_basics_split = 1;                /* 옵션 — 약/강 4버튼 리맵. 끄면 순정 2버튼 */
-void svcsp_set_basics(int on) { svc_basics_split = !!on; }
 /* ★ 강 발동 당김 (옵션 ngp_svcsp_holdsync). 2버튼 모드에서 A/B 를 꾹 눌러 내는 강이 **언제 시작하나**만 바꾼다.
    ── 실측으로 갈라 놓은 세 축 (유저 2026-09-04 「쥐는 시간·약 모션·강 모션 따로일걸」 — 맞다) ──
      ① 쥐는 시간(약/강 판정) : 게임 문턱. 카운터 0x0C76 이 2프레임에 1씩, 4가 되면 강 = 버튼 8프레임.
@@ -131,59 +126,6 @@ void svcsp_set_basics(int on) { svc_basics_split = !!on; }
    4버튼 모드(강약 구분 켬)는 홀드 강이 없으므로 무관. 롤백 지점: 태그 stake-3.75. */
 static int svc_hold_sync = 1;                   /* 0=off · 1=mid(기본) · 2=max */
 void svcsp_set_holdsync(int v) { svc_hold_sync = v < 0 ? 0 : (v > 2 ? 2 : v); }
-/* ★ 착지 선입력 창 — 재려고 env 로 흔들 수 있게 뺐다(기본값은 SVC_LAND_WIN 그대로).
-   다시 굽지 않고 문턱을 이분법으로 찾기 위한 것이다. SVCSP_LAND_WIN=<프레임>. */
-static int svc_land_win(void)
-{
-   static int v = -1;
-   if (v < 0)
-   {
-      const char *e = getenv("SVCSP_LAND_WIN");
-      v = (e && *e) ? atoi(e) : SVC_LAND_WIN;
-      if (v < 0) v = 0;
-   }
-   return v;
-}
-
-/* ★ 하강 판정 — 점프 중 최소 Y(가장 높이 오른 자리)를 들고, 거기서 더 안 오르면 하강.
-   ⚠ Y 는 «한 값이 2프레임씩» 이어진다(119 119 111 111 …). 그래서 「직전보다 크거나 같다」로
-     가르면 **올라가는 중에도 격프레임마다 참**이 된다. 최소값으로 갈라야 한다.
-   ⚠ 정점 «그 프레임»은 못 잡는다 — 더 내려와야 하강인 줄 안다. 정점 +1 부터다. */
-static int  land_miny = 255;
-
-/* 하강 규칙 켬/끔 — 기본 켬. 끄면 예전(창만) 규칙으로 돌아간다(대조군용). */
-static int svc_land_fall_rule(void)
-{
-   static int v = -1;
-   if (v < 0) { const char *e = getenv("SVCSP_LAND_FALL"); v = !(e && *e == '0'); }
-   return v;
-}
-
-/* 지금 «내려오는 중»인가. 최소 Y 를 갱신하며 판단한다.
-   더 높이 오르면(작은 Y) 최소를 갱신하고 «아직 상승»,
-   같은 높이가 두 프레임 이어지거나 더 내려오면 «하강». */
-static int svc_land_falling(void)
-{
-   int y = CPUExRAM[OFF_Y1];
-   if (y < land_miny) { land_miny = y; return 0; }
-   /* ★ **더 내려온 것만 하강으로 본다.** 「같은 높이가 두 프레임」으로 가르려다 데였다 —
-      Y 는 «올라갈 때도» 한 값이 2프레임씩 이어져서(119 119 111 111 …) 상승 내내 참이 된다.
-      내가 바로 윗줄 주석에 그 함정을 적어 놓고 그대로 밟았다.
-      대가로 «정점 그 프레임»은 놓친다(정점 +1 부터 무장). 실측으로는 캐릭터가 달라도
-      무장 시작이 **착지 −16** 으로 나란해진다(체공 34짜리도 38짜리도). 그게 이 자의 값어치다. */
-   return y > land_miny;
-}
-
-static int svc_land_on = 0;                     /* 옵션 — 착지 선입력. 기본 끔(유저 결정 2026-09-04) */
-void svcsp_set_land(int on) { svc_land_on = !!on; }
-/* 착지 선입력 상태 — 파일 스코프. 리뷰 지적(2026-09-04): 블록 안 static 이면 svcsp_reset(리셋·스테이트 로드)이
-   못 비워 사이클 중 로드 뒤에도 계속 주입했다. */
-static uint16_t land_prev_ret;
-static int  land_wait, land_cyc, land_air, land_str, air_hold;
-static unsigned char land_a0, air_acte;
-static uint8_t land_btn;
-static void svc_land_reset(void)
-{ land_prev_ret = 0; land_wait = land_cyc = land_air = land_str = air_hold = 0; land_a0 = air_acte = 0; land_btn = 0; land_miny = 255; }
 static int svc_engine_now(void)
 {
    if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
@@ -1244,210 +1186,18 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
                  (unsigned)ret, (unsigned)(took ? tp : pad));
       if (took) { prev_trig = 0; return tp; }
    }
-   if (!svc_native_basics && !svc_basics_split)
-   {  /* ★ 강약 구분 끔(옵션) — A·B 는 **순정 그대로**(탭=약/꾹=강, 약컷 없음).
-         다만 강버튼(Y/X)까지 순정 홀드로 내리면 강기본기가 8프레임짜리가 된다
-         (제보: 「빠른 강기본기 되겠나」) — 그래서 Y/X 는 즉발 주입을 유지한다.
-         = 순정 2버튼 감각 + 원할 때만 쓰는 빠른 강버튼. */
-      if (ret & (1u << 1))
-      {
-         pad |= 0x10;
-         if (svc_fast_strong() && !svc_airborne())
-         { int iv = svc_inject_2btn();                    /* 맞춤이면 2 — 홀드와 같은 프레임 */
-           if (CPUExRAM[OFF_HOLDCNT_P] < iv) CPUExRAM[OFF_HOLDCNT_P] = (uint8_t)iv; }
-      }
-      if (ret & (1u << 9))
-      {
-         pad |= 0x20;
-         if (svc_fast_strong() && !svc_airborne())
-         { int iv = svc_inject_2btn();
-           if (CPUExRAM[OFF_HOLDCNT_K] < iv) CPUExRAM[OFF_HOLDCNT_K] = (uint8_t)iv; }
-      }
-      if (ret & (1u << 10)) pad |= 0x30;                  /* L = A+B */
-      {  /* 강 발동 맞춤 — A/B 를 N프레임(기본 5) 쥐면 카운터를 문턱−1 로 올려 강 래치를 당긴다(지상 전용) */
-         static int hb_p, hb_k;
-         hb_p = (ret & (1u << 0)) ? hb_p + 1 : 0;
-         hb_k = (ret & (1u << 8)) ? hb_k + 1 : 0;
-         int hb = svc_hold_boost();
-         if (hb > 0 && !svc_airborne())
-         {  int iv = svc_thr() - 1; if (iv < 1) iv = 1;
-            if (hb_p >= hb && CPUExRAM[OFF_HOLDCNT_P] < iv) CPUExRAM[OFF_HOLDCNT_P] = (uint8_t)iv;
-            if (hb_k >= hb && CPUExRAM[OFF_HOLDCNT_K] < iv) CPUExRAM[OFF_HOLDCNT_K] = (uint8_t)iv;
-         }
-      }
-   }
-   else if (!svc_native_basics)
-   {  /* 기본 레이아웃(양 모드 공통): A·B=약 고정, Y=강펀치(C) X=강킥(D), L=A+B.
-         약 고정 = 물리 버튼을 6f(실측 약 상한)에서 강제 해제 — 꾹 눌러도 강이 안 된다.
-         메뉴에서는 그냥 짧은 A 누름과 같아 부작용 없음.
-         모던(엔진 켬)에서도 기본기 여섯 자리는 그대로다 — 「기본기는 콤보,
-         기술키는 SP」(제보). 기술키는 R 하나만 넘어간다. 끔이면 R 도 A+B. */
-      static int hold_p, hold_k, wk_p, wk_k;
-      wk_p = (ret & (1u << 0)) ? wk_p + 1 : 0;            /* 물리 B버튼 = NGP A */
-      wk_k = (ret & (1u << 8)) ? wk_k + 1 : 0;            /* 물리 A버튼 = NGP B */
-      pad &= (uint8_t)~0x30;
-      if (wk_p >= 1 && wk_p <= svc_btn_weak()) pad |= 0x10;   /* 약펀치 — 약 상한까지만 */
-      if (wk_k >= 1 && wk_k <= svc_btn_weak()) pad |= 0x20;   /* 약킥   — (문턱 파생) */
-      /* ★ 강 = **즉발**. 게임은 버튼 홀드 길이를 `0x0C76` 에 센다(누르는 동안 2프레임에
-           1씩, 놓으면 0). 값 4 = 버튼 8프레임 = 강 문턱. 그래서 버튼을 12프레임 쥐는
-           대신 **2프레임만 넣고 누른 다음 프레임에 3 을 박으면** 강이 그대로 나온다.
-           실측(쿄·류·테리·켄 × 두 위상): 전부 강펀치 act 99 · 피해가 12프레임 대조군과 동일.
-           박는 시점은 **버튼 누른 다음 프레임**이어야 한다 — 그보다 뒤면 안 나간다.
-           4 이상을 박으면 게임이 되돌려 안 된다. 3 이어야 다음 프레임에 4 가 되어 넘는다. */
-      if (svc_fast_strong() && !svc_airborne())
-      {  /* ★ 즉발은 **지상 전용** — 공중은 홀드 카운터 판정이 달라 3f+주입으로는
-            강이 안 나간다(제보: 공중 강PK 무발동). 공중은 아래 홀드 경로가 받는다. */
-         static int pv, kv;
-         int pn = (ret & (1u << 1)) ? 1 : 0, kn = (ret & (1u << 9)) ? 1 : 0;
-         if (pn && !pv) hold_p = 3;                       /* 엣지에서 3프레임만 */
-         if (kn && !kv) hold_k = 3;
-         pv = pn; kv = kn;
-         /* ★ **매 프레임 검사해서 3 미만일 때만 박는다.** 특정 프레임에 한 번만 박으면
-              게임이 2프레임에 1씩 올리는 주기의 어느 쪽에 걸리느냐로 갈려 수율이 50%
-              (캐릭터마다 한쪽 위상만 성공)였다. 이렇게 두면 위상을 안 탄다.
-              이미 게임이 4 로 올렸으면 덮지 않는다 — 덮으면 도로 문턱 아래로 내려간다. */
-         if (hold_p)
-         { int iv = svc_inject_val(); pad |= 0x10; hold_p--;
-           if (CPUExRAM[OFF_HOLDCNT_P] < iv) CPUExRAM[OFF_HOLDCNT_P] = (uint8_t)iv; }
-         if (hold_k)
-         { int iv = svc_inject_val(); pad |= 0x20; hold_k--;
-           if (CPUExRAM[OFF_HOLDCNT_K] < iv) CPUExRAM[OFF_HOLDCNT_K] = (uint8_t)iv; }
-      }
-      else
-      {
-         if (ret & (1u << 1)) hold_p = SVC_HOLD_STRONG; else if (hold_p) hold_p--;
-         if (ret & (1u << 9)) hold_k = SVC_HOLD_STRONG; else if (hold_k) hold_k--;
-         if (hold_p) pad |= 0x10;                         /* NGP A 지속 = 강펀치 */
-         if (hold_k) pad |= 0x20;                         /* NGP B 지속 = 강킥 */
-      }
-      if (ret & (1u << 10)) pad |= 0x30;                  /* L = A+B(백플립) */
-   }
-   {  /* ★ 착지 선입력 — 공중에서 누른 기본기를 기억했다가 **착지하는 순간** 낸다.
-        실측(순정, 제자리 점프, 착지 43프레임): 공중에서 누른 기본기는 공중 동작으로
-        소비되고 지상으로 안 넘어온다. 착지 뒤에 누른 것만 나가고, 그것도 누른 시점
-        +8~20 프레임이라 「점프 기본기 → 착지 → 기본기」를 손으로 잇기가 어렵다.
-        그래서 착지 직전 창 안에 누른 것을 엔진이 대신 들고 있다가 낸다. */
-      uint16_t bedge = (uint16_t)(ret & ~land_prev_ret);
-      int air = svc_airborne();
-      land_prev_ret = ret;
-      if (!svc_land_on)
-      {  /* 옵션 끔(기본) — 게임엔 손대지 않고 상태만 비운다. 켜는 순간 묵은 무장이 튀지 않게 */
-         land_btn = 0; land_wait = 0; land_cyc = 0;
-      }
-      else if (air)
-      {  /* 공중에서 새로 누른 기본기를 기억한다. 나중 누름이 앞 누름을 덮어쓴다 (air_hold/air_acte 는 파일 스코프)
+   /* ★ 강약 버튼 구분 **폐기** (유저 2026-09-06).
+      전에는 여기서 A·B 를 «약 고정»으로 자르고 Y=강펀치·X=강킥으로 리맵했다.
+      그 기계(약 상한 자르기 · 즉발 주입 · 홀드 카운터 박기)를 통째로 뺐다.
+      이제 A·B 는 **게임에 그대로** 간다 — 순정 판정(탭=약 / 8프레임부터 꾹=강).
 
-            ★ **내려오는 중일 때만 무장한다**(유저: 「점프 유예 타이밍이 넘 길다」).
-              전에는 창(32프레임)만 봤는데, 체공이 캐릭터마다 32~38 이라
-              **정점 입력을 모두 살리는 최소 창이 곧 32** 였다 — 창으로는 못 줄인다.
-              그러면서 체공 34짜리에서는 «뜨자마자 누른 것»까지 살렸다(실측).
-              「하강 중」은 캐릭터에 안 휘둘리는 자다. 창은 위쪽 뚜껑으로만 남는다. */
-         int fall = !svc_land_fall_rule() || svc_land_falling();
-         if      (fall && (bedge & (1u << 1))) { land_btn = 0x10; land_str = 1; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (fall && (bedge & (1u << 9))) { land_btn = 0x20; land_str = 1; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (fall && (bedge & (1u << 0))) { land_btn = 0x10; land_str = 0; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (fall && (bedge & (1u << 8))) { land_btn = 0x20; land_str = 0; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (land_wait > 0)     land_wait--;
-         /* ★ 버튼 하나 = 기술 하나. 이 누름이 **공중 기술로 이미 소비**됐으면 착지 무장을
-            푼다 — 빈 점프에서 Y 한 번에 공중강+착지강 두 방 나가는 오발 방지.
-            소비 판정은 act 로 — 누른 시점의 act 도, 점프 이동 동작(제자리 3~6 / 앞 7~9 /
-            뒤 11~14, 카탈로그 실측)도 아닌 값으로 바뀌면 새 공중 기술이 나간 것.
-            (동작 카운터 리셋으로 가르면 오탐 — P 카운터는 킥 동작 중에도 리셋된다, 실측 65f)
-            점프킥 뒤의 두 번째 누름은 공중 기술을 못 만들므로(점프당 공중 공격 1회)
-            act 가 킥 그대로라 무장이 산다. */
-         if (land_btn)
-         {
-            unsigned a = CPUExRAM[OFF_ACT];
-            int freepass = (a == air_acte || a == 0 ||
-                            (a >= 3 && a <= 9) || (a >= 11 && a <= 14));
-            if (!freepass)
-            {
-               /* 귀속: 내 공중기술은 엣지 +4~8f 에 act 가 뜬다(카탈로그 실측 82/100).
-                  엣지 +2f 이내에 뜬 act 는 **먼저 누른 다른 버튼의 기술**이 이제 막
-                  시작된 것 — 내 누름은 안 소비됐으니 무장 유지 (e60 오귀속 실측). */
-               if (air_hold <= 2) air_acte = (unsigned char)a;
-               else               { land_btn = 0; land_wait = 0; }
-            }
-         }
-         /* ★ 무장된 누름은 첫 12프레임은 게임에 보낸다 — 공중 강(홀드 판정) 성립용
-            (4프레임에서 끊었더니 공중 강이 약 82 로 떨어졌다, 실측). 그 뒤로는
-            **삼킨다** — 게임 눈엔 떼진 상태가 되어 착지 엣지가 깨끗해진다. */
-         if (land_btn && land_wait > 0 && ++air_hold > 12)
-            pad &= (uint8_t)~land_btn;
-      }
-      else
-      {
-         /* ★ 지상 회복 중 누름도 같은 사이클로 받는다 — 착지(67f)가 회복 끝(83f)보다
-            훨씬 이르므로, 사람 손은 킥 히트(71f) 무렵 = 이미 지상에서 누르게 된다.
-            그 누름은 게임 자체 버퍼(행동가능 3~4f 전)보다 이르면 그냥 죽던 것(실측
-            e66~78 전멸). 행동불가 + 비중립 act 일 때만 무장 — 중립·걷기에서는 게임이
-            직접 받으므로 끼어들지 않는다(이중발사 방지). */
-         if ((bedge & 0x0303u) && svc_dbg())
-            fprintf(stderr, "[land] g-edge cyc=%d actable=%d act=%u\n",
-                    land_cyc, svc_actable(), (unsigned)CPUExRAM[OFF_ACT]);
-         if (!land_cyc && (bedge & 0x0303u) && !svc_actable())
-         {
-            unsigned a = CPUExRAM[OFF_ACT];
-            if (!(a == 0 || a == 2 || a == 21 || a == 22 || a == 23 || a == 255))
-            {
-               if      (bedge & (1u << 1)) { land_btn = 0x10; land_str = 1; }
-               else if (bedge & (1u << 9)) { land_btn = 0x20; land_str = 1; }
-               else if (bedge & (1u << 0)) { land_btn = 0x10; land_str = 0; }
-               else                        { land_btn = 0x20; land_str = 0; }
-               land_cyc = 36; land_wait = 0;
-               land_a0  = (unsigned char)a;
-            }
-         }
-         land_miny = 255;   /* 지상 — 다음 점프를 위해 비운다 */
-         if (land_air && land_wait > 0 && land_btn)       /* 방금 내려앉았다 */
-            /* ★ 엣지 사이클 시동. 착지 순간 한 번만 누르는 옛 방식은 「킥이 늦게 나가
-               착지 후에도 킥 동작이 이어지는」 깊은 히트에서 회복 프레임에 먹혀 죽었다
-               (실측: 착지 67f, 회복 끝 83f, 첫 발사는 그 사이에 만료).
-               게임은 행동가능 3~4프레임 전까지의 **엣지**를 버퍼로 받아 주므로(실측
-               p80→83 발동, p79 죽음), 3f 누름+2f 뗌을 반복해 엣지를 계속 만들면
-               그중 하나가 반드시 버퍼 창에 걸린다 — 손입력 재현으로 콤보 성립 확인. */
-            { land_cyc = 36; land_wait = 0;
-              land_a0 = CPUExRAM[OFF_ACT]; }
-         if (land_cyc > 0)
-         {
-            /* 성공 감지는 **act 로만** — act 가 무장 시점 값도, 중립(0·2·21~23·255)도,
-               점프 이동(3~9·11~14)도 아닌 값으로 바뀌면 기술이 나간 것 → 즉시 중단.
-               (동작 카운터 리셋으로 가르면 오탐 — 카운터는 킥 진행 중 74f 에도
-               발동 없이 리셋된다, CSV 실측. 그 오탐이 사이클을 4프레임 만에 죽였다) */
-            unsigned a = CPUExRAM[OFF_ACT];
-            int neutral = (a == 0 || a == 2 || a == 21 || a == 22 || a == 23 || a == 255 ||
-                           (a >= 3 && a <= 9) || (a >= 11 && a <= 14));
-            int ph = (36 - land_cyc) % 5;
-            land_cyc--;
-            if (!neutral && a != land_a0)
-               { land_cyc = 0; land_btn = 0; }
-            else
-            {
-               if (ph < 3)
-               {  /* 누름 3프레임 — **강 버튼이었을 때만** 즉발 카운터를 박는다. 물리
-                     엣지는 공중에서 이미 소진돼 즉발 경로가 착지에서는 안 걸리기
-                     때문(실측). 약 버튼 선입력은 주입 없이 3프레임 = 약으로 나간다. */
-                  pad |= land_btn;
-                  /* ★ 홀드 입력 지원(2026-09-04 유저 제보 「착지 시 강이 안 되고 약이 나간다」): 약 자리 버튼(A/B)이라도
-                     발사 순간 아직 쥐고 있으면 홀드 의도 = 강. 3f 탭으로만 내보내면 순정 2버튼 사용자의 점프강→착지강이
-                     늘 약으로 둔갑한다. 강약 구분(basics) 켬에서는 A/B 가 약 고정이라 그대로 둔다. */
-                  int held_weak = (ret & ((land_btn & 0x10) ? (1u << 0) : (1u << 8))) != 0;
-                  int as_strong = land_str || (held_weak && (svc_native_basics || !svc_basics_split));
-                  if (as_strong && svc_fast_strong())
-                  {
-                     int off = (land_btn & 0x10) ? OFF_HOLDCNT_P : OFF_HOLDCNT_K;
-                     int iv  = svc_inject_val();
-                     if (CPUExRAM[off] < iv) CPUExRAM[off] = (uint8_t)iv;
-                  }
-               }
-               else pad &= (uint8_t)~0x30;   /* 뗌 2프레임 — 다음 엣지 준비 */
-               if (land_cyc == 0) land_btn = 0;
-            }
-         }
-         else land_btn = 0;
-      }
-      land_air = air;
-   }
+      ⚠ `L = A+B` 는 리맵의 일부처럼 이 블록 «안»에 있었지만 **버튼 계약**이다.
+        같이 지우면 SvC 만 A+B 가 없어진다 — 어제 고친 병이 그대로 돌아온다. 남긴다. */
+   if (ret & (1u << 10)) pad |= 0x30;                     /* L = A+B — 언제나 */
+   /* ★ 착지 선입력 **폐기** (유저 2026-09-06).
+      공중에서 누른 기본기를 기억했다가 착지 순간 대신 내주던 기계를 뺐다.
+      왜 프레임 창으로는 못 풀었는지는 `tools/svc/LANDWIN.md` 에 남는다 —
+      체공이 캐릭터마다 32~38 이라 «정점을 모두 살리는 최소 창»이 곧 기존 값이었다. */
    {  /* ★ 동작 번호 상시 표시 (SVCSP_ACTSHOW=1) — 검증용. 화면 구석에 act(0x0968)를
          매 프레임 그려서, 영상·스샷만으로 「실제 무엇이 발동했나」를 게임이 직접 말한다.
          사람 눈으로 강약을 가르는 판독(임팩트 컷으로는 원리적으로 불가, 실측 3/15)을 없앤다.
@@ -1466,7 +1216,9 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
    }
    if (!svc_engine_now())
    {
-      if (!svc_native_basics && (ret & (1u << 11))) pad |= 0x30;   /* 엔진 끔: R 도 A+B */
+      /* 엔진 끔 → R 은 A+B. SvC·KOF·월화 공통 계약(유저 「svc처럼 해라」).
+         전에는 `!svc_native_basics` 가 붙어 있었는데 그 변수를 폐기했다. 조건 없이 남긴다. */
+      if (ret & (1u << 11)) pad |= 0x30;
       prev_trig = 0;
       return pad;
    }
@@ -1758,15 +1510,12 @@ uint8_t svcsp_frame_app(uint8_t pad, uint16_t trig)
    if (pad & 0x10) ret |= (1u << 0);    /* NGP A(펀치) → 약P 엣지 자리 */
    if (pad & 0x20) ret |= (1u << 8);    /* NGP B(킥)  → 약K 엣지 자리 */
    if (trig & 1u)  ret |= (1u << 11);   /* SP 키 → 기술키 */
-   svc_native_basics = 1;
    out = svcsp_frame(pad, ret);
-   svc_native_basics = 0;
    return out;
 }
 
 void svcsp_reset(void)
 {
-   svc_land_reset();                    /* 착지 선입력 잔재 — 리뷰 지적 */
    q_n = q_i = q_left = 0;
    pending = 0; pending_left = 0; pending_kind = 0; move_started = 0;
    retry_mv = 0; retry_cnt = 0; retry_at = 0; macro_end_at = 0; compile_no_retry = 0;
