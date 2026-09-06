@@ -725,7 +725,7 @@ index ef01e22..b0b90b7 100644
  {
     if(type == RETRO_MEMORY_SYSTEM_RAM)
 diff --git a/libretro_core_options.h b/libretro_core_options.h
-index a0dc3ec..5b3c278 100644
+index a0dc3ec..e320cf8 100644
 --- a/libretro_core_options.h
 +++ b/libretro_core_options.h
 @@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
@@ -737,7 +737,7 @@ index a0dc3ec..5b3c278 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -52,6 +52,195 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -52,6 +52,181 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
        },
        "english",
     },
@@ -839,8 +839,6 @@ index a0dc3ec..5b3c278 100644
 +         { "disabled", "끔" },
 +         { NULL, NULL },
 +      },
-+      "disabled"
-+   },
 +   {
 +      "ngp_kofsp_engine",
 +      "KOF R-2 모던 조작 (원버튼 필살기)",
@@ -853,8 +851,6 @@ index a0dc3ec..5b3c278 100644
 +         { "disabled", "끔" },
 +         { NULL, NULL },
 +      },
-+      "disabled"
-+   },
 +   {
 +      "ngp_svcsp_engine",
 +      "SvC 모던 조작 (원버튼 필살기)",
@@ -867,10 +863,6 @@ index a0dc3ec..5b3c278 100644
 +         { "disabled", "끔" },
 +         { NULL, NULL },
 +      },
-+      "enabled"
-+   },
-+      "enabled"
-+   },
 +   {
 +      "ngp_kofsp_toast",
 +      "KOF 기술 표기 표시",
@@ -883,8 +875,6 @@ index a0dc3ec..5b3c278 100644
 +         { "disabled", "끔" },
 +         { NULL, NULL },
 +      },
-+      "enabled"
-+   },
 +   {
 +      "ngp_svcsp_holdsync",
 +      "SvC 강 발동 당김",
@@ -900,8 +890,6 @@ index a0dc3ec..5b3c278 100644
 +      },
 +      "mid"
 +   },
-+      "disabled"
-+   },
 +   {
 +      "ngp_svcsp_toast",
 +      "SvC 기술명 표시",
@@ -914,8 +902,6 @@ index a0dc3ec..5b3c278 100644
 +         { "disabled", "끔" },
 +         { NULL, NULL },
 +      },
-+      "enabled"
-+   },
 +   {
 +      "ngp_ss2sp_sides",
 +      "SS2 Side Art Pillars",
@@ -933,7 +919,7 @@ index a0dc3ec..5b3c278 100644
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
  };
  
-@@ -72,6 +261,17 @@ struct retro_core_option_definition option_defs_us[] = {
+@@ -72,6 +247,17 @@ struct retro_core_option_definition option_defs_us[] = {
        },
        "english",
     },
