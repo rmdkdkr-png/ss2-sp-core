@@ -440,7 +440,9 @@ static bool ss2sp_enable = true;
    SP 배치(기술 목록 선택·타이거니)는 엔진(ss2comm/ss2sp)이 다 들고 있다. */
 #define SS2_SIDE_W 64
 #define SS2_WIDE_W (SS2_SIDE_W*2 + FB_WIDTH)
-static bool     ss2_sides = true;                 /* 코어 옵션 ngp_ss2sp_sides */
+/* ★ 기둥 아트 **폐기** (유저 2026-09-07). 옵션을 없앴으므로 이 값이 그대로 굳는다 —
+   true 로 두면 «영영 켜진 채»가 된다. 배관은 남긴다(프레임 폭 계산이 본다). */
+static bool     ss2_sides = false;
 static int      comm_mode_opt = 4;                /* 해설창 옵션 원값 (0끔/2안위/3안아래/4위띠) */
 
 /* 기둥이 켜져 있으면 위-띠(above)를 **화면 안 아래**로 강등한다 — 옆(288)이
@@ -520,54 +522,6 @@ static void check_variables(void)
    if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       ss2sp_enable = strcmp(var.value, "disabled") ? true : false;
 
-   /* 해설 옵션 */
-   var.key   = "ngp_ss2sp_comm";
-   var.value = NULL;
-   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      ss2comm_set_enabled(strcmp(var.value, "disabled") != 0);
-      ov_chat = ov_chat_p = (strcmp(var.value, "disabled") != 0) ? 1 : 0;
-   }
-
-   /* 캐릭터 챗 / 심판(쿠로코) — 마스터(ngp_ss2sp_comm)와 따로 끈다. 유저 요청(2026-09-03):
-      「캐릭터 챗은 기본 끔, 쿠로코 목소리는 남겨라」. 마스터를 끄면 둘 다 죽으므로(ss2comm 539행)
-      앱 설정은 이 두 키를 쓰고 마스터는 켜 둔다. */
-   var.key   = "ngp_ss2sp_chat";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      ss2comm_set_chat(strcmp(var.value, "disabled") != 0);
-   else
-      ss2comm_set_chat(0);                           /* 옵션이 없으면 기본 끔 */
-   var.key   = "ngp_ss2sp_ref";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      int on = strcmp(var.value, "disabled") != 0;
-      ss2comm_set_ref(on); ov_ref = ov_ref_p = (unsigned char)on;
-   }
-
-   var.key   = "ngp_ss2sp_comm_spk";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      /* v0.7: 해설자가 15명이다. 표는 엔진(ss2comm)이 들고 있으므로 이름으로 찾는다 —
-         대사표를 늘려도 이 파일은 안 고쳐도 된다. */
-      static const char *const spk_key[] = {
-         "haohmaru","nakoruru","hanzo","galford","rimururu","genjuro","ukyo","charlotte",
-         "jubei","kazuki","sogetsu","asura","shiki","morozumi","yuga"
-      };
-      int sp = 0, k;
-      for (k = 0; k < (int)(sizeof(spk_key)/sizeof(spk_key[0])); k++)
-         if (!strcmp(var.value, spk_key[k])) { sp = k; break; }
-      ss2comm_set_speaker(sp);
-      ov_spk = ov_spk_p = (unsigned char)sp;
-   }
-
-   var.key   = "ngp_ss2sp_comm_duo";
-   var.value = NULL;
-   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      ss2comm_set_duo(!strcmp(var.value, "enabled"));
-
    var.key   = "ngp_svcsp_engine";
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -579,22 +533,6 @@ static void check_variables(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       svcsp_toast_on = strcmp(var.value, "disabled") ? true : false;
    ov_toast = ov_toast_p = svcsp_toast_on ? 1 : 0;
-
-   var.key   = "ngp_ss2sp_comm_draw";
-   var.value = NULL;
-   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      int prev = ss2comm_band_h() | (ss2comm_band_top() << 8);
-      int mode = 4;                                  /* 기본: 화면 밖 **위** 띠 (아래는 어색하다는 제보) */
-      if      (!strcmp(var.value, "disabled"))     mode = 0;
-      else if (!strcmp(var.value, "above"))        mode = 4;
-      else if (!strcmp(var.value, "inside_top"))   mode = 2;
-      else if (!strcmp(var.value, "inside_bottom"))mode = 3;
-      comm_mode_opt = mode;
-      ss2_apply_comm_mode();                         /* 기둥 켬이면 above → 화면 안 아래 */
-      if ((ss2comm_band_h() | (ss2comm_band_top() << 8)) != prev)
-         update_video = true;                        /* 화면 세로가 바뀌면 지오메트리 재통보 */
-   }
 
    var.key   = "ngp_svcsp_band";
    var.value = NULL;
@@ -613,36 +551,6 @@ static void check_variables(void)
       else ss2comm_sp_band(0);
    }
 
-   var.key   = "ngp_ss2sp_sides";
-   var.value = NULL;
-   if (!cv_booted && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      bool on = strcmp(var.value, "disabled") != 0;
-      if (on != ss2_sides)
-      {
-         ss2_sides = on;
-         ss2_apply_comm_mode();
-         ss2_set_geometry();
-      }
-   }
-
-   var.key   = "ngp_ss2sp_dub";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      int on = strcmp(var.value, "disabled") != 0;
-      ss2voice_set_dub(on);
-      ov_dub = ov_dub_p = (unsigned char)on;
-   }
-
-   var.key   = "ngp_ss2sp_comm_vol";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      int pct = atoi(var.value);
-      ss2voice_set_volume(pct);
-      ov_vol = ov_vol_p = (unsigned char)((pct + 5) / 10);
-   }
    cv_booted = true;
 
    /* 오버레이 그림자값을 방금 적용한 옵션과 맞춘다 */

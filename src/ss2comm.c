@@ -292,7 +292,8 @@ static unsigned char anec_at[15], weap_at[15];  /* 썰·무기 소회를 어디�
 static unsigned ref_next;                       /* 심판끼리의 최소 간격 */
 static unsigned ref_shown;                      /* 아래 칸에 세운 시각 (0 = 아직) */
 static char     ref_text[160];
-static int ref_enabled = 1;       /* 심판 온오프 — 끄면 쿠로코가 아예 안 선다 (설정에서 토글) */
+static int ref_enabled = 0;       /* 심판 쿠로코 — **폐기**(유저 2026-09-07). 옵션이 없어졌으니
+                                     이 기본값이 굳는다. 1 로 두면 도로 살아난다. */
 static unsigned char ref_flash;   /* 반짝이 — 「승부!」「한 판!」 같은 구령은 게임 연출처럼 깜빡인다 */
 static int ref_ttl;               /* 이 줄의 수명 — 구령은 짧게 */
 static unsigned char intro_pending;    /* 인트로 진입 때 상대 미탑재 — 인트로 동안 재확인한다
@@ -311,7 +312,7 @@ static unsigned char intro_refok; /* 이 판에 심판이 서나 (인트로 진�
 static unsigned plate2_at;        /* 팻말 둘째 마디 「훌륭하오!」 시각 (이름…! 다음) */
 static unsigned char ref_thump_pend;   /* 구령이 선 프레임 — 앱이 진동 한 번으로 받아 간다 */
 static unsigned char anecv_used[15];   /* 주제별로 화자 목소리 썰 첫 마디를 냈나 */
-static int chat_enabled = 1;      /* 캐릭터챗 온오프 — 쿠로코와 따로 끈다 (셋 다 조합 가능) */
+static int chat_enabled = 0;      /* 캐릭터 챗 — **폐기**(유저 2026-09-07). 위와 같은 이유. */
 static unsigned plate_at;         /* 승자 팻말 호명 시각 (0 = 없음) */
 static int      plate_char;       /* 팻말에 오를 승자 */
 
@@ -1753,7 +1754,10 @@ out:
    화면 아래에 띠를 덧붙이고 초상 + 8x8 갈무리 글리프 + 연출을 찍는다. 폰트 의존 0. */
 #include "ss2comm_font.h"
 
-static int cm_draw = 4;   /* 기본: 화면 밖 위 띠 (아래는 어색하다는 제보로 상방 기본) */
+/* ★ 해설 그리기 **끔이 기본** (유저 2026-09-07 「해설같은거 코어메뉴도 정리」).
+   4(화면 밖 위 띠)로 두면 옵션을 지운 뒤 그 값이 굳어 **화면 세로가 152→184** 로 늘어난다.
+   SvC 코어에서 실제로 그렇게 나왔다. 그리기만 끈다 — `cm_on` 은 다른 길이 같이 쓴다. */
+static int cm_draw = 0;
 void ss2comm_draw_enable(int mode){ cm_draw = mode; }
 /* 0 끔 / 1 화면 밖 아래 띠 / 2 화면 안 위 / 3 화면 안 아래 / 4 화면 밖 위 띠 */
 
