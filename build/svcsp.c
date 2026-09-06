@@ -148,8 +148,8 @@ static int svc_land_win(void)
 /* ★ 하강 판정 — 점프 중 최소 Y(가장 높이 오른 자리)를 들고, 거기서 더 안 오르면 하강.
    ⚠ Y 는 «한 값이 2프레임씩» 이어진다(119 119 111 111 …). 그래서 「직전보다 크거나 같다」로
      가르면 **올라가는 중에도 격프레임마다 참**이 된다. 최소값으로 갈라야 한다.
-   ⚠ 정점은 2프레임이라(85 85) 그 «둘째 프레임»부터 무장한다 — 정점 입력이 살아야 한다. */
-static int  land_miny = 255, land_minc;
+   ⚠ 정점 «그 프레임»은 못 잡는다 — 더 내려와야 하강인 줄 안다. 정점 +1 부터다. */
+static int  land_miny = 255;
 
 /* 하강 규칙 켬/끔 — 기본 켬. 끄면 예전(창만) 규칙으로 돌아간다(대조군용). */
 static int svc_land_fall_rule(void)
@@ -165,9 +165,13 @@ static int svc_land_fall_rule(void)
 static int svc_land_falling(void)
 {
    int y = CPUExRAM[OFF_Y1];
-   if (y < land_miny) { land_miny = y; land_minc = 1; return 0; }
-   if (y > land_miny) return 1;
-   return (++land_minc >= 2);
+   if (y < land_miny) { land_miny = y; return 0; }
+   /* ★ **더 내려온 것만 하강으로 본다.** 「같은 높이가 두 프레임」으로 가르려다 데였다 —
+      Y 는 «올라갈 때도» 한 값이 2프레임씩 이어져서(119 119 111 111 …) 상승 내내 참이 된다.
+      내가 바로 윗줄 주석에 그 함정을 적어 놓고 그대로 밟았다.
+      대가로 «정점 그 프레임»은 놓친다(정점 +1 부터 무장). 실측으로는 캐릭터가 달라도
+      무장 시작이 **착지 −16** 으로 나란해진다(체공 34짜리도 38짜리도). 그게 이 자의 값어치다. */
+   return y > land_miny;
 }
 
 static int svc_land_on = 0;                     /* 옵션 — 착지 선입력. 기본 끔(유저 결정 2026-09-04) */
@@ -179,7 +183,7 @@ static int  land_wait, land_cyc, land_air, land_str, air_hold;
 static unsigned char land_a0, air_acte;
 static uint8_t land_btn;
 static void svc_land_reset(void)
-{ land_prev_ret = 0; land_wait = land_cyc = land_air = land_str = air_hold = 0; land_a0 = air_acte = 0; land_btn = 0; land_miny = 255; land_minc = 0; }
+{ land_prev_ret = 0; land_wait = land_cyc = land_air = land_str = air_hold = 0; land_a0 = air_acte = 0; land_btn = 0; land_miny = 255; }
 static int svc_engine_now(void)
 {
    if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
@@ -1394,7 +1398,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
                land_a0  = (unsigned char)a;
             }
          }
-         land_miny = 255; land_minc = 0;   /* 지상 — 다음 점프를 위해 비운다 */
+         land_miny = 255;   /* 지상 — 다음 점프를 위해 비운다 */
          if (land_air && land_wait > 0 && land_btn)       /* 방금 내려앉았다 */
             /* ★ 엣지 사이클 시동. 착지 순간 한 번만 누르는 옛 방식은 「킥이 늦게 나가
                착지 후에도 킥 동작이 이어지는」 깊은 히트에서 회복 프레임에 먹혀 죽었다
