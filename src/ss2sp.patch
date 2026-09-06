@@ -17,7 +17,7 @@ index b61e812..a6f9fe6 100644
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..b0b90b7 100644
+index ef01e22..72a0664 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -34,7 +34,7 @@ index ef01e22..b0b90b7 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,175 @@ static void check_color_depth(void)
+@@ -377,6 +379,178 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -121,7 +121,10 @@ index ef01e22..b0b90b7 100644
 +   SP 배치(기술 목록 선택·타이거니)는 엔진(ss2comm/ss2sp)이 다 들고 있다. */
 +#define SS2_SIDE_W 64
 +#define SS2_WIDE_W (SS2_SIDE_W*2 + FB_WIDTH)
-+static bool     ss2_sides = true;                 /* 코어 옵션 ngp_ss2sp_sides */
++/* ★ 기둥 아트 **폐기** (유저 2026-09-07). 옵션을 없앴으므로 이 값이 그대로 굳는다 —
++   기본값이 true 였어서 그냥 지우면 «영영 켜진 채»가 됐다. false 로 내린다.
++   배관은 남겨 둔다(오버레이·프레임 폭 계산이 이 값을 본다). */
++static bool     ss2_sides = false;
 +static uint16_t ss2_wide[SS2_WIDE_W * (FB_HEIGHT + SS2COMM_BAND_MAX)];
 +static unsigned ss2_last_w = FB_WIDTH, ss2_last_h = FB_HEIGHT;
 +/* 오버레이가 직접 만지는 값 — 코어 옵션이 바뀌면 여기로도 동기한다 */
@@ -210,7 +213,7 @@ index ef01e22..b0b90b7 100644
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +563,135 @@ static void check_variables(void)
+@@ -392,6 +566,83 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -221,35 +224,8 @@ index ef01e22..b0b90b7 100644
 +      ss2sp_enable = strcmp(var.value, "disabled") ? true : false;
 +
 +   /* 해설 옵션 */
-+   var.key   = "ngp_ss2sp_comm";
-+   var.value = NULL;
-+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-+   {
-+      ss2comm_set_enabled(strcmp(var.value, "disabled") != 0);
-+      ov_chat = ov_chat_p = (strcmp(var.value, "disabled") != 0) ? 1 : 0;
-+   }
 +
-+   var.key   = "ngp_ss2sp_comm_spk";
-+   var.value = NULL;
-+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-+   {
-+      /* v0.7: 해설자가 15명이다. 표는 엔진(ss2comm)이 들고 있으므로 이름으로 찾는다 —
-+         대사표를 늘려도 이 파일은 안 고쳐도 된다. */
-+      static const char *const spk_key[] = {
-+         "haohmaru","nakoruru","hanzo","galford","rimururu","genjuro","ukyo","charlotte",
-+         "jubei","kazuki","sogetsu","asura","shiki","morozumi","yuga"
-+      };
-+      int sp = 0, k;
-+      for (k = 0; k < (int)(sizeof(spk_key)/sizeof(spk_key[0])); k++)
-+         if (!strcmp(var.value, spk_key[k])) { sp = k; break; }
-+      ss2comm_set_speaker(sp);
-+      ov_spk = ov_spk_p = (unsigned char)sp;
-+   }
 +
-+   var.key   = "ngp_ss2sp_comm_duo";
-+   var.value = NULL;
-+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-+      ss2comm_set_duo(!strcmp(var.value, "enabled"));
 +
 +   var.key   = "ngp_svcsp_engine";
 +   var.value = NULL;
@@ -294,20 +270,6 @@ index ef01e22..b0b90b7 100644
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 +      lbsp_set_engine(strcmp(var.value, "disabled") != 0);
 +
-+   var.key   = "ngp_ss2sp_comm_draw";
-+   var.value = NULL;
-+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-+   {
-+      int prev = ss2comm_band_h() | (ss2comm_band_top() << 8);
-+      int mode = 4;                                  /* 기본: 화면 밖 **위** 띠 (아래는 어색하다는 제보) */
-+      if      (!strcmp(var.value, "disabled"))     mode = 0;
-+      else if (!strcmp(var.value, "above"))        mode = 4;
-+      else if (!strcmp(var.value, "inside_top"))   mode = 2;
-+      else if (!strcmp(var.value, "inside_bottom"))mode = 3;
-+      ss2comm_draw_enable(mode);
-+      if ((ss2comm_band_h() | (ss2comm_band_top() << 8)) != prev)
-+         update_video = true;                        /* 화면 세로가 바뀌면 지오메트리 재통보 */
-+   }
 +
 +   var.key   = "ngp_svcsp_band";
 +   var.value = NULL;
@@ -327,17 +289,6 @@ index ef01e22..b0b90b7 100644
 +      else ss2comm_sp_band(0);
 +   }
 +
-+   var.key   = "ngp_ss2sp_sides";
-+   var.value = NULL;
-+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-+   {
-+      bool on = strcmp(var.value, "disabled") != 0;
-+      if (on != ss2_sides)
-+      {
-+         ss2_sides = on;
-+         ss2_set_geometry();
-+      }
-+   }
 +
 +   /* 오버레이 그림자값을 방금 적용한 옵션과 맞춘다 */
 +   ov_sp    = ov_sp_p    = svcsp_rom_ok() ? (svcsp_engine_on() ? 1 : 0)
@@ -346,7 +297,7 @@ index ef01e22..b0b90b7 100644
  }
  
  void retro_init(void)
-@@ -436,6 +736,17 @@ void retro_init(void)
+@@ -436,6 +687,17 @@ void retro_init(void)
  
  void retro_reset(void)
  {
@@ -364,7 +315,7 @@ index ef01e22..b0b90b7 100644
     neopop_reset();
  }
  
-@@ -448,6 +759,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +710,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -372,7 +323,7 @@ index ef01e22..b0b90b7 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +770,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +721,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -386,7 +337,7 @@ index ef01e22..b0b90b7 100644
  
        { 0 },
     };
-@@ -479,6 +798,32 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +749,32 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -419,7 +370,7 @@ index ef01e22..b0b90b7 100644
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +901,170 @@ static void update_input(void)
+@@ -556,6 +852,170 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -590,24 +541,23 @@ index ef01e22..b0b90b7 100644
  }
  
  void retro_run(void)
-@@ -598,12 +1107,68 @@ void retro_run(void)
+@@ -598,12 +1058,68 @@ void retro_run(void)
        update_video = false;
     }
  
 -   Emulate(&spec, sound_buf);
 +   {
 +   int ss2_paused = ss2comm_overlay_active();
- 
--   width  = spec.DisplayRect.w;
--   height = spec.DisplayRect.h;
++
 +   if (!ss2_paused)
 +   {
 +      Emulate(&spec, sound_buf);
- 
--   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++
 +      width  = spec.DisplayRect.w;
 +      height = spec.DisplayRect.h;
-+
+ 
+-   width  = spec.DisplayRect.w;
+-   height = spec.DisplayRect.h;
 +      {
 +         const char *cline = ss2comm_frame();
 +         int band = ss2comm_band_h();
@@ -637,7 +587,8 @@ index ef01e22..b0b90b7 100644
 +      height = ss2_last_h;
 +      spec.SoundBufSize = 0;
 +   }
-+
+ 
+-   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
 +   if (sides_on())
 +   {
 +      /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
@@ -663,7 +614,7 @@ index ef01e22..b0b90b7 100644
  
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-@@ -629,11 +1194,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+@@ -629,11 +1145,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -684,7 +635,7 @@ index ef01e22..b0b90b7 100644
  
     check_color_depth();
  }
-@@ -762,6 +1331,10 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1282,10 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
@@ -695,7 +646,7 @@ index ef01e22..b0b90b7 100644
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1355,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1306,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  
@@ -725,7 +676,7 @@ index ef01e22..b0b90b7 100644
  {
     if(type == RETRO_MEMORY_SYSTEM_RAM)
 diff --git a/libretro_core_options.h b/libretro_core_options.h
-index a0dc3ec..f6fc232 100644
+index a0dc3ec..4893bc9 100644
 --- a/libretro_core_options.h
 +++ b/libretro_core_options.h
 @@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
@@ -737,7 +688,7 @@ index a0dc3ec..f6fc232 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -52,6 +52,191 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -52,6 +52,105 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
        },
        "english",
     },
@@ -754,78 +705,6 @@ index a0dc3ec..f6fc232 100644
 +         { NULL, NULL},
 +      },
 +      "enabled",
-+   },
-+   {
-+      "ngp_ss2sp_comm",
-+      "SS2 Character Commentary",
-+      NULL,
-+      "Samurai Shodown! 2 only. One of 15 characters comments on the match: KO, perfect win, comeback, win streak, story progress and menu chatter. Press L2 during play to hand over to the next commentator. Korean text.",
-+      NULL,
-+      "video",
-+      {
-+         { "enabled",  "Enabled" },
-+         { "disabled", "Disabled" },
-+         { NULL, NULL},
-+      },
-+      "enabled",
-+   },
-+   {
-+      "ngp_ss2sp_comm_spk",
-+      "SS2 Commentary Speaker",
-+      NULL,
-+      "Who does the talking.",
-+      NULL,
-+      "video",
-+      {
-+         { "haohmaru",  "Haohmaru" },
-+         { "nakoruru",  "Nakoruru" },
-+         { "hanzo",     "Hanzo" },
-+         { "galford",   "Galford" },
-+         { "rimururu",  "Rimururu" },
-+         { "genjuro",   "Genjuro" },
-+         { "ukyo",      "Ukyo" },
-+         { "charlotte", "Charlotte" },
-+         { "jubei",     "Jubei" },
-+         { "kazuki",    "Kazuki" },
-+         { "sogetsu",   "Sogetsu" },
-+         { "asura",     "Asura" },
-+         { "shiki",     "Shiki" },
-+         { "morozumi",  "Morozumi" },
-+         { "yuga",      "Yuga" },
-+         { NULL, NULL},
-+      },
-+      "haohmaru",
-+   },
-+   {
-+      "ngp_ss2sp_comm_duo",
-+      "SS2 Commentary Partner",
-+      NULL,
-+      "In big moments a second character answers the commentator in one short line - KO, super move, comeback, danger, and the end-of-match verdict. Turn it off if one voice is enough.",
-+      NULL,
-+      "video",
-+      {
-+         { "enabled",  "Enabled" },
-+         { "disabled", "Disabled" },
-+         { NULL, NULL},
-+      },
-+      "enabled",
-+   },
-+   {
-+      "ngp_ss2sp_comm_draw",
-+      "SS2 Commentary Display",
-+      NULL,
-+      "Outside the screen (default): the core adds a 32px band above or below the game image and draws the line there with its own Korean pixel font (Galmuri 11px) plus the speaker's portrait - the game image is never covered, but the picture gets taller. Inside the screen: draws a dialogue box over the game image instead, so the console screen size and aspect stay exactly as they were. Frontend notification only: no drawing, uses RetroArch OSD (Korean may not render, depends on the frontend font).",
-+      NULL,
-+      "video",
-+      {
-+         { "above",         "Outside the screen, above" },
-+         { "enabled",       "Outside the screen, below" },
-+         { "inside_top",    "Inside the screen, top" },
-+         { "inside_bottom", "Inside the screen, bottom" },
-+         { "disabled",      "Frontend notification only" },
-+         { NULL, NULL},
-+      },
-+      "above",
 +   },
 +   {
 +      "ngp_lbsp_engine",
@@ -912,24 +791,10 @@ index a0dc3ec..f6fc232 100644
 +      },
 +      "enabled"
 +   },
-+   {
-+      "ngp_ss2sp_sides",
-+      "SS2 Side Art Pillars",
-+      NULL,
-+      "Adds 64px pillars on both sides of the game image (288px wide output). Each pillar shows the fighter's large card illustration, rebuilt at runtime from your own ROM - the core ships only tile address tables, no artwork. The pillars react to the match: shake on hit, white flash on heavy damage, red tint when near death, grayscale on KO. Includes the Quick Settings overlay (hold Down + Option) with one-button special move assignment.",
-+      NULL,
-+      "video",
-+      {
-+         { "enabled",  "Enabled" },
-+         { "disabled", "Disabled" },
-+         { NULL, NULL},
-+      },
-+      "enabled",
-+   },
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
  };
  
-@@ -72,6 +257,17 @@ struct retro_core_option_definition option_defs_us[] = {
+@@ -72,6 +171,17 @@ struct retro_core_option_definition option_defs_us[] = {
        },
        "english",
     },
