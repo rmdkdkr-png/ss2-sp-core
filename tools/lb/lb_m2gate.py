@@ -44,10 +44,17 @@ def run(script, opts):
     return [int(r[2]) for r in rows]      # csv 는 frame,pad,<offset들> — 값은 r[2]부터
 
 
-def one(idle, opts, tail=70):
+# 뛰어넘어 자리를 바꾸는 대본 — 반전이 1(왼쪽 봄)이 된다.
+# 실측: f142 에 반전이 0→1 로 바뀌고, 되넘으면 f322 에 0 으로 «돌아온다».
+CROSS = ["60 R", "30 U R", "90 -"]
+
+
+def one(idle, opts, tail=70, cross=False):
     """세이브를 불러 idle 프레임 쉰 뒤 트리거를 한 프레임 누른다."""
-    sc = ["!load %s" % ST, "!w t %X" % ACT,
-          "%d -" % idle, "1 R1", "%d -" % tail, "!w off"]
+    sc = ["!load %s" % ST, "!w t %X" % ACT, "%d -" % idle]
+    if cross:
+        sc += CROSS
+    sc += ["1 R1", "%d -" % tail, "!w off"]
     return run(sc, opts)
 
 
@@ -96,6 +103,21 @@ def main():
         extra = ("  (" + " ".join("%s×%d" % kv for kv in sorted(other.items())) + ")") if other else ""
         print("위상 %d · 엔진 켬 : %2d/%d%s" % (ph, hits, N, extra))
 
+    # ★ 넘어간 뒤 — 앞이 뒤집힌 자리에서도 같은 기술이 나가야 한다.
+    #   여기서 깨지면 반전을 잘못 잡은 것이다(KOF 가 배포까지 낸 그 사고).
+    for ph in (0, 1):
+        hits, other = 0, {}
+        for i in range(N):
+            v = verdict(one(20 + 2 * i + ph, ON, cross=True))
+            if v == "기술":
+                hits += 1
+            else:
+                other[v] = other.get(v, 0) + 1
+                if v == "못잼": UNMEASURED.append(1)
+        total["x%d" % ph] = hits
+        extra = ("  (" + " ".join("%s×%d" % kv for kv in sorted(other.items())) + ")") if other else ""
+        print("위상 %d · 넘어간 뒤: %2d/%d%s" % (ph, hits, N, extra))
+
     # 대조군 — 꺼도 나가면 아무것도 안 재고 있는 것이다
     ctrl, cother = 0, {}
     for i in range(N):
@@ -131,7 +153,8 @@ def main():
         print("★ 못 잰 시행이 %d 번 있다 — 그 상태의 판정은 «모른다»다." % unmeasured)
     # 관문은 «19/20», 곧 95%. N 을 줄여 돌릴 때도 같은 잣대가 되게 비율로 잰다.
     need = lambda h: h * 20 >= 19 * N
-    ok = (need(total[0]) and need(total[1]) and ctrl == 0
+    ok = (need(total[0]) and need(total[1])
+          and need(total["x0"]) and need(total["x1"]) and ctrl == 0
           and rep_ok == REP and unmeasured == 0)
     print("판정: %s" % ("PASS" if ok else "★FAIL"))
     return 0 if ok else 1
