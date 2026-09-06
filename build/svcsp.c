@@ -145,6 +145,12 @@ static int svc_land_win(void)
    return v;
 }
 
+/* ★ 하강 판정 — 점프 중 최소 Y(가장 높이 오른 자리)를 들고, 거기서 더 안 오르면 하강.
+   ⚠ Y 는 «한 값이 2프레임씩» 이어진다(119 119 111 111 …). 그래서 「직전보다 크거나 같다」로
+     가르면 **올라가는 중에도 격프레임마다 참**이 된다. 최소값으로 갈라야 한다.
+   ⚠ 정점은 2프레임이라(85 85) 그 «둘째 프레임»부터 무장한다 — 정점 입력이 살아야 한다. */
+static int  land_miny = 255, land_minc;
+
 /* 하강 규칙 켬/끔 — 기본 켬. 끄면 예전(창만) 규칙으로 돌아간다(대조군용). */
 static int svc_land_fall_rule(void)
 {
@@ -170,11 +176,6 @@ void svcsp_set_land(int on) { svc_land_on = !!on; }
    못 비워 사이클 중 로드 뒤에도 계속 주입했다. */
 static uint16_t land_prev_ret;
 static int  land_wait, land_cyc, land_air, land_str, air_hold;
-/* ★ 하강 판정 — 점프 중 최소 Y(가장 높이 오른 자리)를 들고, 거기서 더 안 오르면 하강.
-   ⚠ Y 는 «한 값이 2프레임씩» 이어진다(119 119 111 111 …). 그래서 「직전보다 크거나 같다」로
-     가르면 **올라가는 중에도 격프레임마다 참**이 된다. 최소값으로 갈라야 한다.
-   ⚠ 정점은 2프레임이라(85 85) 그 «둘째 프레임»부터 무장한다 — 정점 입력이 살아야 한다. */
-static int  land_miny = 255, land_minc;
 static unsigned char land_a0, air_acte;
 static uint8_t land_btn;
 static void svc_land_reset(void)
