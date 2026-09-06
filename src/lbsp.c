@@ -144,19 +144,82 @@ static const LbMacStep MAC_236A[] = {
 };
 #define MAC_236A_N ((int)(sizeof MAC_236A / sizeof MAC_236A[0]))
 
-/* 링을 쓸 때의 짧은 꼬리 — D·DF 는 박고 **F 와 버튼만 실제로 누른다.**
-   프레임 수는 lb_env() 로 흔들 수 있다(다시 안 굽고 쓸어 보려고). */
+/* ── 슬롯 ────────────────────────────────────────────────────────
+   트리거를 누를 때 **잡고 있는 방향**으로 기술을 고른다.
+
+   `pre[]` 는 **링에 박을 방향들**(오래된 것 → 최근), `live` 는 **실제로 누를**
+   마지막 방향(0 이면 없음), `btn` 은 버튼.
+   ★ 주입 규칙 — SvC·KOF 에서 두 번 확인된 것: **마지막이 카디널이면 앞칸만 박고
+     마지막 방향과 버튼은 진짜로 누른다. 마지막이 대각이면 전부 박고 버튼만.**
+     반대로 하면 다른 기술이 나간다.
+
+   ⚠ 없는 슬롯은 **비워 둔다**(`btn == 0`). 카에데는 지상 다섯뿐이고
+     뒤아래·공중 기술이 없다. 없는 것을 지어 넣으면 「안 나간다」가 버그로 보인다. */
+enum { LB_N = 0, LB_F, LB_B, LB_D, LB_DF, LB_DB, LB_AIR, LB_SLOT_MAX };
+
+typedef struct {
+   const char *name;      /* 표시용 */
+   uint8_t pre[5];        /* 링에 박을 방향(오래된 것 → 최근) */
+   int npre;
+   uint8_t live;          /* 실제로 누를 마지막 방향. 0 = 없음(대각으로 끝나는 커맨드) */
+   uint8_t btn;           /* NGP_A(베기) · NGP_B(킥) · 0 = 슬롯 없음 */
+   const char *disp;      /* 기술명 토스트 */
+} LbMove;
+
+static const LbMove MOVES[LB_SLOT_MAX] = {
+   /* N  — 236+A 질풍   지문 112→144 */
+   { "236+A", { NGP_D, (uint8_t)(NGP_D | F) }, 2, F, NGP_A,
+     "\u2193\u2198\u2192 + \ubca0\uae30" },
+   /* F  — 623+A 풍아   지문 116→48 · 마지막이 «대각»이라 전부 박고 버튼만 */
+   { "623+A", { F, NGP_D, (uint8_t)(NGP_D | F) }, 3, 0, NGP_A,
+     "\u2192\u2193\u2198 + \ubca0\uae30" },
+   /* B  — 214+A 참격   지문 148→28 */
+   { "214+A", { NGP_D, (uint8_t)(NGP_D | B) }, 2, B, NGP_A,
+     "\u2193\u2199\u2190 + \ubca0\uae30" },
+   /* D  — 214+B 동풍   지문 168 */
+   { "214+B", { NGP_D, (uint8_t)(NGP_D | B) }, 2, B, NGP_B,
+     "\u2193\u2199\u2190 + \ubc1c" },
+   /* DF — 41236+B 폭풍 지문 148→140 */
+   { "41236+B", { B, (uint8_t)(NGP_D | B), NGP_D, (uint8_t)(NGP_D | F) }, 4, F, NGP_B,
+     "\ubc18\ud68c\uc804 + \ubc1c" },
+   /* DB — 없음 */
+   { NULL, { 0 }, 0, 0, 0, NULL },
+   /* AIR — 없음 */
+   { NULL, { 0 }, 0, 0, 0, NULL },
+};
+
+/* 링을 쓸 때의 짧은 꼬리 — 앞선 방향은 박고 **마지막 방향과 버튼만 실제로 누른다.**
+   프레임 수는 lb_env() 로 흔들 수 있다(다시 안 굽고). */
 static LbMacStep mac_ring[2];
 static int mac_ring_n;
 
-static void lb_build_ring_macro(void)
+static void lb_build_ring_macro(const LbMove *m)
 {
-   mac_ring[0].frames = lb_env("LBSP_RING_F", 2);
-   mac_ring[0].pad = F;
-   mac_ring[1].frames = lb_env("LBSP_RING_BTN", 4);
-   mac_ring[1].pad = NGP_A;
-   mac_ring_n = (mac_ring[0].frames > 0) ? 2 : 1;
-   if (mac_ring[0].frames <= 0) { mac_ring[0] = mac_ring[1]; }
+   int n = 0;
+   int fr = lb_env("LBSP_RING_F", 2);
+   if (m->live && fr > 0)
+   {
+      mac_ring[n].frames = fr;
+      mac_ring[n].pad = m->live;
+      n++;
+   }
+   mac_ring[n].frames = lb_env("LBSP_RING_BTN", 4);
+   mac_ring[n].pad = m->btn;
+   n++;
+   mac_ring_n = n;
+}
+
+/* 지금 잡고 있는 방향으로 슬롯을 고른다. 공중은 아직 안 잰다(OFF_H1 미측정). */
+static int lb_slot_of(uint8_t pad, uint8_t fwd)
+{
+   uint8_t back = (fwd == NGP_R) ? NGP_L : NGP_R;
+   int d = (pad & NGP_D) != 0, f = (pad & fwd) != 0, b = (pad & back) != 0;
+   if (d && f) return LB_DF;
+   if (d && b) return LB_DB;
+   if (d)      return LB_D;
+   if (f)      return LB_F;
+   if (b)      return LB_B;
+   return LB_N;
 }
 
 /* 지금 도는 대본이 무엇인지 — 링을 썼으면 짧은 꼬리, 아니면 원래 18프레임. */
@@ -318,18 +381,29 @@ uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
    /* 엣지에서만 시작한다. 누르고 있는 동안 되풀이 발동하면 그게 누출이다. */
    if (trig && !trig_prev && lb_can_start())
    {
+      const LbMove *m;
+      int slot;
       mac_fwd = lb_fwd();
+      slot = lb_slot_of(pad, mac_fwd);
+      m = &MOVES[slot];
+      if (!m->btn)
+      {  /* ★ 빈 슬롯 — 아무것도 안 한다. 없는 기술을 억지로 내면 딴 게 나간다. */
+         trig_prev = trig;
+         return pad;
+      }
       if (lb_ring_on())
       {
-         /* ★ 마지막 F 는 카디널이니 **박지 않는다.** D·DF 만 박고 F 는 진짜로 누른다.
-            최근 칸(머리−1)이 DF, 그 앞(머리−2)이 D 다 — 시간 순서가 뒤집히면 안 된다. */
-         lb_ring_put(1, (uint8_t)(NGP_D | mac_fwd));
-         lb_ring_put(2, NGP_D);
-         lb_build_ring_macro();
+         /* 앞선 방향을 링에 박는다. **최근 칸(머리−1)이 «마지막» 방향**이다 —
+            시간 순서가 뒤집히면 게임이 커맨드를 거꾸로 읽어 아무것도 안 나간다. */
+         int i;
+         for (i = 0; i < m->npre; i++)
+            lb_ring_put(m->npre - i, lb_bits(m->pre[i], mac_fwd));
+         lb_build_ring_macro(m);
          mac_cur = mac_ring; mac_cur_n = mac_ring_n;
       }
       else
-      {
+      {  /* 링을 끄면 예전 18프레임 대본으로 — 236+A 하나만 걸어 둔다(대조군용). */
+         if (slot != LB_N) { trig_prev = trig; return pad; }
          mac_cur = MAC_236A; mac_cur_n = MAC_236A_N;
       }
       mac_step = 0;
@@ -341,7 +415,7 @@ uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
          if (mac_step >= mac_cur_n) mac_step = -1;
          else mac_left = mac_cur[1].frames;
       }
-      lb_disp("\u2193\u2198\u2192 + \ubca0\uae30");   /* ↓↘→ + 베기 */
+      if (m->disp) lb_disp(m->disp);
       trig_prev = trig;
       return pad;
    }
