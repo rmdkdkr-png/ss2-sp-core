@@ -19,6 +19,10 @@
 #define NGP_A (1 << 4)
 #define NGP_B (1 << 5)
 
+/* kofsp.c 가 extern 으로 쓰는 램. 시험에서는 우리가 준다.
+   (이게 없어 이 시험은 그동안 «링크조차 안 됐다» — 돌지 않는 시험은 시험이 아니다.) */
+unsigned char CPUExRAM[16384];
+
 static int fails;
 
 static void ck(int cond, const char *what)
@@ -37,6 +41,13 @@ static unsigned char ref_fold(unsigned char pad, unsigned ret)
    if (ret & (1u << RP_X)) pad |= NGP_B;
    if (ret & (1u << RP_L)) pad |= (unsigned char)(NGP_A | NGP_B);
    return pad;   /* ⚠ R 은 일부러 뺐다 — 트리거다 */
+}
+
+/* 롬 머리 흉내 — 0x24 에 표식을 박는다. 파일 없이 판별만 볼 때 쓴다. */
+static void mkrom(unsigned char *r, const char *tag)
+{
+   memset(r, 0, 0x40);
+   memcpy(r + 0x24, tag, strlen(tag));
 }
 
 static int rom_says(const char *path, int want)
@@ -66,6 +77,28 @@ int main(void)
    char p[512];
 
    printf("1) 롬 판별 진리표 — 헤더 0x24 의 \"KOF R2\"\n");
+
+   /* ── 버튼 계약 (월화와 같다) ───────────────────────────────
+      Y=A · X=B · L=A+B 는 언제나. R 은 엔진 켤 때만 SP, 끄면 아무것도 안 한다.
+      ⚠ 코어 옵션 설명이 한동안 「끄면 R=A+B (순정과 같음)」이라 **거짓말**을 하고 있었다.
+        코드는 처음부터 안 접었다. 문구를 고쳤고, 이 시험이 앞으로 되돌림을 막는다. */
+   {
+      unsigned char rr[0x40];
+      mkrom(rr, "KOF R2");
+      kofsp_set_rom(rr, sizeof rr);
+      kofsp_set_engine(0); kofsp_reset();
+      ck(kofsp_frame(0, (unsigned short)(1u << RP_R)) == 0,
+         "엔진 끔: R 은 아무것도 안 한다(A+B 로 안 접힌다)");
+      ck(kofsp_frame(0, (unsigned short)((1u << RP_R) | (1u << RP_L)))
+         == (NGP_A | NGP_B),
+         "엔진 끔: R+L 을 같이 눌러도 A+B 는 L 것만");
+      ck(kofsp_frame(0, (unsigned short)(1u << RP_L)) == (NGP_A | NGP_B),
+         "엔진 끔: L 한 프레임에 A+B 두 비트가 함께 선다");
+      kofsp_set_engine(1); kofsp_reset();
+      ck(kofsp_frame(0, (unsigned short)(1u << RP_L)) == (NGP_A | NGP_B),
+         "엔진 켬: L 한 프레임에 A+B 두 비트가 함께 선다");
+      kofsp_set_engine(0); kofsp_reset();
+   }
    snprintf(p, sizeof p, "%s/ss2/rom/kofr2.ngc", home);        rom_says(p, 1);
    snprintf(p, sizeof p, "%s/ss2/rom/svc.ngc", home);          rom_says(p, 0);
    snprintf(p, sizeof p, "%s/ss2/rom/ss2.ngc", home);          rom_says(p, 0);
