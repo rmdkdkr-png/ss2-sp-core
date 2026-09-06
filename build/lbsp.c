@@ -1,4 +1,4 @@
-/* 월화의 검사 원버튼 필살기 엔진 — M1: **배관만**.
+/* 월화의 검사 원버튼 필살기 엔진 — M2: **매크로 하나**.
  *
  * ─ 왜 svcsp.c 를 일반화하지 않고 파일을 하나 더 만드나
  *   저장소가 이미 ss2sp.c / svcsp.c / kofsp.c 로 갈라 놓았다. 넷째도 가른다.
@@ -10,10 +10,17 @@
  *   메탈슬러그가 SS2 선처리에 삼켜져 무반응이던 사고가 그 증거다.
  *   그래서 M1 의 통과 조건은 **출력이 한 비트도 안 바뀌는 것** 하나다.
  *
- *   지금 월화는 libretro.c 의 **순정 롬 폴드** 가지로 떨어진다(Y=A·X=B·L·R=A+B).
- *   그러므로 lbsp 가지를 그 앞에 끼우면서 **폴드와 글자 그대로 똑같이** 동작해야 한다.
- *   ★ R 도 아직 접는다. M2 에서 R 이 트리거가 되면서 빠질 것이고, 그때가 출력이
- *     처음 달라지는 순간이다. M1 에서 미리 빼면 M1 이 통과할 수가 없다.
+ *   M1(배관만)은 통과했다 — 무회귀 일곱 게임 0바이트, 폴드 8,192조합 어긋남 0.
+ *
+ * ─ M2 에서 달라진 것: **R 이 SP 트리거다**
+ *   ★ 단, **엔진을 끄면 R 은 예전처럼 A+B 로 접힌다.** 이건 kofsp 와 «일부러 다르다»
+ *     (kofsp 는 R 을 무조건 뺀다). 이렇게 해야 「엔진 끔」이 **순정과 글자 그대로 같은**
+ *     대조군이 된다 — 대조군이 조금이라도 다르면 그건 대조군이 아니다.
+ *
+ * ─ M2 는 링을 **안 쓴다**
+ *   링은 M0 에서 찾아 뒀지만(0x1313~) M3 의 일이다. 여기서 링까지 같이 넣으면
+ *   실패했을 때 **배관 탓인지 링 탓인지 못 가른다.** 먼저 패드로 걸어 넣어
+ *   발동을 세우고, 그 다음에 링으로 빠르게 만든다.
  *
  * ─ 게임 상수는 잰 것만 넣는다
  *   안 잰 것은 전부 LBSP_UNMEASURED 로 둔다. 「아직 안 잰 것에 기대는 코드」가
@@ -93,9 +100,32 @@ int lbsp_unmeasured_count(void)
 #define RP_L 10
 #define RP_R 11
 
+/* ── 매크로 ──────────────────────────────────────────────────────
+   M2 는 **하나**만 있다: 236+A (카에데 질풍). act 112 가 나오면 성공이다.
+
+   ⚠ **앞 = NGP_R 로 못 박았다.** 반전(좌우) 주소가 아직 미측정이라
+     「P1 이 왼쪽에서 오른쪽을 보는」 트레이닝 무대에서만 옳다.
+     M3 로 가기 전에 반드시 반전을 재라 — KOF 는 반전을 잘못 잡아
+     **한 라운드 두 번째 발동부터 커맨드가 좌우로 뒤집히는** 사고를 배포까지 냈다.
+
+   ⚠ 프레임 수는 lb_moves.py 의 실측 그대로다(방향 4프레임씩, 버튼 6프레임).
+     링이 2프레임에 한 칸이니 4프레임이면 한 방향이 두 칸을 채운다. */
+typedef struct { int frames; unsigned char pad; } LbMacStep;
+
+static const LbMacStep MAC_236A[] = {
+   { 4, NGP_D },
+   { 4, (unsigned char)(NGP_D | NGP_R) },
+   { 4, NGP_R },
+   { 6, NGP_A }                 /* 버튼은 방향을 놓고 나서 — 실측이 그랬다 */
+};
+#define MAC_236A_N ((int)(sizeof MAC_236A / sizeof MAC_236A[0]))
+
 /* ── 상태 ────────────────────────────────────────────────────── */
 static int  lb_engine_on;      /* 기본 꺼짐 */
 static int  lb_is_rom;
+static int  mac_step = -1;     /* -1 = 안 돎 */
+static int  mac_left;          /* 이번 칸에 남은 프레임 */
+static int  trig_prev;
 
 char lbsp_last_disp[64];
 int  lbsp_disp_seq;
@@ -105,6 +135,7 @@ int  lbsp_engine_on(void)    { return lb_engine_on; }
 
 void lbsp_reset(void)
 {
+   mac_step = -1; mac_left = 0; trig_prev = 0;
    lbsp_last_disp[0] = 0;
    /* seq 는 **안 되돌린다** — 프론트가 엣지로 보므로 되돌리면 옛 값과 같아져 한 번 놓친다. */
 }
@@ -123,14 +154,78 @@ void lbsp_set_rom(const void *rom, unsigned len)
 
 int lbsp_rom_ok(void) { return lb_is_rom; }
 
-/* ── 매 프레임 ───────────────────────────────────────────────────
-   M1 은 **순정 폴드 그대로**다. 엔진을 켜도 마찬가지다 — 켤 것이 아직 없다.
-   여기에 한 줄이라도 더 붙는 순간 M1 의 통과 조건이 깨진다. */
+/* 기술명 — 프론트가 seq 엣지를 보고 버퍼를 읽는다. **버퍼 먼저, seq 나중.** */
+static void lb_disp(const char *t)
+{
+   size_t n = strlen(t);
+   if (n >= sizeof lbsp_last_disp) n = sizeof lbsp_last_disp - 1;
+   memcpy(lbsp_last_disp, t, n);
+   lbsp_last_disp[n] = 0;
+   lbsp_disp_seq++;
+}
+
+/* 지금 매크로를 걸어도 되는 몸 상태인가.
+   act 를 못 읽으면(램이 없으면) **막지 않는다** — M2 의 관심사는 배관이지 조건이 아니다.
+   조건을 촘촘히 다는 것은 M3 이후, 그것도 «재고 나서» 할 일이다. */
+static int lb_can_start(void)
+{
+#ifdef SS2SP_RAM_POINTER
+   if (!CPUExRAM) return 1;      /* 포인터 빌드에서만 널일 수 있다 */
+#endif
+   return CPUExRAM[OFF_ACT] == LBSP_ACT_REST;
+}
+
+/* ── 매 프레임 ─────────────────────────────────────────────────── */
 uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
 {
+   int trig;
+
+   /* ★ 엔진이 꺼져 있으면 **순정 폴드 그대로**다 — R 까지 접는다.
+      이것이 대조군의 정의다. 여기서 한 비트라도 다르면 대조군이 아니다. */
+   if (!lb_engine_on || !lb_is_rom)
+   {
+      if (ret & (1u << RP_Y)) pad |= NGP_A;
+      if (ret & (1u << RP_X)) pad |= NGP_B;
+      if ((ret & (1u << RP_L)) || (ret & (1u << RP_R)))
+         pad |= (uint8_t)(NGP_A | NGP_B);
+      mac_step = -1;
+      trig_prev = 0;
+      return pad;
+   }
+
+   /* 엔진 켬 — R 은 트리거라 접지 않는다. L 은 그대로 A+B(사람의 동시입력 수단). */
+   trig = (ret & (1u << RP_R)) ? 1 : 0;
    if (ret & (1u << RP_Y)) pad |= NGP_A;
    if (ret & (1u << RP_X)) pad |= NGP_B;
-   if ((ret & (1u << RP_L)) || (ret & (1u << RP_R)))
-      pad |= (uint8_t)(NGP_A | NGP_B);
+   if (ret & (1u << RP_L)) pad |= (uint8_t)(NGP_A | NGP_B);
+
+   /* 매크로가 도는 동안은 **사람 입력을 통째로 덮는다.**
+      섞으면 사람이 잡고 있던 방향이 커맨드에 끼어들어 딴 기술이 나간다. */
+   if (mac_step >= 0)
+   {
+      pad = MAC_236A[mac_step].pad;
+      if (--mac_left <= 0)
+      {
+         mac_step++;
+         if (mac_step >= MAC_236A_N) mac_step = -1;
+         else mac_left = MAC_236A[mac_step].frames;
+      }
+      trig_prev = trig;
+      return pad;
+   }
+
+   /* 엣지에서만 시작한다. 누르고 있는 동안 되풀이 발동하면 그게 누출이다. */
+   if (trig && !trig_prev && lb_can_start())
+   {
+      mac_step = 0;
+      mac_left = MAC_236A[0].frames;
+      pad = MAC_236A[0].pad;
+      if (--mac_left <= 0) { mac_step = 1; mac_left = MAC_236A[1].frames; }
+      lb_disp("\u2193\u2198\u2192 + \ubca0\uae30");   /* ↓↘→ + 베기 */
+      trig_prev = trig;
+      return pad;
+   }
+
+   trig_prev = trig;
    return pad;
 }
