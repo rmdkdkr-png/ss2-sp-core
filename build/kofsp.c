@@ -642,7 +642,16 @@ uint8_t kofsp_frame(uint8_t pad, uint16_t ret)
    if (ret & (1u << RP_X)) pad |= NGP_B;
    if (ret & (1u << RP_L)) pad |= (uint8_t)(NGP_A | NGP_B);
 
-   if (!kofsp_engine_on() || !kof_is_rom) { trig_prev = trig; return pad; }
+   if (!kofsp_engine_on() || !kof_is_rom)
+   {  /* ★ 엔진을 끄면 **R 도 A+B 로 접는다** — SvC(`svcsp.c:1418`)·월화와 같은 꼴.
+        유저 지시 「svc처럼 해라」. 세 게임이 같은 규칙이면 유저가 익힐 것이 하나다.
+        ⚠ 이건 «새로 넣는» 것이다. 이 파일은 원래 R 을 한 번도 안 접었고
+          (실측표: tools/kof/kof_ab.py — 끔 상태에서 R 은 변화 없음),
+          코어 옵션 설명만 「끄면 R=A+B」라 적혀 있었다. 이제 설명이 참이 된다. */
+      if (ret & (1u << RP_R)) pad |= (uint8_t)(NGP_A | NGP_B);
+      trig_prev = trig;
+      return pad;
+   }
 
    /* 상대가 경직에 **막 들어간** 프레임에 캔슬 창을 연다. */
    if (CPUExRAM)
