@@ -17,7 +17,7 @@ index b61e812..a6f9fe6 100644
  ifneq ($(STATIC_LINKING), 1)
  SOURCES_C += \
 diff --git a/libretro.c b/libretro.c
-index ef01e22..c42e5e7 100644
+index ef01e22..b0b90b7 100644
 --- a/libretro.c
 +++ b/libretro.c
 @@ -334,9 +334,11 @@ void StateAction(StateMem *sm, int load, int data_only)
@@ -34,7 +34,7 @@ index ef01e22..c42e5e7 100644
  #define MEDNAFEN_CORE_EXTENSIONS "ngp|ngc|ngpc|npc"
  #define MEDNAFEN_CORE_TIMING_FPS 60.25
  #define MEDNAFEN_CORE_GEOMETRY_BASE_W 160 
-@@ -377,6 +379,177 @@ static void check_color_depth(void)
+@@ -377,6 +379,175 @@ static void check_color_depth(void)
  #endif
  }
  
@@ -47,8 +47,6 @@ index ef01e22..c42e5e7 100644
 +/* ── SvC MotM 원버튼 엔진 (svcsp.c) — 롬 헤더로 자동 판별, SvC 때만 이쪽이 받는다 ── */
 +extern uint8_t svcsp_frame(uint8_t pad, uint16_t ret);
 +extern void    svcsp_set_engine(int on);
-+extern void    svcsp_set_basics(int on);
-+extern void    svcsp_set_land(int on);
 +extern void    svcsp_set_holdsync(int v);
 +extern int     svcsp_engine_on(void);
 +extern void    svcsp_reset(void);
@@ -212,7 +210,7 @@ index ef01e22..c42e5e7 100644
  static void check_variables(void)
  {
     struct retro_variable var = {0};
-@@ -392,6 +565,145 @@ static void check_variables(void)
+@@ -392,6 +563,135 @@ static void check_variables(void)
        else if (!strcmp(var.value, "english"))
           setting_ngp_language = 1;
     }
@@ -258,10 +256,6 @@ index ef01e22..c42e5e7 100644
 +   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 +      svcsp_set_engine(strcmp(var.value, "disabled") != 0);
 +
-+   var.key   = "ngp_svcsp_basics";
-+   var.value = NULL;
-+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-+      svcsp_set_basics(strcmp(var.value, "disabled") != 0);   /* 끄면 순정 2버튼 */
 +
 +   /* 강 발동 맞춤 — 기본 켬(mid). 값 "off" 일 때만 순정(즉발 18·홀드 24). */
 +   var.key   = "ngp_svcsp_holdsync";
@@ -278,12 +272,6 @@ index ef01e22..c42e5e7 100644
 +      kofsp_toast_on = strcmp(var.value, "disabled") ? true : false;
 +   ov_ktoast = ov_ktoast_p = kofsp_toast_on ? 1 : 0;
 +
-+   var.key   = "ngp_svcsp_land";
-+   var.value = NULL;
-+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-+      svcsp_set_land(strcmp(var.value, "enabled") == 0);
-+   else
-+      svcsp_set_land(0);
 +
 +   var.key   = "ngp_svcsp_toast";
 +   var.value = NULL;
@@ -358,7 +346,7 @@ index ef01e22..c42e5e7 100644
  }
  
  void retro_init(void)
-@@ -436,6 +748,23 @@ void retro_init(void)
+@@ -436,6 +736,17 @@ void retro_init(void)
  
  void retro_reset(void)
  {
@@ -372,17 +360,11 @@ index ef01e22..c42e5e7 100644
 +   kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   lbsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   ss2_overlay_rebind();
-+   if (svcsp_rom_ok())
-+   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
-+      static char ver_toast[48];
-+      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
-+      ss2comm_toast(ver_toast, 180);
-+   }
 +   ss2comm_reset();
     neopop_reset();
  }
  
-@@ -448,6 +777,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
+@@ -448,6 +759,7 @@ bool retro_load_game_special(unsigned a, const struct retro_game_info *b, size_t
  #define MAX_BUTTONS 7
  static uint8_t input_buf;
  
@@ -390,7 +372,7 @@ index ef01e22..c42e5e7 100644
  bool retro_load_game(const struct retro_game_info *info)
  {
     struct retro_input_descriptor desc[] = {
-@@ -458,6 +788,13 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -458,6 +770,13 @@ bool retro_load_game(const struct retro_game_info *info)
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" },
        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Option" },
@@ -404,7 +386,7 @@ index ef01e22..c42e5e7 100644
  
        { 0 },
     };
-@@ -479,6 +816,38 @@ bool retro_load_game(const struct retro_game_info *info)
+@@ -479,6 +798,32 @@ bool retro_load_game(const struct retro_game_info *info)
     MDFN_LoadGameCheats();
     MDFNMP_InstallReadPatches();
  
@@ -415,12 +397,6 @@ index ef01e22..c42e5e7 100644
 +   kofsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   lbsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
 +   ss2_overlay_rebind();
-+   if (svcsp_rom_ok())
-+   {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
-+      static char ver_toast[48];
-+      snprintf(ver_toast, sizeof ver_toast, "SP %s", GIT_VERSION);
-+      ss2comm_toast(ver_toast, 180);
-+   }
 +   if (svcsp_rom_ok())
 +   {  /* SvC 슬롯 배치 복원 — <시스템>/ngpsvc_slots.bin (없으면 기본 배치) */
 +      const char *sd2 = NULL;
@@ -443,7 +419,7 @@ index ef01e22..c42e5e7 100644
     surf = (MDFN_Surface*)calloc(1, sizeof(*surf));
  
     if (!surf)
-@@ -556,6 +925,170 @@ static void update_input(void)
+@@ -556,6 +901,170 @@ static void update_input(void)
     for (i = 0; i < MAX_BUTTONS; i++)
        if ((map[i] != -1u) && (ret & (1 << map[i])))
           input_buf |= (1 << i);
@@ -614,20 +590,21 @@ index ef01e22..c42e5e7 100644
  }
  
  void retro_run(void)
-@@ -598,12 +1131,68 @@ void retro_run(void)
+@@ -598,12 +1107,68 @@ void retro_run(void)
        update_video = false;
     }
  
 -   Emulate(&spec, sound_buf);
 +   {
 +   int ss2_paused = ss2comm_overlay_active();
-+
+ 
+-   width  = spec.DisplayRect.w;
+-   height = spec.DisplayRect.h;
 +   if (!ss2_paused)
 +   {
 +      Emulate(&spec, sound_buf);
  
--   width  = spec.DisplayRect.w;
--   height = spec.DisplayRect.h;
+-   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
 +      width  = spec.DisplayRect.w;
 +      height = spec.DisplayRect.h;
 +
@@ -660,8 +637,7 @@ index ef01e22..c42e5e7 100644
 +      height = ss2_last_h;
 +      spec.SoundBufSize = 0;
 +   }
- 
--   video_cb(surf->pixels, width, height, FB_WIDTH * 2);
++
 +   if (sides_on())
 +   {
 +      /* 좌우 기둥 — 앱판과 같은 층: 대형 일러(주소표)·전황 연출.
@@ -687,7 +663,7 @@ index ef01e22..c42e5e7 100644
  
     for (total = 0; total < spec.SoundBufSize; )
        total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-@@ -629,11 +1218,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
+@@ -629,11 +1194,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     memset(info, 0, sizeof(*info));
     info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
     info->timing.sample_rate    = 44100;
@@ -708,7 +684,7 @@ index ef01e22..c42e5e7 100644
  
     check_color_depth();
  }
-@@ -762,6 +1355,10 @@ bool retro_serialize(void *data, size_t size)
+@@ -762,6 +1331,10 @@ bool retro_serialize(void *data, size_t size)
  
  bool retro_unserialize(const void *data, size_t size)
  {
@@ -719,7 +695,7 @@ index ef01e22..c42e5e7 100644
     StateMem st;
  
     st.data           = (uint8_t*)data;
-@@ -782,6 +1379,28 @@ void *retro_get_memory_data(unsigned type)
+@@ -782,6 +1355,28 @@ void *retro_get_memory_data(unsigned type)
     return NULL;
  }
  
@@ -749,7 +725,7 @@ index ef01e22..c42e5e7 100644
  {
     if(type == RETRO_MEMORY_SYSTEM_RAM)
 diff --git a/libretro_core_options.h b/libretro_core_options.h
-index a0dc3ec..6207ed0 100644
+index a0dc3ec..5b3c278 100644
 --- a/libretro_core_options.h
 +++ b/libretro_core_options.h
 @@ -32,7 +32,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
@@ -761,7 +737,7 @@ index a0dc3ec..6207ed0 100644
     //{"advanced","Advanced", NULL},
     { NULL,     NULL,       NULL },
  };
-@@ -52,6 +52,219 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+@@ -52,6 +52,195 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
        },
        "english",
     },
@@ -893,18 +869,6 @@ index a0dc3ec..6207ed0 100644
 +      },
 +      "enabled"
 +   },
-+   {
-+      "ngp_svcsp_basics",
-+      "SvC 강약 버튼 구분",
-+      NULL,
-+      "켬 = 약P/약K/강P/강K 4버튼(약은 짧게 고정, 강은 즉발). 끔 = 순정 2버튼(B/A 탭=약, 8프레임부터 꾹=강 - 게임 원판정). 끔에서도 Y/X는 즉발 강으로 살아 있습니다. (SNK vs. Capcom MotM 전용)",
-+      NULL,
-+      "system",
-+      {
-+         { "enabled",  "켬" },
-+         { "disabled", "끔" },
-+         { NULL, NULL },
-+      },
 +      "enabled"
 +   },
 +   {
@@ -936,18 +900,6 @@ index a0dc3ec..6207ed0 100644
 +      },
 +      "mid"
 +   },
-+   {
-+      "ngp_svcsp_land",
-+      "SvC 착지 선입력",
-+      NULL,
-+      "켬 = 점프 공격 뒤 착지 직전에 누른 기본기를 엔진이 기억했다가 착지하는 순간 대신 눌러 줍니다(강P/강K=강. A/B 는 강약 구분 끔일 때 쥔 채 착지=강·탭=약, 켬이면 약 고정). 끔(기본) = 순정 그대로 — 공중에서 누른 건 공중기로만 쓰이고 지상기는 착지 뒤 다시 눌러야 나갑니다. (SNK vs. Capcom MotM 전용)",
-+      NULL,
-+      "system",
-+      {
-+         { "disabled", "끔" },
-+         { "enabled",  "켬" },
-+         { NULL, NULL },
-+      },
 +      "disabled"
 +   },
 +   {
@@ -981,7 +933,7 @@ index a0dc3ec..6207ed0 100644
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
  };
  
-@@ -72,6 +285,17 @@ struct retro_core_option_definition option_defs_us[] = {
+@@ -72,6 +261,17 @@ struct retro_core_option_definition option_defs_us[] = {
        },
        "english",
     },
