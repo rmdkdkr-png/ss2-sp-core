@@ -145,16 +145,40 @@ static int svc_land_win(void)
    return v;
 }
 
+/* 하강 규칙 켬/끔 — 기본 켬. 끄면 예전(창만) 규칙으로 돌아간다(대조군용). */
+static int svc_land_fall_rule(void)
+{
+   static int v = -1;
+   if (v < 0) { const char *e = getenv("SVCSP_LAND_FALL"); v = !(e && *e == '0'); }
+   return v;
+}
+
+/* 지금 «내려오는 중»인가. 최소 Y 를 갱신하며 판단한다.
+   더 높이 오르면(작은 Y) 최소를 갱신하고 «아직 상승»,
+   같은 높이가 두 프레임 이어지거나 더 내려오면 «하강». */
+static int svc_land_falling(void)
+{
+   int y = CPUExRAM[OFF_Y1];
+   if (y < land_miny) { land_miny = y; land_minc = 1; return 0; }
+   if (y > land_miny) return 1;
+   return (++land_minc >= 2);
+}
+
 static int svc_land_on = 0;                     /* 옵션 — 착지 선입력. 기본 끔(유저 결정 2026-09-04) */
 void svcsp_set_land(int on) { svc_land_on = !!on; }
 /* 착지 선입력 상태 — 파일 스코프. 리뷰 지적(2026-09-04): 블록 안 static 이면 svcsp_reset(리셋·스테이트 로드)이
    못 비워 사이클 중 로드 뒤에도 계속 주입했다. */
 static uint16_t land_prev_ret;
 static int  land_wait, land_cyc, land_air, land_str, air_hold;
+/* ★ 하강 판정 — 점프 중 최소 Y(가장 높이 오른 자리)를 들고, 거기서 더 안 오르면 하강.
+   ⚠ Y 는 «한 값이 2프레임씩» 이어진다(119 119 111 111 …). 그래서 「직전보다 크거나 같다」로
+     가르면 **올라가는 중에도 격프레임마다 참**이 된다. 최소값으로 갈라야 한다.
+   ⚠ 정점은 2프레임이라(85 85) 그 «둘째 프레임»부터 무장한다 — 정점 입력이 살아야 한다. */
+static int  land_miny = 255, land_minc;
 static unsigned char land_a0, air_acte;
 static uint8_t land_btn;
 static void svc_land_reset(void)
-{ land_prev_ret = 0; land_wait = land_cyc = land_air = land_str = air_hold = 0; land_a0 = air_acte = 0; land_btn = 0; }
+{ land_prev_ret = 0; land_wait = land_cyc = land_air = land_str = air_hold = 0; land_a0 = air_acte = 0; land_btn = 0; land_miny = 255; land_minc = 0; }
 static int svc_engine_now(void)
 {
    if (svc_engine < 0) { const char *e = getenv("SVCSP_FORCE"); svc_engine = (e && *e == '1'); }
@@ -1306,11 +1330,18 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
          land_btn = 0; land_wait = 0; land_cyc = 0;
       }
       else if (air)
-      {  /* 공중에서 새로 누른 기본기를 기억한다. 나중 누름이 앞 누름을 덮어쓴다 (air_hold/air_acte 는 파일 스코프) */
-         if      (bedge & (1u << 1)) { land_btn = 0x10; land_str = 1; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (bedge & (1u << 9)) { land_btn = 0x20; land_str = 1; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (bedge & (1u << 0)) { land_btn = 0x10; land_str = 0; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
-         else if (bedge & (1u << 8)) { land_btn = 0x20; land_str = 0; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
+      {  /* 공중에서 새로 누른 기본기를 기억한다. 나중 누름이 앞 누름을 덮어쓴다 (air_hold/air_acte 는 파일 스코프)
+
+            ★ **내려오는 중일 때만 무장한다**(유저: 「점프 유예 타이밍이 넘 길다」).
+              전에는 창(32프레임)만 봤는데, 체공이 캐릭터마다 32~38 이라
+              **정점 입력을 모두 살리는 최소 창이 곧 32** 였다 — 창으로는 못 줄인다.
+              그러면서 체공 34짜리에서는 «뜨자마자 누른 것»까지 살렸다(실측).
+              「하강 중」은 캐릭터에 안 휘둘리는 자다. 창은 위쪽 뚜껑으로만 남는다. */
+         int fall = !svc_land_fall_rule() || svc_land_falling();
+         if      (fall && (bedge & (1u << 1))) { land_btn = 0x10; land_str = 1; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
+         else if (fall && (bedge & (1u << 9))) { land_btn = 0x20; land_str = 1; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
+         else if (fall && (bedge & (1u << 0))) { land_btn = 0x10; land_str = 0; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
+         else if (fall && (bedge & (1u << 8))) { land_btn = 0x20; land_str = 0; land_wait = svc_land_win(); air_hold = 0; air_acte = CPUExRAM[OFF_ACT]; }
          else if (land_wait > 0)     land_wait--;
          /* ★ 버튼 하나 = 기술 하나. 이 누름이 **공중 기술로 이미 소비**됐으면 착지 무장을
             푼다 — 빈 점프에서 Y 한 번에 공중강+착지강 두 방 나가는 오발 방지.
@@ -1362,6 +1393,7 @@ uint8_t svcsp_frame(uint8_t pad, uint16_t ret)   /* ret = 레트로패드 원본
                land_a0  = (unsigned char)a;
             }
          }
+         land_miny = 255; land_minc = 0;   /* 지상 — 다음 점프를 위해 비운다 */
          if (land_air && land_wait > 0 && land_btn)       /* 방금 내려앉았다 */
             /* ★ 엣지 사이클 시동. 착지 순간 한 번만 누르는 옛 방식은 「킥이 늦게 나가
                착지 후에도 킥 동작이 이어지는」 깊은 히트에서 회복 프레임에 먹혀 죽었다
