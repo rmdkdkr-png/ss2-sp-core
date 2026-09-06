@@ -462,7 +462,10 @@ static bool ss2sp_enable = true;
    SP 배치(기술 목록 선택·타이거니)는 엔진(ss2comm/ss2sp)이 다 들고 있다. */
 #define SS2_SIDE_W 64
 #define SS2_WIDE_W (SS2_SIDE_W*2 + FB_WIDTH)
-static bool     ss2_sides = true;                 /* 코어 옵션 ngp_ss2sp_sides */
+/* ★ 기둥 아트 **폐기** (유저 2026-09-07). 옵션을 없앴으므로 이 값이 그대로 굳는다 —
+   기본값이 true 였어서 그냥 지우면 «영영 켜진 채»가 됐다. false 로 내린다.
+   배관은 남겨 둔다(오버레이·프레임 폭 계산이 이 값을 본다). */
+static bool     ss2_sides = false;
 static uint16_t ss2_wide[SS2_WIDE_W * (FB_HEIGHT + SS2COMM_BAND_MAX)];
 static unsigned ss2_last_w = FB_WIDTH, ss2_last_h = FB_HEIGHT;
 /* 오버레이가 직접 만지는 값 — 코어 옵션이 바뀌면 여기로도 동기한다 */
@@ -570,35 +573,8 @@ static void check_variables(void)
       ss2sp_enable = strcmp(var.value, "disabled") ? true : false;
 
    /* 해설 옵션 */
-   var.key   = "ngp_ss2sp_comm";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      ss2comm_set_enabled(strcmp(var.value, "disabled") != 0);
-      ov_chat = ov_chat_p = (strcmp(var.value, "disabled") != 0) ? 1 : 0;
-   }
 
-   var.key   = "ngp_ss2sp_comm_spk";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      /* v0.7: 해설자가 15명이다. 표는 엔진(ss2comm)이 들고 있으므로 이름으로 찾는다 —
-         대사표를 늘려도 이 파일은 안 고쳐도 된다. */
-      static const char *const spk_key[] = {
-         "haohmaru","nakoruru","hanzo","galford","rimururu","genjuro","ukyo","charlotte",
-         "jubei","kazuki","sogetsu","asura","shiki","morozumi","yuga"
-      };
-      int sp = 0, k;
-      for (k = 0; k < (int)(sizeof(spk_key)/sizeof(spk_key[0])); k++)
-         if (!strcmp(var.value, spk_key[k])) { sp = k; break; }
-      ss2comm_set_speaker(sp);
-      ov_spk = ov_spk_p = (unsigned char)sp;
-   }
 
-   var.key   = "ngp_ss2sp_comm_duo";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      ss2comm_set_duo(!strcmp(var.value, "enabled"));
 
    var.key   = "ngp_svcsp_engine";
    var.value = NULL;
@@ -643,20 +619,6 @@ static void check_variables(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       lbsp_set_engine(strcmp(var.value, "disabled") != 0);
 
-   var.key   = "ngp_ss2sp_comm_draw";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      int prev = ss2comm_band_h() | (ss2comm_band_top() << 8);
-      int mode = 4;                                  /* 기본: 화면 밖 **위** 띠 (아래는 어색하다는 제보) */
-      if      (!strcmp(var.value, "disabled"))     mode = 0;
-      else if (!strcmp(var.value, "above"))        mode = 4;
-      else if (!strcmp(var.value, "inside_top"))   mode = 2;
-      else if (!strcmp(var.value, "inside_bottom"))mode = 3;
-      ss2comm_draw_enable(mode);
-      if ((ss2comm_band_h() | (ss2comm_band_top() << 8)) != prev)
-         update_video = true;                        /* 화면 세로가 바뀌면 지오메트리 재통보 */
-   }
 
    var.key   = "ngp_svcsp_band";
    var.value = NULL;
@@ -676,17 +638,6 @@ static void check_variables(void)
       else ss2comm_sp_band(0);
    }
 
-   var.key   = "ngp_ss2sp_sides";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      bool on = strcmp(var.value, "disabled") != 0;
-      if (on != ss2_sides)
-      {
-         ss2_sides = on;
-         ss2_set_geometry();
-      }
-   }
 
    /* 오버레이 그림자값을 방금 적용한 옵션과 맞춘다 */
    ov_sp    = ov_sp_p    = svcsp_rom_ok() ? (svcsp_engine_on() ? 1 : 0)
