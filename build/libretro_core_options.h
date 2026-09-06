@@ -150,6 +150,8 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
          { "disabled", "끔" },
          { NULL, NULL },
       },
+      "disabled"
+   },
    {
       "ngp_kofsp_engine",
       "KOF R-2 모던 조작 (원버튼 필살기)",
@@ -162,6 +164,8 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
          { "disabled", "끔" },
          { NULL, NULL },
       },
+      "disabled"
+   },
    {
       "ngp_svcsp_engine",
       "SvC 모던 조작 (원버튼 필살기)",
@@ -174,6 +178,8 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
          { "disabled", "끔" },
          { NULL, NULL },
       },
+      "enabled"
+   },
    {
       "ngp_kofsp_toast",
       "KOF 기술 표기 표시",
@@ -186,6 +192,8 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
          { "disabled", "끔" },
          { NULL, NULL },
       },
+      "enabled"
+   },
    {
       "ngp_svcsp_holdsync",
       "SvC 강 발동 당김",
@@ -213,6 +221,8 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
          { "disabled", "끔" },
          { NULL, NULL },
       },
+      "enabled"
+   },
    {
       "ngp_ss2sp_sides",
       "SS2 Side Art Pillars",
