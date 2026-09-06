@@ -977,7 +977,17 @@ static void update_input(void)
       ss2_ov_prev = ret;
    }
 
-   if (ss2sp_enable)
+   /* ★★ 여기는 «언제나» 돈다. ss2sp_enable 은 «SS2 의 SP»만 가른다.
+      ─ 왜 갈랐나 (버그 고침이다, 취향이 아니다)
+        전에는 이 블록 전체가 `if (ss2sp_enable)` 안에 있었다. 그런데 `ngp_ss2sp` 는
+        앱에서 **SS2 에서만 보이는 항목**이고 값은 **한 벌로 저장**된다. 그래서
+        SS2 에서 한 번 끄면 **SvC·KOF·월화의 폴드까지 통째로 죽었다** —
+        화면의 A+B·SP 버튼이 «보이는데 안 먹고», 유저는 그 게임 설정에서
+        그 항목을 보지도 되돌리지도 못했다.
+        실측(tools/master_sw.py): `ngp_ss2sp=disabled` 에서 월화·KOF 모두
+        L 을 눌러도 act 가 안 바뀐다. 켜면 128 / 8 이 나온다.
+      ─ 이제 SS2 도 다른 셋과 같은 규칙이다:
+        **SP 켬 → X·R = 트리거 · SP 끔 → X·R = A+B · Y·L = A+B 는 언제나.** */
    {
       /* v0.5: 트리거는 SP 하나뿐(X, 그리고 손이 편한 쪽을 위해 R 도 같은 자리).
          A+B 버튼(Y·L)은 패드 바이트에 A·B 를 한꺼번에 세워 준다 —
@@ -987,15 +997,22 @@ static void update_input(void)
       {  /* SS2 전용 선처리 — SvC 는 svcsp_frame 이 레트로패드 원본을 직접 해석한다.
             SS2 도 SvC 도 아닌 순정 롬(메탈슬러그 등)은 여기 오면 안 된다 — 예전엔
             롬 검사 없이 돌아서 X·R 이 삼켜지고 Y·L 이 A+B 로 변조되는 무반응 사고. */
-         if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_X)) ||
-             (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R)))
-            trig |= 1u;
+         int sp_btn = (ret & (1 << RETRO_DEVICE_ID_JOYPAD_X))
+                   || (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R));
+         if (sp_btn)
+         {
+            if (ss2sp_enable) trig |= 1u;                  /* SP 켬 — 기술키 */
+            else input_buf |= (uint8_t)((1 << 4) | (1 << 5));  /* SP 끔 — A+B (SvC 꼴) */
+         }
          if ((ret & (1 << RETRO_DEVICE_ID_JOYPAD_Y)) ||
              (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L)))
-            input_buf |= (uint8_t)((1 << 4) | (1 << 5));   /* A + B 동시 */
+            input_buf |= (uint8_t)((1 << 4) | (1 << 5));   /* A + B 동시 — 언제나 */
       }
       /* v0.7: L2 = 해설자 교대. 설정을 열지 않고 판 중에 다음 사람에게 넘긴다.
-         누른 순간에만 한 번 — 누르고 있는 동안 계속 넘어가면 안 된다. */
+         누른 순간에만 한 번 — 누르고 있는 동안 계속 넘어가면 안 된다.
+         ⚠ 이건 예전대로 `ss2sp_enable` 에 걸어 둔다 — 오늘 고치는 것은 «폴드»다.
+           해설자를 어느 토글에 걸지는 따로 정할 일이다(`ngp_ss2sp_comm` 이 따로 있다). */
+      if (ss2sp_enable)
       {
          static int comm_prev = 0;
          int now = (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L2)) ? 1 : 0;
@@ -1020,7 +1037,9 @@ static void update_input(void)
          }
       }
       else if (ss2comm_rom_is_ss2())
-         input_buf = ss2sp_frame(input_buf, trig);
+      {  /* SP 를 끄면 엔진을 «안 부른다». 폴드는 위에서 이미 했다. */
+         if (ss2sp_enable) input_buf = ss2sp_frame(input_buf, trig);
+      }
       else if (kofsp_rom_ok())
          /* KOF R-2 — 원버튼 엔진. ★ M1 단계에서는 kofsp_frame 이 아래 순정 폴드와
             **똑같이** 접기만 한다(Y=A·X=B·L·R=A+B). 그래서 이 가지가 생겨도
