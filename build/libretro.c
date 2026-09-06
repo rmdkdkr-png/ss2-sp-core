@@ -622,10 +622,12 @@ void retro_reset(void)
    }
    else
    {
-      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+      /* ★ 해설·해설자·심판·기둥·음성 **폐기** (유저 2026-09-07 「게임내 기둥버튼 제거 /
+         해설같은거 코어메뉴도 정리」). 옵션 표에서 뺐어도 **여기 오버레이에는 그대로 떴다** —
+         「정리했다」고 말한 자리가 앱 설정·코어 옵션 표·이 오버레이로 **세 겹**이었다.
+         남기는 것은 원버튼 필살기와 기술명 표시 둘뿐이다. */
+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
-      ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
    }
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
@@ -698,10 +700,12 @@ bool retro_load_game(const struct retro_game_info *info)
    }
    else
    {
-      ss2comm_overlay_bind(&ov_chat, &ov_spk, &ov_ref, &ov_sides, 0, 0, 0, &ov_sp);
+      /* ★ 해설·해설자·심판·기둥·음성 **폐기** (유저 2026-09-07 「게임내 기둥버튼 제거 /
+         해설같은거 코어메뉴도 정리」). 옵션 표에서 뺐어도 **여기 오버레이에는 그대로 떴다** —
+         「정리했다」고 말한 자리가 앱 설정·코어 옵션 표·이 오버레이로 **세 겹**이었다.
+         남기는 것은 원버튼 필살기와 기술명 표시 둘뿐이다. */
+      ss2comm_overlay_bind(0, 0, 0, 0, 0, 0, 0, &ov_sp);
       ss2comm_overlay_bind_extra("기술명 표시", &ov_toast);
-      ss2comm_overlay_bind_extra("음성", &ov_dub);   /* 「빙」 낱자가 11px 폰트에 없다 */
-      ss2comm_overlay_bind_knob("음성 크기", &ov_vol, 15);  /* 「륨」도 없다 */
    }
    if (svcsp_rom_ok())
    {  /* 어떤 빌드가 도는지 화면으로 — "지원 문의: 옛 코어가 로드되는 사고" 방지 */
