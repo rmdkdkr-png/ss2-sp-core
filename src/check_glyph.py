@@ -40,9 +40,14 @@ for p in sorted(glob.glob(os.path.join(D, "*.c")) + glob.glob(os.path.join(D, "*
     t = io.open(p, encoding="utf-8", errors="replace").read()
     if re.search(r'^\s*int\s+main\s*\(', t, re.M): continue
     nfile += 1
-    for s in re.findall(r'"((?:[^"\\]|\\.)*)"', t):
+    # ── stderr·stdout 으로 가는 줄은 화면에 안 나간다 — 디버그 문자열까지 훑어
+    #    본 시험을 «한 번도 못 돌게» 했던 구멍(2026-09-07). snprintf 는 화면행 후보라 남긴다.
+    OUT = re.compile(r'\b(?:f?printf|puts|perror)\s*\(')
+    for line in t.splitlines():
+      if OUT.search(line): continue
+      for s in re.findall(r'"((?:[^"\\]|\\.)*)"', line):
         for ch in unescape(s):
-            if ord(ch) > 0x20: need.setdefault(ord(ch), (os.path.basename(p), s))
+          if ord(ch) > 0x20: need.setdefault(ord(ch), (os.path.basename(p), s))
 
 miss = sorted(c for c in need if c not in font)
 if miss:
