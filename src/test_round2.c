@@ -8,6 +8,8 @@
 extern void        ss2comm_set_ram(void *p);
 extern void        ss2comm_set_enabled(int on);
 extern void        ss2comm_set_speaker(int idx);
+extern void        ss2comm_set_chat(int on);
+extern void        ss2comm_set_ref(int on);
 extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
 
@@ -45,6 +47,8 @@ int main(void)
     ss2comm_set_ram(ram);
     ss2comm_set_enabled(1);
     ss2comm_set_speaker(0);
+    ss2comm_set_chat(1);             /* 2026-09-07 기본값이 끔 — 시험이 직접 켠다 */
+    ss2comm_set_ref(1);
     ss2comm_reset();
     memset(ram, 0, sizeof(ram));
     ram[BLK1] = 8 * (2*2 + 0);            /* 나 = 하오마루 */

@@ -9,6 +9,8 @@
 extern void        ss2comm_set_ram(void *p);
 extern void        ss2comm_set_enabled(int on);
 extern void        ss2comm_set_speaker(int idx);
+extern void        ss2comm_set_chat(int on);
+extern void        ss2comm_set_ref(int on);
 extern void        ss2comm_reset(void);
 extern const char *ss2comm_frame(void);
 extern int         ss2comm_speaker_count(void);
@@ -119,6 +121,11 @@ int main(void)
     ss2comm_set_ram(ram);
     ss2comm_set_enabled(1);
     ss2comm_set_speaker(0);          /* 하오마루 */
+    /* ★ 캐릭터챗·심판을 시험이 직접 켠다. 2026-09-07 코어 기본값이 끔으로 내려가
+       (옵션 폐기 → 기본값이 굳음) 기본값에 기대던 시험 10개가 죽었다.
+       시험은 자기가 재는 상태를 자기가 만든다 — 기본값이 무엇이든. */
+    ss2comm_set_chat(1);
+    ss2comm_set_ref(1);
 
     printf("해설자 %d명: ", ss2comm_speaker_count());
     for(i = 0; i < ss2comm_speaker_count(); i++) printf("%s ", ss2comm_speaker_name(i));
