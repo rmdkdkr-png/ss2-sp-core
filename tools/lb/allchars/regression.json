@@ -1,0 +1,50 @@
+{
+  "ss2": {
+    "stable_ram_diff": 0,
+    "noise_bytes": 0,
+    "video_baseline_stable": true,
+    "video_equal": true,
+    "audio_baseline_stable": true,
+    "audio_equal": true
+  },
+  "svc": {
+    "stable_ram_diff": 0,
+    "noise_bytes": 95,
+    "video_baseline_stable": true,
+    "video_equal": true,
+    "audio_baseline_stable": false,
+    "audio_equal": true
+  },
+  "kof": {
+    "stable_ram_diff": 0,
+    "noise_bytes": 0,
+    "video_baseline_stable": true,
+    "video_equal": true,
+    "audio_baseline_stable": true,
+    "audio_equal": true
+  },
+  "mslug1": {
+    "stable_ram_diff": 0,
+    "noise_bytes": 0,
+    "video_baseline_stable": true,
+    "video_equal": true,
+    "audio_baseline_stable": true,
+    "audio_equal": true
+  },
+  "mslug2": {
+    "stable_ram_diff": 0,
+    "noise_bytes": 0,
+    "video_baseline_stable": true,
+    "video_equal": true,
+    "audio_baseline_stable": true,
+    "audio_equal": true
+  },
+  "ffury": {
+    "stable_ram_diff": 0,
+    "noise_bytes": 0,
+    "video_baseline_stable": true,
+    "video_equal": true,
+    "audio_baseline_stable": true,
+    "audio_equal": true
+  }
+}

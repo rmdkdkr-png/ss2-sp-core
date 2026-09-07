@@ -1,0 +1,1592 @@
+{
+  "rows": [
+    {
+      "id": 0,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 0,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 1,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 2,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 3,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 5,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 4,
+      "slot": 5,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 5,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 5,
+      "slot": 5,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 6,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 6,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 6,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 6,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 6,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 6,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 6,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 6,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 7,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 7,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 7,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 7,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 7,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 7,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 7,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 7,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 5,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 8,
+      "slot": 5,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 6,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 9,
+      "slot": 6,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 5,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 6,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 5,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 10,
+      "slot": 6,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 6,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 11,
+      "slot": 6,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 5,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 12,
+      "slot": 5,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 1,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 4,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 1,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 13,
+      "slot": 4,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 14,
+      "slot": 0,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 14,
+      "slot": 2,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 14,
+      "slot": 3,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 14,
+      "slot": 5,
+      "side": 0,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 14,
+      "slot": 0,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 14,
+      "slot": 2,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 14,
+      "slot": 3,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    },
+    {
+      "id": 14,
+      "slot": 5,
+      "side": 1,
+      "counts": [
+        20,
+        20
+      ],
+      "fail": []
+    }
+  ],
+  "last": 14,
+  "continuous_last": [
+    true,
+    true,
+    true,
+    true,
+    true
+  ]
+}
