@@ -1114,7 +1114,7 @@ static const struct { const char *nm; int at, hold; } TB_JOB[3] = {
       양쪽 위상에서 다 되는 값으로 잡았다: 황 6 · 독 9. */
    { "황 최속 6f", 5, 6 },   /* 뗌 11~12 — 어느 위상이든 황 */
    { "독 최속 9f", 5, 9 },   /* 뗌 14~15 — 어느 위상이든 독 */
-   { "커맨드밖",   8, 4 },   /* 8프레임 넘겨 누름 — 필살기가 안 나간다 */
+   { "커맨드 초과", 8, 4 },   /* 글자는 글꼴에 있는 것만 — 토스트로 화면에 나간다 */   /* 8프레임 넘겨 누름 — 필살기가 안 나간다 */
 };
 
 static int      tb_boot;          /* 부팅 세이브를 올렸는가 */
@@ -1158,7 +1158,7 @@ static int tb_step(uint8_t *pad, uint16_t ret)
          if (tb_watch && --tb_watch == 0)
          {  /* 결과 보고 — act 는 발동 직후가 아니라 몇 프레임 뒤에 앉는다 */
             int dmg = tb_hp0 - (int)CPUExRAM[OFF_HP2];
-            snprintf(msg, sizeof msg, "뱅크 %u  act %u  피해 %d",
+            snprintf(msg, sizeof msg, "bank %u  act %u  피해 %d",
                      (unsigned)tb_bank, (unsigned)tb_act, dmg);
             ss2comm_toast(msg, 150);
          }
@@ -1167,7 +1167,7 @@ static int tb_step(uint8_t *pad, uint16_t ret)
       tb_job = pick; tb_at = 0;
       tb_hp0 = (int)CPUExRAM[OFF_HP2];
       tb_bank = 255; tb_act = 0;
-      snprintf(msg, sizeof msg, "%s  A@%d x%d",
+      snprintf(msg, sizeof msg, "%s  A#%d x%d",
                TB_JOB[pick].nm, TB_JOB[pick].at, TB_JOB[pick].hold);
       ss2comm_toast(msg, 90);
    }
