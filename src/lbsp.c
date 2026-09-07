@@ -1,436 +1,121 @@
-/* 월화의 검사 원버튼 필살기 엔진 — M2: **매크로 하나**.
- *
- * ─ 왜 svcsp.c 를 일반화하지 않고 파일을 하나 더 만드나
- *   저장소가 이미 ss2sp.c / svcsp.c / kofsp.c 로 갈라 놓았다. 넷째도 가른다.
- *   일반화 안은 kofsp.c 머리에서 한 번 기각됐다(「돌고 있는 코드를 대수술」).
- *   이식이 다 끝난 뒤에 판단할 일이다.
- *
- * ─ M1 이 일부러 아무것도 안 하는 이유
- *   게임 여러 개를 한 .so 에 담을 때 실제로 깨지는 자리는 **분기와 배관**이지 엔진이 아니다.
- *   메탈슬러그가 SS2 선처리에 삼켜져 무반응이던 사고가 그 증거다.
- *   그래서 M1 의 통과 조건은 **출력이 한 비트도 안 바뀌는 것** 하나다.
- *
- *   M1(배관만)은 통과했다 — 무회귀 일곱 게임 0바이트, 폴드 8,192조합 어긋남 0.
- *
- * ─ M2 에서 달라진 것: **R 이 SP 트리거다**
- *   ★ 단, **엔진을 끄면 R 은 예전처럼 A+B 로 접힌다.** 이건 kofsp 와 «일부러 다르다»
- *     (kofsp 는 R 을 무조건 뺀다). 이렇게 해야 「엔진 끔」이 **순정과 글자 그대로 같은**
- *     대조군이 된다 — 대조군이 조금이라도 다르면 그건 대조군이 아니다.
- *
- * ─ M2 는 링을 **안 쓴다**
- *   링은 M0 에서 찾아 뒀지만(0x1313~) M3 의 일이다. 여기서 링까지 같이 넣으면
- *   실패했을 때 **배관 탓인지 링 탓인지 못 가른다.** 먼저 패드로 걸어 넣어
- *   발동을 세우고, 그 다음에 링으로 빠르게 만든다.
- *
- * ─ 게임 상수는 잰 것만 넣는다
- *   안 잰 것은 전부 LBSP_UNMEASURED 로 둔다. 「아직 안 잰 것에 기대는 코드」가
- *   **구조적으로 못 생기게** 하려는 것이다. 실측 근거는 tools/lb/README.md · MOVES.md.
+/* Last Blade UE SP: 14 profiles plus awakened Kaede (actor ID 0).
+ * Measurements and reproducible gates: tools/lb/allchars/.
+ * Only direction history is written; ROM, flash, HP and character IDs are untouched.
  */
 #include "lbsp.h"
-
 #include <stdlib.h>
 #include <string.h>
-
-/* ── 램 접근 — ss2sp.c · svcsp.c · kofsp.c 와 같은 이중 경로 ─────── */
 #ifdef SS2SP_RAM_POINTER
-static uint8_t *lb_ram_ptr;
-void lbsp_set_ram(void *p) { lb_ram_ptr = (uint8_t *)p; }
-#define CPUExRAM lb_ram_ptr
+static uint8_t *ram;
+void lbsp_set_ram(void *p) { ram = (uint8_t *)p; }
 #else
 extern uint8_t CPUExRAM[16384];
+#define ram CPUExRAM
 #endif
-
-/* ── 게임 상수 ───────────────────────────────────────────────────
-   램 오프셋은 CPUExRAM 기준(= CPU 주소 − 0x4000).
-   ⚠ 겉모습으로 정하지 마라. 승격은 「독립 시나리오 2개 + 위상 2종 + 교차 증인」이다.
-   ⚠ SvC·KOF 상수를 베껴 오지 마라 — KOF 는 강약 문턱이 6/4 로 SvC 의 12/5 와 달랐다. */
-#define LBSP_UNMEASURED (-1)
-
-/* ★ 승격됨 — 동작 ID. 쉴 때 4 · 서서베기 96 · 앉아베기 120 · 킥 128 ·
-   236+A 112 · 623+A 116 · 214+B 168. 기술 여섯을 위상 2종으로 돌려 값이 전부 같았고,
-   표에 없는 커맨드(421+A)는 평타만 나오는 대조군이 섰다. (tools/lb/MOVES.md) */
-#define OFF_ACT        0x0370
-#define LBSP_ACT_REST  4
-/* ★ «걸 수 있는» 상태는 서기 하나가 아니다. 방향을 잡으면 act 가 바뀐다:
-     4 서기 · 12 웅크림 · 20 앞걷기 · 24 뒤걷기 (MOVES.md 실측).
-   서기만 받았더니 **방향 슬롯이 전부 무반응**이었다 — 슬롯을 고르려면
-   방향을 잡아야 하는데, 잡는 순간 조건이 깨지는 자가당착이었다. */
-#define LBSP_ACT_CROUCH 12
-#define LBSP_ACT_WALKF  20
-#define LBSP_ACT_WALKB  24
-
-/* ★ 승격됨 — 방향이력 링. **SvC·KOF 와 구조가 다르다.**
-   그 둘은 값이 «밀린다»(간격 2). 월화는 **값이 안 움직이고 머리만 나아간다**(간격 1).
-   결과는 같지만 주입 코드가 다르다 — 밀기를 흉내 내면 안 된다.
-   한 칸 = 2프레임 → 128칸으로 256프레임을 기억한다. 값은 NGP 패드 비트 그대로.
-   중립도 기록된다(0 이 앉는다). 머리는 128 에서 되돌아온다. */
-#define OFF_RING_HEAD  0x1312
-#define OFF_RING       0x1313
-#define LBSP_RING_N    128
-#define LBSP_P2_DELTA  0x88    /* P2 는 머리 0x139A · 링 0x139B~ */
-
-/* ── 아직 안 잰 것 ───────────────────────────────────────────────
-   ⚠ **반전(좌우)이 제일 위험하다.** KOF 에서 0x0D4A 를 반전이라 잘못 잡았는데
-     그건 「필살기를 한 번 쓰면 서고 안 내려오는 플래그」였고, 그 탓에 배포된 엔진이
-     한 라운드 두 번째 발동부터 커맨드를 좌우로 뒤집었다. 이것을 못 확정하면 접는다. */
-/* ★ 승격됨 — 좌우 반전. **0 = 오른쪽 봄(앞=R) · 1 = 왼쪽 봄(앞=L).**
-   P2 는 +0x40 (P2 act 는 0x03B0, 쉼 4 로 확인). 승격 근거:
-     · 독립 시나리오 둘 — ⓐ 뛰어넘어 자리를 바꾼다 ⓑ 넘어간 뒤 걷는 방향이 뒤집힌다
-       (반전0: R=앞걷기20·L=뒤걷기24 / 반전1: R=24·L=20 — 네 칸 진리표가 딱 맞는다)
-     · 위상 2종 완전 일치 · 가만히 있으면 안 바뀜(대조군)
-     · 교차 증인 — P2(+0x40)가 «늘 반대 값»이다
-   ★ **되돌아온다**: 0 → 1 → 0. 되넘어오면 0 으로 복귀한다.
-     KOF 가 여기서 당했다 — 0x0D4A 는 한 번 서면 «안 내려오는» 플래그였는데
-     스냅숏 두 장만 보고 반전이라 불렀고, 배포된 엔진이 한 라운드
-     **두 번째 발동부터 커맨드를 좌우로 뒤집었다.** 그래서 복귀를 반드시 본다. */
-#define OFF_FACE       0x0386
-#define OFF_FACE2      (OFF_FACE + 0x40)  /* 교차 증인용 — 판정에는 안 쓴다 */
-#define LBSP_FACE_LEFT 1
-#define OFF_H1         LBSP_UNMEASURED   /* 지상/공중 */
-#define OFF_HP2        LBSP_UNMEASURED   /* 상대 체력 — 교차 증인 */
-#define OFF_COMBO      LBSP_UNMEASURED   /* 콤보 수 — 게임이 화면에도 띄운다 */
-/* ★ 강약 문턱 — 버튼을 **8프레임 이상** 쥐면 강이 된다(질풍 지속 62 → 70).
-   ⚠ **7 은 금지구역이다.** 위상 0 에서는 약, 위상 1 에서는 강으로 «갈린다».
-     KOF 의 「5프레임은 위상에 따라 갈림 → 금지구역」과 똑같은 꼴이다.
-     안전한 약 구역은 ≤6, 안전한 강 구역은 ≥8. 그래서 기본 버튼을 4 로 둔다.
-   ⚠ 성질이 다른 증인으로도 확인했다 — **엔진을 끄고 손으로 베기를 쥐어도** 같은 문턱에서
-     act 96(약) → 112(강) 로 넘어간다. */
-#define LBSP_TH_STRONG 8
-#define LBSP_TH_TAPMAX 6                 /* 여기까지는 확실히 약 */
-#define LBSP_CMD_WIN   LBSP_UNMEASURED   /* 커맨드 창(프레임) */
-
-static const int lb_consts[] = {
-   OFF_H1, OFF_HP2, OFF_COMBO, LBSP_CMD_WIN
+#define ACT 0x370
+#define CHAR 0x36e
+#define FACE 0x386
+#define HEAD 0x1312
+#define RING 0x1313
+#define F 64
+#define B 128
+/* pre is chronological, and HEAD points to the next ring slot. */
+typedef struct { const char *label; uint8_t pre[44], n, live, btn; } LbMove;
+static const LbMove moves[15][7] = {
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"214A", {2,130}, 2, 128, 16},{"214B", {2,130}, 2, 128, 32},{"41236B", {128,130,2,66}, 4, 64, 32},{0},{0}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"214A", {2,130}, 2, 128, 16},{"214B", {2,130}, 2, 128, 32},{"41236B", {128,130,2,66}, 4, 64, 32},{0},{0}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"214A", {2,130}, 2, 128, 16},{"214B", {2,130}, 2, 128, 32},{"41236B", {128,130,2,66}, 4, 64, 32},{0},{0}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"214A", {2,130}, 2, 128, 16},{"63214B", {64,66,2,130}, 4, 128, 32},{"41236B", {128,130,2,66}, 4, 64, 32},{0},{0}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"63214A", {64,66,2,130}, 4, 128, 16},{"236B", {2,66}, 2, 64, 32},{"63214B", {64,66,2,130}, 4, 128, 32},{"421A", {128,2,130}, 3, 0, 16},{0}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"421A", {128,2,130}, 3, 0, 16},{"28B", {2}, 1, 1, 32},{"63214A", {64,66,2,130}, 4, 128, 16},{"63214B", {64,66,2,130}, 4, 128, 32},{0}},
+ {{"[4]6A", {128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128}, 40, 64, 16},{"[2]8A", {2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2}, 40, 1, 16},{"214A", {2,130}, 2, 128, 16},{"[4]6B", {128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128}, 40, 64, 32},{0},{0},{0}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"214A", {2,130}, 2, 128, 16},{"214B", {2,130}, 2, 128, 32},{0},{0},{0}},
+ {{"616A", {64,130}, 2, 64, 16},{"623B", {64,2,66}, 3, 0, 32},{"214A", {2,130}, 2, 128, 16},{"63214B", {64,66,2,130}, 4, 128, 32},{"63214A", {64,66,2,130}, 4, 128, 16},{"41236B", {128,130,2,66}, 4, 64, 32},{0}},
+ {{"214B", {2,130}, 2, 128, 32},{"[2]8A", {2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2}, 40, 1, 16},{"63214A", {64,66,2,130}, 4, 128, 16},{"AB", {0}, 0, 0, 48},{0},{0},{"236B", {2,66}, 2, 64, 32}},
+ {{"236A", {2,66}, 2, 64, 16},{"623B", {64,2,66}, 3, 0, 32},{"214A", {2,130}, 2, 128, 16},{"421A", {128,2,130}, 3, 0, 16},{"63214B", {64,66,2,130}, 4, 128, 32},{"41236B", {128,130,2,66}, 4, 64, 32},{"236A", {2,66}, 2, 64, 16}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"63214A", {64,66,2,130}, 4, 128, 16},{"214B", {2,130}, 2, 128, 32},{"236B", {2,66}, 2, 64, 32},{0},{"2B", {0}, 0, 2, 32}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"214B", {2,130}, 2, 128, 32},{"623B", {64,2,66}, 3, 0, 32},{"41236B", {128,130,2,66}, 4, 64, 32},{"AB", {0}, 0, 0, 48},{0}},
+ {{"236A", {2,66}, 2, 64, 16},{"623A", {64,2,66}, 3, 0, 16},{"214A", {2,130}, 2, 128, 16},{"623B", {64,2,66}, 3, 0, 32},{"63214B", {64,66,2,130}, 4, 128, 32},{0},{0}},
+ {{"236A", {2,66}, 2, 64, 16},{0},{"214A", {2,130}, 2, 128, 16},{"214B", {2,130}, 2, 128, 32},{0},{"AB", {0}, 0, 0, 48},{0}}
 };
 
-int lbsp_unmeasured_count(void)
-{
-   unsigned i; int n = 0;
-   for (i = 0; i < sizeof(lb_consts) / sizeof(lb_consts[0]); i++)
-      if (lb_consts[i] == LBSP_UNMEASURED) n++;
-   return n;
-}
-
-/* ── 패드 비트 ───────────────────────────────────────────────────
-   ⚠ 대본 글자와 헷갈리지 마라. 하네스 대본은 **레트로패드** 기준이라
-     NGP A = 대본 `B` · NGP B = 대본 `A` 다. 여기 값은 **NGP 쪽**이다. */
-#define NGP_U 0x01
-#define NGP_D 0x02
-#define NGP_L 0x04
-#define NGP_R 0x08
-#define NGP_A (1 << 4)
-#define NGP_B (1 << 5)
-
-#define RP_Y 1
-#define RP_X 9
-#define RP_L 10
-#define RP_R 11
-
-/* ── 매크로 ──────────────────────────────────────────────────────
-   M2 는 **하나**만 있다: 236+A (카에데 질풍). act 112 가 나오면 성공이다.
-
-   ⚠ 프레임 수는 lb_moves.py 의 실측 그대로다(방향 4프레임씩, 버튼 6프레임).
-     링이 2프레임에 한 칸이니 4프레임이면 한 방향이 두 칸을 채운다.
-
-   ★ 방향은 **`F`(앞)·`B`(뒤)로 적고** 나갈 때 반전을 보고 실제 비트로 바꾼다.
-     못 박아 두면 반대편에서 딴 기술이 나간다. */
-#define F 0x40                  /* 앞 — 실제 비트는 lb_fwd() 가 정한다 */
-#define B 0x80                  /* 뒤 */
-
-/* 아래 링 도우미들의 앞선언 — 대본 표가 먼저 와야 읽기 좋아서 여기 둔다. */
-static int lb_env(const char *k, int dflt);
-static int lb_ring_on(void);
-
-typedef struct { int frames; unsigned char pad; } LbMacStep;
-
-static const LbMacStep MAC_236A[] = {
-   { 4, NGP_D },
-   { 4, (unsigned char)(NGP_D | F) },
-   { 4, F },
-   { 6, NGP_A }                 /* 버튼은 방향을 놓고 나서 — 실측이 그랬다 */
-};
-#define MAC_236A_N ((int)(sizeof MAC_236A / sizeof MAC_236A[0]))
-
-/* ── 슬롯 ────────────────────────────────────────────────────────
-   트리거를 누를 때 **잡고 있는 방향**으로 기술을 고른다.
-
-   `pre[]` 는 **링에 박을 방향들**(오래된 것 → 최근), `live` 는 **실제로 누를**
-   마지막 방향(0 이면 없음), `btn` 은 버튼.
-   ★ 주입 규칙 — SvC·KOF 에서 두 번 확인된 것: **마지막이 카디널이면 앞칸만 박고
-     마지막 방향과 버튼은 진짜로 누른다. 마지막이 대각이면 전부 박고 버튼만.**
-     반대로 하면 다른 기술이 나간다.
-
-   ⚠ 없는 슬롯은 **비워 둔다**(`btn == 0`). 카에데는 지상 다섯뿐이고
-     뒤아래·공중 기술이 없다. 없는 것을 지어 넣으면 「안 나간다」가 버그로 보인다. */
-enum { LB_N = 0, LB_F, LB_B, LB_D, LB_DF, LB_DB, LB_AIR, LB_SLOT_MAX };
-
-typedef struct {
-   const char *name;      /* 표시용 */
-   uint8_t pre[5];        /* 링에 박을 방향(오래된 것 → 최근) */
-   int npre;
-   uint8_t live;          /* 실제로 누를 마지막 방향. 0 = 없음(대각으로 끝나는 커맨드) */
-   uint8_t btn;           /* NGP_A(베기) · NGP_B(킥) · 0 = 슬롯 없음 */
-   const char *disp;      /* 기술명 토스트 */
-} LbMove;
-
-static const LbMove MOVES[LB_SLOT_MAX] = {
-   /* N  — 236+A 질풍   지문 112→144 */
-   { "236+A", { NGP_D, (uint8_t)(NGP_D | F) }, 2, F, NGP_A,
-     "\u2193\u2198\u2192 + \ubca0\uae30" },
-   /* F  — 623+A 풍아   지문 116→48 · 마지막이 «대각»이라 전부 박고 버튼만 */
-   { "623+A", { F, NGP_D, (uint8_t)(NGP_D | F) }, 3, 0, NGP_A,
-     "\u2192\u2193\u2198 + \ubca0\uae30" },
-   /* B  — 214+A 참격   지문 148→28 */
-   { "214+A", { NGP_D, (uint8_t)(NGP_D | B) }, 2, B, NGP_A,
-     "\u2193\u2199\u2190 + \ubca0\uae30" },
-   /* D  — 214+B 동풍   지문 168 */
-   { "214+B", { NGP_D, (uint8_t)(NGP_D | B) }, 2, B, NGP_B,
-     "\u2193\u2199\u2190 + \ubc1c" },
-   /* DF — 41236+B 폭풍 지문 148→140 */
-   { "41236+B", { B, (uint8_t)(NGP_D | B), NGP_D, (uint8_t)(NGP_D | F) }, 4, F, NGP_B,
-     "\ubc18\ud68c\uc804 + \ubc1c" },
-   /* DB — 없음 */
-   { NULL, { 0 }, 0, 0, 0, NULL },
-   /* AIR — 없음 */
-   { NULL, { 0 }, 0, 0, 0, NULL },
-};
-
-/* 링을 쓸 때의 짧은 꼬리 — 앞선 방향은 박고 **마지막 방향과 버튼만 실제로 누른다.**
-   프레임 수는 lb_env() 로 흔들 수 있다(다시 안 굽고). */
-static LbMacStep mac_ring[2];
-static int mac_ring_n;
-
-static void lb_build_ring_macro(const LbMove *m)
-{
-   int n = 0;
-   int fr = lb_env("LBSP_RING_F", 2);
-   if (m->live && fr > 0)
-   {
-      mac_ring[n].frames = fr;
-      mac_ring[n].pad = m->live;
-      n++;
-   }
-   mac_ring[n].frames = lb_env("LBSP_RING_BTN", 4);
-   mac_ring[n].pad = m->btn;
-   n++;
-   mac_ring_n = n;
-}
-
-/* 지금 잡고 있는 방향으로 슬롯을 고른다. 공중은 아직 안 잰다(OFF_H1 미측정). */
-static int lb_slot_of(uint8_t pad, uint8_t fwd)
-{
-   uint8_t back = (fwd == NGP_R) ? NGP_L : NGP_R;
-   int d = (pad & NGP_D) != 0, f = (pad & fwd) != 0, b = (pad & back) != 0;
-   if (d && f) return LB_DF;
-   if (d && b) return LB_DB;
-   if (d)      return LB_D;
-   if (f)      return LB_F;
-   if (b)      return LB_B;
-   return LB_N;
-}
-
-/* 지금 도는 대본이 무엇인지 — 링을 썼으면 짧은 꼬리, 아니면 원래 18프레임. */
-static const LbMacStep *mac_cur;
-static int mac_cur_n;
-
-/* ── 상태 ────────────────────────────────────────────────────── */
-static int  lb_engine_on;      /* 기본 꺼짐 */
-static int  lb_is_rom;
-static int  mac_step = -1;     /* -1 = 안 돎 */
-static uint8_t mac_fwd;        /* ★ 시작할 때의 «앞». 도는 중엔 안 바꾼다 */
-static int  mac_left;          /* 이번 칸에 남은 프레임 */
-static int  trig_prev;
-
+static int enabled, is_rom, step=-1, left, count, held;
+static int pending=-1, pending_char, pending_frames;
+static uint8_t direction, pads[48], times[48];
 char lbsp_last_disp[64];
-int  lbsp_disp_seq;
-
-void lbsp_set_engine(int on) { lb_engine_on = on ? 1 : 0; }
-int  lbsp_engine_on(void)    { return lb_engine_on; }
-
-void lbsp_reset(void)
-{
-   mac_step = -1; mac_left = 0; trig_prev = 0; mac_fwd = NGP_R;
-   mac_cur = MAC_236A; mac_cur_n = MAC_236A_N;
-   lbsp_last_disp[0] = 0;
-   /* seq 는 **안 되돌린다** — 프론트가 엣지로 보므로 되돌리면 옛 값과 같아져 한 번 놓친다. */
+int lbsp_disp_seq;
+int lbsp_unmeasured_count(void) { return 3; } /* HP, combo, command window */
+void lbsp_set_engine(int on) { enabled=!!on; if (!enabled) {step=-1;held=0;pending=-1;} }
+int lbsp_engine_on(void) {return enabled;}
+void lbsp_reset(void) {step=-1;left=0;held=0;pending=-1;lbsp_last_disp[0]=0;}
+void lbsp_set_rom(const void *p,unsigned n) {
+ is_rom=p && n>=0x30 && !memcmp((const char *)p+0x24,"LASTBLADE",9);lbsp_reset();
 }
-
-/* 헤더 0x24 의 게임 표식으로 판별한다.
-   ⚠ 판별 순서 사고를 피하려면 접두가 안 겹쳐야 한다. 확인했다:
-     LASTBLADE124 는 SAMURAI2 · KOF R2 · SNKvsCAPCOM1 · GEKKA 어느 것과도 안 겹친다. */
-void lbsp_set_rom(const void *rom, unsigned len)
-{
-   const char *p = (const char *)rom;
-   lb_is_rom = 0;
-   if (p && len >= 0x30 && !memcmp(p + 0x24, "LASTBLADE", 9))
-      lb_is_rom = 1;
-   lbsp_reset();
+int lbsp_rom_ok(void) {return is_rom;}
+static uint8_t bits(uint8_t p) {
+ return (p&63) | ((p&F)?direction:0) | ((p&B)?(direction==8?4:8):0);
 }
-
-int lbsp_rom_ok(void) { return lb_is_rom; }
-
-/* ── 링 주입 ─────────────────────────────────────────────────────
-   기본 **켬**. 끄려면 LBSP_RING=0 — 대조군을 돌릴 길은 남겨 둔다. */
-static int lb_ring_on(void)
-{
-   static int v = -1;
-   if (v < 0) { const char *e = getenv("LBSP_RING"); v = !(e && *e == '0'); }
-   return v;
+static int character(void) {
+ unsigned c=ram[CHAR];
+ /* Actor dispatch index: 4*ID. Natural P1/P2 selections independently verified. */
+ return (c%4==0 && c<=56)?(int)(c/4):-1;
 }
-
-static int lb_env(const char *k, int dflt)
-{
-   const char *e = getenv(k);
-   if (!e || !*e) return dflt;
-   return atoi(e);
+static int slot(uint8_t pad) {
+ unsigned f=pad&direction,b=pad&(direction==8?4:8),d=pad&2;
+ return d?(f?4:b?5:3):f?1:b?2:0;
 }
-
-/* 머리에서 back 칸 뒤에 값을 박는다. back=1 이 «가장 최근 칸»이다.
-   ⚠ 머리(0x1312)는 «다음에 쓸 칸»의 색인이다 — 최근 칸은 머리−1 이다.
-   ⚠ 한 칸만 붙잡아 두고 증명하려 하지 마라. KOF 에서 링을 정적으로 붙잡았더니
-     게임이 읽는 시작점이 돌아 사실상 모든 회전을 시도하게 돼 증명이 안 됐다.
-     **한 번만 쓰는 것**이 본질이다. */
-static void lb_ring_put(int back, uint8_t v)
-{
-   int h = CPUExRAM[OFF_RING_HEAD];
-   CPUExRAM[OFF_RING + ((h - back) & (LBSP_RING_N - 1))] = v;
+static int ground(int c,uint8_t a) {
+ if(c==14) return a==4 || a==12 || a==16;
+ return a==4 || a==12 || a==20 || a==24;
 }
-
-/* 지금 «앞»이 어느 비트인가. 램을 못 읽으면 오른쪽 봄으로 둔다(트레이닝 기본). */
-static uint8_t lb_fwd(void)
-{
+static void append(unsigned p,unsigned t) {pads[count]=(uint8_t)p;times[count++]=(uint8_t)t;}
+static void begin(const LbMove *m) {
+ unsigned i; const char *env=getenv("LBSP_RING");
+ count=0;
+ if(env && *env=='0') {
+  for(i=0;i<m->n;i++) append(m->pre[i],m->n>5?2:4);
+ } else {
+  unsigned h=ram[HEAD];
+  for(i=0;i<m->n;i++) ram[RING+((h-m->n+i)&127)]=bits(m->pre[i]);
+ }
+ if(m->live) append(m->live,2);
+ /* Up must remain held with the button. Four up-only frames already jump. */
+ append(m->btn | (m->live==1?1:0),4);
+ step=0;left=times[0];
+ strncpy(lbsp_last_disp,m->label,sizeof(lbsp_last_disp)-1);
+ lbsp_last_disp[sizeof(lbsp_last_disp)-1]=0;lbsp_disp_seq++;
+}
+uint8_t lbsp_frame(uint8_t pad,uint16_t ret) {
+ int trig=!!(ret&(1u<<11));
+ if(ret&(1u<<1))pad|=16;
+ if(ret&(1u<<9))pad|=32;
+ if(ret&(1u<<10))pad|=48;
+ if(!enabled || !is_rom) {if(trig)pad|=48;step=-1;held=0;return pad;}
 #ifdef SS2SP_RAM_POINTER
-   if (!CPUExRAM) return NGP_R;
+ if(!ram) {step=-1;held=trig;return pad;}
 #endif
-   return (CPUExRAM[OFF_FACE] == LBSP_FACE_LEFT) ? NGP_L : NGP_R;
-}
-
-/* 대본의 F/B 를 실제 방향 비트로 바꾼다. 한 프레임 안에서 값을 고정해 쓴다 —
-   매크로가 도는 중에 반전이 바뀌어도 «시작할 때의 앞»을 끝까지 쓰기 위해서다. */
-static uint8_t lb_bits(uint8_t p, uint8_t fwd)
-{
-   uint8_t back = (fwd == NGP_R) ? NGP_L : NGP_R;
-   uint8_t o = (uint8_t)(p & (NGP_U | NGP_D | NGP_A | NGP_B));
-   if (p & F) o |= fwd;
-   if (p & B) o |= back;
-   return o;
-}
-
-/* 기술명 — 프론트가 seq 엣지를 보고 버퍼를 읽는다. **버퍼 먼저, seq 나중.** */
-static void lb_disp(const char *t)
-{
-   size_t n = strlen(t);
-   if (n >= sizeof lbsp_last_disp) n = sizeof lbsp_last_disp - 1;
-   memcpy(lbsp_last_disp, t, n);
-   lbsp_last_disp[n] = 0;
-   lbsp_disp_seq++;
-}
-
-/* 지금 매크로를 걸어도 되는 몸 상태인가.
-   act 를 못 읽으면(램이 없으면) **막지 않는다** — M2 의 관심사는 배관이지 조건이 아니다.
-   조건을 촘촘히 다는 것은 M3 이후, 그것도 «재고 나서» 할 일이다. */
-static int lb_can_start(void)
-{
-#ifdef SS2SP_RAM_POINTER
-   if (!CPUExRAM) return 1;      /* 포인터 빌드에서만 널일 수 있다 */
-#endif
-   {
-      uint8_t a = CPUExRAM[OFF_ACT];
-      return a == LBSP_ACT_REST || a == LBSP_ACT_CROUCH
-          || a == LBSP_ACT_WALKF || a == LBSP_ACT_WALKB;
+ if(pending>=0) {
+  int c=character();
+  if(c!=pending_char || ++pending_frames>20 || (ram[ACT]!=44 && ram[ACT]!=48)) pending=-1;
+  else if(ram[0x36c]<=90) {begin(&moves[c][6]);pending=-1;}
+ }
+ if(step<0 && pending<0 && trig && !held) {
+  int c=character(),s; const LbMove *m=0;
+  direction=ram[FACE]==1?4:8;
+  if(c>=0) {
+   s=slot(pad);
+   if(ground(c,ram[ACT]))m=&moves[c][s];
+   else if((ram[ACT]==44 || ram[ACT]==48) && moves[c][6].label) {
+    if(ram[0x36c]<=90)m=&moves[c][6];
+    else if(ram[ACT]==44){pending=6;pending_char=c;pending_frames=0;}
    }
-}
-
-/* ── 매 프레임 ─────────────────────────────────────────────────── */
-uint8_t lbsp_frame(uint8_t pad, uint16_t ret)
-{
-   int trig;
-
-   /* ★ 엔진을 끄면 **R 도 A+B 로 접는다** — SvC 와 같은 꼴이다(`svcsp.c:1418`).
-      유저 지시 「svc처럼 해라」. 세 게임의 규칙을 하나로 맞추는 것이 값어치다.
-
-      A+B 를 내는 길은 **언제나 L** 이고, 그건 엔진 켬·끔 어느 쪽에서도 변하지 않는다.
-      R 은 «엔진을 켰을 때만» SP 이고, 껐을 때는 놀지 않고 A+B 를 받는다.
-
-      ⚠ 한때 이 자리에서 R 겸업을 뗐다가 되돌렸다(`2bbed30` → 이 커밋).
-        「a+b는 a+b의 역할이고 SP는 SP다」를 「겸업을 떼라」로 읽은 것이 잘못이었고,
-        진짜 뜻은 **버튼이 둘 다 화면에 있어야 한다**였다. 그건 앱 쪽에서 고쳤다.
-      ⚠ 조건은 «엔진 토글»이다. SvC 는 `ngp_svcsp_basics`(기본기 모드)에 걸려 있는데
-        월화·KOF 에는 그 모드가 없다 — **조건까지 같게 만들 수는 없다.** */
-   if (!lb_engine_on || !lb_is_rom)
-   {
-      if (ret & (1u << RP_Y)) pad |= NGP_A;
-      if (ret & (1u << RP_X)) pad |= NGP_B;
-      if ((ret & (1u << RP_L)) || (ret & (1u << RP_R)))
-         pad |= (uint8_t)(NGP_A | NGP_B);
-      mac_step = -1;
-      trig_prev = 0;
-      return pad;
-   }
-
-   /* 엔진 켬 — R 은 트리거. L 은 그대로 A+B(사람의 동시입력 수단). */
-   trig = (ret & (1u << RP_R)) ? 1 : 0;
-   if (ret & (1u << RP_Y)) pad |= NGP_A;
-   if (ret & (1u << RP_X)) pad |= NGP_B;
-   if (ret & (1u << RP_L)) pad |= (uint8_t)(NGP_A | NGP_B);
-
-   /* 매크로가 도는 동안은 **사람 입력을 통째로 덮는다.**
-      섞으면 사람이 잡고 있던 방향이 커맨드에 끼어들어 딴 기술이 나간다. */
-   if (mac_step >= 0)
-   {
-      pad = lb_bits(mac_cur[mac_step].pad, mac_fwd);
-      if (--mac_left <= 0)
-      {
-         mac_step++;
-         if (mac_step >= mac_cur_n) mac_step = -1;
-         else mac_left = mac_cur[mac_step].frames;
-      }
-      trig_prev = trig;
-      return pad;
-   }
-
-   /* 엣지에서만 시작한다. 누르고 있는 동안 되풀이 발동하면 그게 누출이다. */
-   if (trig && !trig_prev && lb_can_start())
-   {
-      const LbMove *m;
-      int slot;
-      mac_fwd = lb_fwd();
-      slot = lb_slot_of(pad, mac_fwd);
-      m = &MOVES[slot];
-      if (!m->btn)
-      {  /* ★ 빈 슬롯 — 아무것도 안 한다. 없는 기술을 억지로 내면 딴 게 나간다. */
-         trig_prev = trig;
-         return pad;
-      }
-      if (lb_ring_on())
-      {
-         /* 앞선 방향을 링에 박는다. **최근 칸(머리−1)이 «마지막» 방향**이다 —
-            시간 순서가 뒤집히면 게임이 커맨드를 거꾸로 읽어 아무것도 안 나간다. */
-         int i;
-         for (i = 0; i < m->npre; i++)
-            lb_ring_put(m->npre - i, lb_bits(m->pre[i], mac_fwd));
-         lb_build_ring_macro(m);
-         mac_cur = mac_ring; mac_cur_n = mac_ring_n;
-      }
-      else
-      {  /* 링을 끄면 예전 18프레임 대본으로 — 236+A 하나만 걸어 둔다(대조군용). */
-         if (slot != LB_N) { trig_prev = trig; return pad; }
-         mac_cur = MAC_236A; mac_cur_n = MAC_236A_N;
-      }
-      mac_step = 0;
-      mac_left = mac_cur[0].frames;
-      pad = lb_bits(mac_cur[0].pad, mac_fwd);
-      if (--mac_left <= 0)
-      {
-         mac_step = 1;
-         if (mac_step >= mac_cur_n) mac_step = -1;
-         else mac_left = mac_cur[1].frames;
-      }
-      if (m->disp) lb_disp(m->disp);
-      trig_prev = trig;
-      return pad;
-   }
-
-   trig_prev = trig;
-   return pad;
+   if(m && m->label)begin(m);
+  }
+ }
+ held=trig;
+ if(step>=0) {
+  pad=bits(pads[step]);
+  if(--left==0){if(++step==count)step=-1;else left=times[step];}
+ }
+ return pad;
 }
