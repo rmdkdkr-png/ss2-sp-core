@@ -406,7 +406,10 @@ static int fg_want(void)
    float hz = 0;
    int want = 0;
    if (fg_opt == 0) return 0;
-   if (fg_opt == 2) return 1;
+   if (fg_rate_block)                                                /* 호출 속도가 60/s 에 머물렀다 — 패널이 120Hz 가 아니다.
+                                                                        '켬' 도 따른다 — 아니면 끄고 켜기를 2.5초마다 되풀이한다 */
+      return 0;
+   if (fg_opt == 2) return 1;                                        /* 강제 — 목표 주사율·런어헤드는 안 본다 */
    if (environ_cb(RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE, &hz) && hz > 0)
    {
       int k = (int)(hz / MEDNAFEN_CORE_TIMING_FPS + 0.5f);        /* 60→1, 120→2, 240→4 */
@@ -418,8 +421,6 @@ static int fg_want(void)
       }
    }
    if (fg_runahead_seen && fg_frames - fg_runahead_seen < 240)    /* 최근 2초 안에 런어헤드 저장/숨은 호출을 봤다 */
-      want = 0;
-   if (fg_rate_block)                                                /* 호출 속도가 60/s 에 머물렀다 — 패널이 120Hz 가 아니다 */
       want = 0;
    return want;
 }
@@ -481,7 +482,7 @@ static void fg_watch_rate(void)
       if (fg_slow_secs >= 2)
       {
          struct retro_message msg;
-         static char text[160];
+         static char text[256];                 /* 아래 문구는 UTF-8 로 170 바이트 가까이 된다 */
          fg_slow_secs = 0; fg_ok_secs = 0;
          fg_rate_block = 1;
          fg_block_t0   = now;

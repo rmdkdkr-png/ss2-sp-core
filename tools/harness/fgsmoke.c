@@ -313,7 +313,9 @@ static void test_retry(const char *rom)
    run_at((int)(39.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "40초 전엔 재시도 없어야");
    e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 40 && fake_t - tb < 42.5, "3차 재시도 복귀 (%.2fs)", fake_t - tb);
    e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "4차 차단 %.2fs", e); tb = fake_t;
-   run_at((int)(200.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "4차 뒤엔 200초 지나도 꺼져 있어야");
+   { int av0 = avinfo_calls;                             /* 한 점 표본이 아니라 200초 내내 꺼져 있어야(80초 뒤 재시도하는 변종도 잡는다) */
+     e = run_until(1, SLOW, 200.0);
+     CHECK(e < 0 && avinfo_calls == av0, "4차 뒤엔 200초 내내 꺼져 있어야 (켜짐 %.1fs, av %d→%d)", e, av0, avinfo_calls); }
    var_updated = 1; e = run_until(1, FAST, 2); CHECK(e >= 0, "옵션 재적용 뒤 복귀");
    run_at((int)(31.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "120/s 31초 동안 켜져 있어야");
    e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "복원 뒤 차단 %.2fs", e); tb = fake_t;
@@ -328,6 +330,24 @@ static void test_retry(const char *rom)
    p_fg_set_clock(NULL);
    unload_game();
    printf("8 차단 재시도(10·20·40초, 4차 영구, 30초 건강 복원): %s\n", fails == f0 ? "통과" : "실패");
+}
+
+/* '켬'(강제)도 차단을 따른다 — 안 그러면 2.5초마다 껐다 켰다 한다. 재시도 일정은 같다 */
+static void test_retry_forced(const char *rom)
+{
+   int f0 = fails; int act, ph; double e, tb; int av0;
+   const double SLOW = 1.0 / 60;
+   target_hz = 60; opt_framegen = "enabled"; opt_mode = "predict";
+   load_game(rom);
+   p_fg_set_clock(fake_clock);
+   p_fg_state(&act, &ph, 0); CHECK(act == 1, "강제 켬은 목표 60 이어도 켜져야");
+   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "강제 켬 1차 차단 %.2fs", e); tb = fake_t; av0 = avinfo_calls;
+   run_at((int)(9.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0);
+   CHECK(act == 0 && avinfo_calls == av0, "강제 켬이 차단 중 다시 켜지면 안 된다 (act %d, av %d→%d)", act, av0, avinfo_calls);
+   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 10 && fake_t - tb < 12.5, "강제 켬 10초 재시도 (%.2fs)", fake_t - tb);
+   p_fg_set_clock(NULL);
+   unload_game();
+   printf("9 강제 켬도 차단·재시도를 따름: %s\n", fails == f0 ? "통과" : "실패");
 }
 
 int main(int argc, char **argv)
@@ -349,6 +369,7 @@ int main(int argc, char **argv)
    test_hidden_auto(rom);
    test_watchdog(rom);
    test_retry(rom);
+   test_retry_forced(rom);
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }
