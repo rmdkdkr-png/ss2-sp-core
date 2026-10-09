@@ -71,6 +71,7 @@ static bool (*p_load)(const struct retro_game_info*);
 static size_t (*p_ser_size)(void);
 static bool (*p_ser)(void*, size_t);
 static void (*p_fg_state)(int*, int*, unsigned*);
+static void (*p_fg_set_clock)(double (*)(void));
 static void (*p_get_av)(struct retro_system_av_info*);
 
 #define SYM(v, n) do { v = dlsym(H, n); if (!v) { fprintf(stderr, "dlsym %s 실패\n", n); exit(2); } } while (0)
@@ -84,7 +85,7 @@ static void core_open(const char *so)
    SYM(p_set_input_poll, "retro_set_input_poll"); SYM(p_set_input_state, "retro_set_input_state");
    SYM(p_init, "retro_init"); SYM(p_deinit, "retro_deinit"); SYM(p_run, "retro_run"); SYM(p_reset, "retro_reset");
    SYM(p_unload, "retro_unload_game"); SYM(p_load, "retro_load_game");
-   SYM(p_ser_size, "retro_serialize_size"); SYM(p_ser, "retro_serialize"); SYM(p_fg_state, "retro_ngp_fg_state"); SYM(p_get_av, "retro_get_system_av_info");
+   SYM(p_ser_size, "retro_serialize_size"); SYM(p_ser, "retro_serialize"); SYM(p_fg_state, "retro_ngp_fg_state"); SYM(p_fg_set_clock, "retro_ngp_fg_set_clock"); SYM(p_get_av, "retro_get_system_av_info");
    p_set_environment(env_cb); p_set_video(video_cb); p_set_audio(audio_cb); p_set_audio_batch(audio_batch_cb);
    p_set_input_poll(input_poll_cb); p_set_input_state(input_state_cb);
 }
@@ -279,6 +280,56 @@ static void test_watchdog(const char *rom)
    printf("7 호출 속도 감시: %s\n", fails == f0 ? "통과" : "실패");
 }
 
+/* 차단 재시도 — 시계를 주입해 결정적으로: 1·2·3 차 차단 뒤 10·20·40 초에 재시도, 4 차는 옵션/재로드까지,
+   120/s 가 30 초 이어지면 횟수 복원, 목표가 60 인 동안엔 재시도해도 안 켜지고 돌아오면 켜진다 */
+static double fake_t = 1000.0;
+static double fake_clock(void) { return fake_t; }
+static void run_at(int n, double dt) { while (n-- > 0) { fake_t += dt; p_run(); } }
+static double run_until(int want, double dt, double maxsec)
+{
+   double t0 = fake_t; int act, ph;
+   for (;;)
+   {
+      fake_t += dt; p_run(); p_fg_state(&act, &ph, 0);
+      if (act == want) return fake_t - t0;
+      if (fake_t - t0 > maxsec) return -1;
+   }
+}
+static void test_retry(const char *rom)
+{
+   int f0 = fails; int act, ph; double e, tb;
+   const double SLOW = 1.0 / 60, FAST = 1.0 / 120;
+   target_hz = 120; opt_framegen = "auto"; opt_mode = "predict";
+   load_game(rom);
+   p_fg_set_clock(fake_clock);
+   p_fg_state(&act, &ph, 0); CHECK(act == 1, "시작 시 켜져 있어야");
+   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "1차 차단 %.2fs", e); tb = fake_t;
+   run_at((int)(9.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "10초 전엔 재시도 없어야");
+   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 10 && fake_t - tb < 12.5, "1차 재시도 복귀 (차단 뒤 %.2fs)", fake_t - tb);
+   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "2차 차단 %.2fs", e); tb = fake_t;
+   run_at((int)(19.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "20초 전엔 재시도 없어야");
+   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 20 && fake_t - tb < 22.5, "2차 재시도 복귀 (%.2fs)", fake_t - tb);
+   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "3차 차단 %.2fs", e); tb = fake_t;
+   run_at((int)(39.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "40초 전엔 재시도 없어야");
+   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 40 && fake_t - tb < 42.5, "3차 재시도 복귀 (%.2fs)", fake_t - tb);
+   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "4차 차단 %.2fs", e); tb = fake_t;
+   run_at((int)(200.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "4차 뒤엔 200초 지나도 꺼져 있어야");
+   var_updated = 1; e = run_until(1, FAST, 2); CHECK(e >= 0, "옵션 재적용 뒤 복귀");
+   run_at((int)(31.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "120/s 31초 동안 켜져 있어야");
+   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "복원 뒤 차단 %.2fs", e); tb = fake_t;
+   e = run_until(1, SLOW, 13); CHECK(e >= 0 && fake_t - tb > 10 && fake_t - tb < 12.5, "복원 뒤 다시 10초 재시도 (%.2fs)", fake_t - tb);
+   run_at((int)(31.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "다시 31초 건강");
+   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "차단 %.2fs", e); tb = fake_t;
+   target_hz = 60; run_at((int)(30.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "목표 60 이면 재시도해도 안 켜져야");
+   target_hz = 120; e = run_until(1, SLOW, 3); CHECK(e >= 0, "목표가 120 으로 돌아오면 켜져야 (%.2f)", e);
+   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "차단 %.2fs", e); tb = fake_t;
+   run_at((int)(19.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "2차니 20초 전엔 재시도 없어야");
+   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 20 && fake_t - tb < 22.5, "2차 20초 복귀 (%.2fs)", fake_t - tb);
+   p_fg_set_clock(NULL);
+   unload_game();
+   printf("8 차단 재시도(10·20·40초, 4차 영구, 30초 건강 복원): %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(int argc, char **argv)
 {
    char rom[1200];
@@ -297,6 +348,7 @@ int main(int argc, char **argv)
    test_hidden(rom);
    test_hidden_auto(rom);
    test_watchdog(rom);
+   test_retry(rom);
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

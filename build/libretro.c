@@ -382,9 +382,14 @@ static unsigned fg_runahead_seen = 0;  /* 런어헤드용 저장이 마지막으
 static int16_t  fg_audio_tail[0x8000]; /* 실제 프레임 소리의 뒷 반 — 합성 호출에서 보낸다 */
 static int      fg_audio_tail_n = 0;
 static uint16_t fg_real[FB_WIDTH * FB_HEIGHT];   /* 마지막 실제 프레임(후처리 전) */
-static int      fg_rate_block = 0;     /* 호출 속도 감시가 '화면이 120Hz 가 아님' 으로 판정 — 옵션을 다시 만질 때까지 끔 */
+static int      fg_rate_block = 0;     /* 호출 속도 감시가 '화면이 120Hz 가 아님' 으로 판정 — 재시도 때까지 끔 */
 static double   fg_t_prev = 0, fg_win_sum = 0;
-static int      fg_win_n = 0, fg_slow_secs = 0;
+static int      fg_win_n = 0, fg_slow_secs = 0, fg_ok_secs = 0;
+static int      fg_block_n = 0;        /* 연속 차단 횟수 — 1·2·3 번째 뒤엔 10·20·40 초 뒤 재시도, 4 번째는 옵션/재로드까지 */
+static double   fg_block_t0 = 0;       /* 마지막 차단 시각 */
+static double (*fg_clock)(void) = NULL; /* 시험용 시계 주입 (retro_ngp_fg_set_clock) — NULL 이면 실제 단조 시계 */
+#define FG_BLOCK_RETRIES 3
+#define FG_BLOCK_WAIT0   10.0
 static uint8_t *fg_state = NULL;       /* 예측용 상태 버퍼 (MDFNSS 가 필요하면 늘린다) */
 static uint32_t fg_state_cap = 0;
 static int16_t  fg_scratch_snd[0x10000];
@@ -421,9 +426,21 @@ static int fg_want(void)
 
 /* 호출 속도 감시 — RetroArch 설정은 120 인데 패널이 60Hz 에 묶여 있으면(삼성 게임 부스터 등) 프론트엔드가
    60 번/초만 부르고 게임은 반속이 된다. 100ms 넘는 공백(메뉴·일시정지)은 빼고 1초 창의 호출 속도를 재서
-   2초 연속 90/s 미만이면 2배 출력을 끄고 알린다. 옵션을 다시 만지거나 게임을 다시 열면 풀린다. */
+   2초 연속 90/s 미만이면 2배 출력을 끄고 알린다.
+   차단은 영구가 아니다: 10 → 20 → 40 초 뒤 판정을 풀어 fg_want 가 다시 보게 한다(목표 주사율이 아직 120 이면
+   30 프레임 히스테리시스를 거쳐 다시 켜진다 — 패널이 잠깐 60 으로 내려갔다 돌아온 경우를 살린다). 네 번째
+   차단은 옵션을 다시 만지거나 게임을 다시 열 때까지 유지한다. 120/s 가 30 초 이어지면 횟수를 되돌린다. */
+static double fg_block_wait(void)
+{
+   double w = FG_BLOCK_WAIT0;
+   int i;
+   for (i = 1; i < fg_block_n; i++) w *= 2;                          /* 1→10, 2→20, 3→40 */
+   return w;
+}
+
 static double fg_now_sec(void)
 {
+   if (fg_clock) return fg_clock();
 #ifdef _WIN32
    LARGE_INTEGER f, c;                            /* mingw 엔 clock_gettime 링크가 없다 — 고해상도 카운터로 */
    if (!QueryPerformanceFrequency(&f) || !QueryPerformanceCounter(&c) || f.QuadPart == 0) return 0;
@@ -442,21 +459,39 @@ static void fg_watch_rate(void)
    if (now <= 0) return;
    dt  = now - fg_t_prev;
    fg_t_prev = now;
-   if (!fg_active) { fg_win_sum = 0; fg_win_n = 0; fg_slow_secs = 0; return; }
+   if (!fg_active)
+   {
+      fg_win_sum = 0; fg_win_n = 0; fg_slow_secs = 0; fg_ok_secs = 0;
+      if (fg_rate_block && fg_block_n <= FG_BLOCK_RETRIES && now - fg_block_t0 >= fg_block_wait())
+         fg_rate_block = 0;                        /* 재시도: 판정만 푼다 — 켜는 건 retro_run 의 30 프레임 히스테리시스 */
+      return;
+   }
    if (dt <= 0 || dt > 0.1) return;
    fg_win_sum += dt; fg_win_n++;
    if (fg_win_sum < 1.0) return;
    {
       double rate = fg_win_n / fg_win_sum;
       fg_win_sum = 0; fg_win_n = 0;
-      if (rate < 90.0) fg_slow_secs++; else fg_slow_secs = 0;
+      if (rate < 90.0) { fg_slow_secs++; fg_ok_secs = 0; }
+      else
+      {
+         fg_slow_secs = 0;
+         if (++fg_ok_secs >= 30) { fg_block_n = 0; fg_ok_secs = 30; }   /* 30 초 건강 — 재시도 횟수 복원 */
+      }
       if (fg_slow_secs >= 2)
       {
          struct retro_message msg;
-         fg_slow_secs = 0;
+         static char text[160];
+         fg_slow_secs = 0; fg_ok_secs = 0;
          fg_rate_block = 1;
+         fg_block_t0   = now;
+         if (fg_block_n < FG_BLOCK_RETRIES + 1) fg_block_n++;
          fg_apply(0);
-         msg.msg    = "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (삼성 게임 부스터·주사율 설정 확인)";
+         if (fg_block_n <= FG_BLOCK_RETRIES)
+            snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (%d초 뒤 다시 시도)", (int)fg_block_wait());
+         else
+            snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (삼성 게임 부스터·주사율 설정 확인 뒤 옵션을 다시 만지면 재시도)");
+         msg.msg    = text;
          msg.frames = 300;
          environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
       }
@@ -731,7 +766,7 @@ static void check_variables(void)
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       fg_mode = !strcmp(var.value, "interp") ? 1 : 0;
-   fg_rate_block = 0;                     /* 옵션을 만졌다 — 속도 감시 판정을 다시 한다 */
+   fg_rate_block = 0; fg_block_n = 0;     /* 옵션을 만졌다 — 속도 감시 판정을 다시 한다 */
 
    cv_booted = true;
 
@@ -868,6 +903,7 @@ bool retro_load_game(const struct retro_game_info *info)
       retro_get_system_av_info 가 처음부터 맞는 fps 를 돌려주게 한다(재초기화 한 번 절약) */
    fg_phase = 0; fg_streak = 0; fg_frames = 0; fg_runahead_seen = 0; fg_audio_tail_n = 0;
    fg_rate_block = 0; fg_win_sum = 0; fg_win_n = 0; fg_slow_secs = 0; fg_t_prev = 0;
+   fg_ok_secs = 0; fg_block_n = 0; fg_block_t0 = 0;
    ss2fg_reset();
    fg_active = fg_want();
 
@@ -1481,6 +1517,13 @@ void retro_ngp_fg_state(int *active, int *phase, unsigned *frames)
    if (active) *active = fg_active;
    if (phase)  *phase  = fg_phase;
    if (frames) *frames = fg_frames;
+}
+
+/* debug export: 호출 속도 감시용 시계 주입 (시험 하네스) — NULL 이면 실제 시계 */
+void retro_ngp_fg_set_clock(double (*fn)(void))
+{
+   fg_clock = fn;
+   fg_t_prev = 0;
 }
 
 /* debug export: K1GE VRAM pointers (portrait tile reversing) */
