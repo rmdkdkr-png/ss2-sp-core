@@ -2691,10 +2691,12 @@ void ss2comm_toast(const char *t, int frames){
   snprintf(toast_txt, sizeof toast_txt, "%s", t);
   toast_left = frames;
 }
+static int  toast_hold;                        /* 1 이면 그리되 수명을 줄이지 않는다(합성 프레임) */
+void ss2comm_draw_hold(int on){ toast_hold = on; }
 static void toast_render(uint16_t *fb, int pitch_px, int w, int h){
   int tw, x0, x1, x, y, y0, band;
   if(toast_left <= 0) return;
-  toast_left--;
+  if(!toast_hold) toast_left--;
   tw = line_w11(toast_txt, toast_txt + sizeof toast_txt);
   if(tw <= 0 || tw > w) return;
   /* 위 띠 모드(4)면 게임 그림이 띠 높이만큼 내려가 있다 — 그 아래, HP 바 아래에 띄운다.

@@ -24,6 +24,7 @@
 #include "TLCS-900h/TLCS900h_registers.h"
 #include "../state.h"
 #include "../video.h"
+#include "../../ss2fg.h"   /* 프레임 생성 — 스캔라인 레지스터·VRAM 캡처 */
 #ifdef MSB_FIRST
 #include "../masmem.h"
 #endif
@@ -622,6 +623,7 @@ void ngpgfx_reset(ngpgfx_t *gfx)
 void ngpgfx_power(ngpgfx_t *gfx)
 {
    ngpgfx_reset(gfx);
+   ss2fg_reset();
 
    memset(gfx->ScrollVRAM, 0, sizeof(gfx->ScrollVRAM));
    memset(gfx->CharacterRAM, 0, sizeof(gfx->CharacterRAM));
@@ -672,6 +674,17 @@ bool ngpgfx_draw(ngpgfx_t *gfx, void *data, bool skip)
    bool ret = 0;
    MDFN_Surface *surface = (MDFN_Surface*)data;
 
+   /* 프레임 생성 캡처 — 이 줄을 그리는 순간의 지연 레지스터(skip 이어도 기록) */
+   if (gfx->raster_line < SCREEN_HEIGHT)
+   {
+      ss2fg_regs r;
+      r.winx = gfx->winx; r.winw = gfx->winw; r.winy = gfx->winy; r.winh = gfx->winh;
+      r.s1x = gfx->scroll1x; r.s1y = gfx->scroll1y; r.s2x = gfx->scroll2x; r.s2y = gfx->scroll2y;
+      r.spx = gfx->scrollsprx; r.spy = gfx->scrollspry;
+      r.swap = gfx->planeSwap ? 1 : 0; r.bgc = gfx->bgc; r.oowc = gfx->oowc; r.neg = gfx->negative ? 1 : 0;
+      ss2fg_capture_line(gfx->raster_line, &r);
+   }
+
    /* Draw the scanline */
    if (gfx->raster_line < SCREEN_HEIGHT && !skip)
    {
@@ -707,6 +720,9 @@ bool ngpgfx_draw(ngpgfx_t *gfx, void *data, bool skip)
    {
       gfx->BLNK = 1;
       ret = 1;
+      /* 프레임 생성 캡처 — 표시가 끝난 시점의 VRAM·팔레트·스프라이트표 사본 */
+      ss2fg_capture_end(gfx->ScrollVRAM, gfx->CharacterRAM, gfx->SpriteVRAM,
+                        gfx->SpriteVRAMColor, gfx->ColorPaletteRAM, gfx->K2GE_MODE, gfx->layer_enable);
 
       if(gfx->CONTROL_INT & 0x80) /* (statusIFF() <= 4 */
          TestIntHDMA(5, 0x0B);
@@ -789,8 +805,20 @@ void ngpgfx_SetLayerEnableMask(ngpgfx_t *gfx, uint64_t mask)
    gfx->layer_enable = mask;
 }
 
+/* 표시 중(1..151줄 그린 뒤) VRAM 쓰기 — 프레임 끝 사본이 위쪽 줄과 달라지므로 프레임 생성에 알린다 */
+static void ss2fg_note_write(ngpgfx_t *gfx, uint32 address)
+{
+   if (gfx->raster_line == 0 || gfx->raster_line >= SCREEN_HEIGHT) return;
+   if (address >= 0x8800 && address <= 0x88ff)      ss2fg_capture_write(SS2FG_DIRTY_SPR);
+   else if (address >= 0x9000 && address <= 0x9fff) ss2fg_capture_write(SS2FG_DIRTY_SCROLL);
+   else if (address >= 0xa000 && address <= 0xbfff) ss2fg_capture_write(SS2FG_DIRTY_CHR);
+   else if ((address >= 0x8200 && address <= 0x83ff) || (address >= 0x8c00 && address <= 0x8c3f))
+      ss2fg_capture_write(SS2FG_DIRTY_PAL);
+}
+
 void ngpgfx_write8(ngpgfx_t *gfx, uint32 address, uint8 data)
 {
+   ss2fg_note_write(gfx, address);
    if(address >= 0x9000 && address <= 0x9fff)
       gfx->ScrollVRAM[address - 0x9000] = data;
    else if(address >= 0xa000 && address <= 0xbfff)

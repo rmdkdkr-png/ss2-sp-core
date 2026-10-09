@@ -90,6 +90,11 @@ static uint8 *chee;
 
 static int32 z80_runtime;
 
+/* 프레임 생성 예측용 가벼운 스냅샷 — StateAction 에서 건너뛸 섹션 (정의는 아래 ss2fg 배관 참고) */
+#define FG_SKIP_SND   1
+#define FG_SKIP_FLASH 2
+static int fg_state_skip = 0;
+
 extern int32_t ngpc_soundTS;
 
 static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf)
@@ -317,12 +322,14 @@ void StateAction(StateMem *sm, int load, int data_only)
    MDFNSS_StateAction(sm, load, data_only, StateRegs, "MAIN", false);
    MDFNSS_StateAction(sm, load, data_only, TLCS_StateRegs, "TLCS", false);
    MDFNNGPCDMA_StateAction(sm, load, data_only);
-   MDFNNGPCSOUND_StateAction(sm, load, data_only);
+   if (!(fg_state_skip & FG_SKIP_SND))     /* 예측 스냅샷: 소리는 뮤트라 안 바뀐다 — 로드가 Blip 버퍼를 비우는 것도 피한다 */
+      MDFNNGPCSOUND_StateAction(sm, load, data_only);
    ngpgfx_StateAction(NGPGfx, sm, load, data_only);
    MDFNNGPCZ80_StateAction(sm, load, data_only);
    int_timer_StateAction(sm, load, data_only);
    BIOSHLE_StateAction(sm, load, data_only);
-   FLASH_StateAction(sm, load, data_only);
+   if (!(fg_state_skip & FG_SKIP_FLASH))   /* 예측 스냅샷: 롬 쓰기를 막으므로 롬 전체 사본은 필요 없다 */
+      FLASH_StateAction(sm, load, data_only);
 
    if(load)
    {
@@ -349,6 +356,115 @@ static bool update_video = false;
 #define FB_WIDTH 160
 #define FB_HEIGHT 152
 #define FB_MAX_HEIGHT FB_HEIGHT
+
+/* ── 프레임 생성(ss2fg) 배관 ─────────────────────────────────────────────
+   켜지면 fps 를 2배(120.5)로 선언하고 retro_run 을 실제 프레임 / 합성 프레임으로 번갈아 쓴다.
+     예측 모드: 실제 N 을 바로 내보내고, 다음 호출에서 상태를 저장한 채 N+1 을 미리 돌려
+               N↔N+1 중간을 그린 뒤 상태를 되돌린다 — 추가 지연 0 (런어헤드와 같은 원리)
+     보간 모드: N-1↔N 중간을 먼저, 다음 호출에 N 을 내보낸다 — 표시가 반 프레임(8.3ms) 늦다
+   오디오는 실제 프레임의 샘플을 반씩 나눠 두 호출에 보낸다(RetroArch 의 호출당 기대 샘플 수에 맞춤).
+   '자동'은 프론트엔드가 목표로 하는 주사율(GET_TARGET_REFRESH_RATE — RetroArch 에선 유저의
+   Vertical Refresh Rate 설정값)이 60.25 의 짝수 배일 때만 켠다. 프론트엔드 런어헤드가 감지되면
+   (저장 문맥이 런어헤드) 자동은 끈다 — 런어헤드는 'retro_run 1회 = 1프레임' 을 전제한다. */
+#include "ss2fg.h"
+static int      fg_opt    = 1;         /* 0 끔 · 1 자동 · 2 켬 */
+static int      fg_mode   = 0;         /* 0 예측(지연 0) · 1 보간(+8ms) */
+static int      fg_active = 0;         /* 지금 2배 fps 로 내보내는 중 */
+static int      fg_phase  = 0;         /* 0 실제 프레임 · 1 합성 프레임 */
+static int      fg_streak = 0;         /* 전환 히스테리시스 카운터 */
+static unsigned fg_frames = 0;         /* retro_run 호출 수 */
+static unsigned fg_runahead_seen = 0;  /* 런어헤드용 저장이 마지막으로 보인 호출 번호 */
+static int16_t  fg_audio_tail[0x8000]; /* 실제 프레임 소리의 뒷 반 — 합성 호출에서 보낸다 */
+static int      fg_audio_tail_n = 0;
+static uint16_t fg_real[FB_WIDTH * FB_HEIGHT];   /* 마지막 실제 프레임(후처리 전) */
+static uint8_t *fg_state = NULL;       /* 예측용 상태 버퍼 (MDFNSS 가 필요하면 늘린다) */
+static uint32_t fg_state_cap = 0;
+static int16_t  fg_scratch_snd[0x10000];
+static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf);
+extern int ngplink_active(void);
+int ngp_fg_mute = 0;                      /* sound.cpp 가 본다 — 예측 프레임 중 소리 무시 */
+extern int ngp_fg_predict;                /* mem.c — 예측 프레임 중 롬/플래시 쓰기 차단 */
+extern void ngp_mem_fg_extras(uint8_t *buf, int load);
+extern int iline;                         /* z80_ops.c — Z80 인터럽트선, 어떤 StateAction 에도 없다 */
+
+static int fg_want(void)
+{
+   float hz = 0;
+   int want = 0;
+   if (fg_opt == 0) return 0;
+   if (fg_opt == 2) return 1;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE, &hz) && hz > 0)
+   {
+      int k = (int)(hz / MEDNAFEN_CORE_TIMING_FPS + 0.5f);        /* 60→1, 120→2, 240→4 */
+      if (k >= 2 && (k & 1) == 0)
+      {
+         float skew = (float)MEDNAFEN_CORE_TIMING_FPS / (hz / (float)k);
+         if (skew < 0) skew = -skew;
+         want = (skew > 0.95f && skew < 1.05f);                   /* RetroArch 의 Maximum Timing Skew 기본 5% */
+      }
+   }
+   if (fg_runahead_seen && fg_frames - fg_runahead_seen < 240)    /* 최근 2초 안에 런어헤드 저장을 봤다 */
+      want = 0;
+   return want;
+}
+
+static void fg_apply(int on)
+{
+   struct retro_system_av_info av;
+   struct retro_message msg;
+   fg_active = on;
+   fg_phase  = 0;
+   fg_streak = 0;
+   fg_audio_tail_n = 0;
+   retro_get_system_av_info(&av);                 /* fps 가 fg_active 에 따라 60.25 / 120.5 */
+   environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &av);
+   msg.msg    = on ? (fg_mode ? "프레임 생성 켬 — 120Hz 출력 (보간)" : "프레임 생성 켬 — 120Hz 출력 (예측)")
+                   : "프레임 생성 끔 — 60Hz 출력";
+   msg.frames = 150;
+   environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
+}
+
+/* 예측 합성: 상태 저장 → 입력을 붙잡은 채 한 프레임 더 → 실제 N ↔ 예측 N+1 중간을 surf 에 → 상태 복원.
+   반환 0 이면 그리지 못했다(호출자가 실제 N 을 다시 내보낸다). */
+static int fg_predict(void)
+{
+   StateMem st;
+   EmulateSpecStruct ps;
+   uint8_t extras[8];
+   int iline_save, ok;
+
+   /* 가벼운 스냅샷: 소리·플래시 섹션은 뺀다(예측 중 바뀌지 않게 막는다) + StateAction 밖의 정적 변수들 */
+   memset(&st, 0, sizeof st);
+   st.data     = fg_state;
+   st.malloced = fg_state_cap;
+   fg_state_skip = FG_SKIP_SND | FG_SKIP_FLASH;
+   ok = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
+   fg_state     = st.data;                        /* realloc 됐을 수 있다 */
+   fg_state_cap = st.malloced;
+   if (!ok) { fg_state_skip = 0; return 0; }
+   ngp_mem_fg_extras(extras, 0);
+   iline_save = iline;
+
+   memset(&ps, 0, sizeof ps);
+   ps.surface         = surf;
+   ps.DisplayRect.w   = FB_WIDTH;
+   ps.DisplayRect.h   = FB_HEIGHT;
+   ps.SoundBufMaxSize = sizeof(fg_scratch_snd) / 2;
+   ngp_fg_mute = 1; ngp_fg_predict = 1;
+   Emulate(&ps, fg_scratch_snd);                  /* 입력은 마지막 실제 프레임 값 그대로(붙잡고 있다고 가정) */
+   ngp_fg_mute = 0; ngp_fg_predict = 0;
+
+   /* 그림은 실제 N(prev), 위치만 예측 N+1(cur) 쪽으로 반 — 없는 그림은 절대 안 나온다 */
+   ok = ss2fg_render(ss2fg_prev(), ss2fg_cur(), 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap);
+
+   st.loc = 0;
+   MDFNSS_LoadSM(&st, 0, 0);
+   fg_state_skip = 0;
+   ngp_mem_fg_extras(extras, 1);
+   iline = iline_save;
+   ss2fg_capture_pop();                           /* 예측 프레임 캡처를 무른다 */
+   return ok;
+}
 
 static void check_system_specs(void)
 {
@@ -551,6 +667,16 @@ static void check_variables(void)
       else ss2comm_sp_band(0);
    }
 
+   var.key   = "ngp_framegen";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      fg_opt = !strcmp(var.value, "disabled") ? 0 : !strcmp(var.value, "enabled") ? 2 : 1;
+
+   var.key   = "ngp_framegen_mode";
+   var.value = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      fg_mode = !strcmp(var.value, "interp") ? 1 : 0;
+
    cv_booted = true;
 
    /* 오버레이 그림자값을 방금 적용한 옵션과 맞춘다 */
@@ -680,6 +806,12 @@ bool retro_load_game(const struct retro_game_info *info)
 
    check_variables();
    check_color_depth();
+
+   /* 프레임 생성 배관 초기화 — 지난 게임의 상태가 남지 않게. 목표 주사율은 지금 바로 판정해
+      retro_get_system_av_info 가 처음부터 맞는 fps 를 돌려주게 한다(재초기화 한 번 절약) */
+   fg_phase = 0; fg_streak = 0; fg_frames = 0; fg_runahead_seen = 0; fg_audio_tail_n = 0;
+   ss2fg_reset();
+   fg_active = fg_want();
 
    if (Load(info->path, (const uint8_t*)info->data, info->size) <= 0)
       return false;
@@ -922,13 +1054,24 @@ void retro_run(void)
    static int16_t sound_buf[0x10000];
    EmulateSpecStruct spec;
    bool updated = false;
+   int synth = 0, hidden = 0, ss2_paused;
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
       check_variables();
 
+   fg_frames++;
+   {  /* 프론트엔드 런어헤드의 숨은 호출(비디오 꺼짐)엔 합성 프레임을 끼우지 않는다 */
+      int av_en = 3;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &av_en) && !(av_en & 1))
+         hidden = 1;
+   }
+
    input_poll_cb();
 
-   update_input();
+   if (fg_active && fg_phase == 1 && !hidden)
+      synth = 1;              /* 합성 호출 — 입력 변환(원버튼 매크로)은 실제 프레임마다 한 번만 돈다 */
+   else
+      update_input();
 
    spec.surface            = surf;
    spec.VideoFormatChanged = update_video;
@@ -940,30 +1083,34 @@ void retro_run(void)
    if (update_video)
    {
       struct retro_system_av_info system_av_info;
-
-      if (update_video)
-      {
-         memset(&system_av_info, 0, sizeof(system_av_info));
-         environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &system_av_info);
-      }
-
       retro_get_system_av_info(&system_av_info);
       environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &system_av_info);
-
       surf->depth = RETRO_PIX_DEPTH;
-
       update_video = false;
    }
 
-   {
-   int ss2_paused = ss2comm_overlay_active();
+   if (!synth)
+   {  /* 2배 출력 켜기/끄기 — 같은 결정이 30 실제 프레임 이어질 때만 바꾼다(AV 재초기화 비용) */
+      int want = fg_want();
+      if (want != fg_active) { if (++fg_streak >= 30) fg_apply(want); }
+      else fg_streak = 0;
+   }
 
-   if (!ss2_paused)
+   ss2_paused = ss2comm_overlay_active();
+
+   if (!ss2_paused && !synth)
    {
       Emulate(&spec, sound_buf);
 
       width  = spec.DisplayRect.w;
       height = spec.DisplayRect.h;
+
+      if (fg_active)
+      {
+         memcpy(fg_real, surf->pixels, sizeof fg_real);           /* 후처리 전 원본 — 합성 실패·보간 모드용 */
+         if (fg_mode == 1)                                         /* 보간: N 의 그림을 N-1 쪽으로 반 되돌린 자리에 지금, N 은 다음 호출에 */
+            ss2fg_render(ss2fg_cur(), ss2fg_prev(), 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap);
+      }
 
       {
          const char *cline = ss2comm_frame();
@@ -986,6 +1133,28 @@ void retro_run(void)
       ss2_last_w = width;
       ss2_last_h = height;
    }
+   else if (!ss2_paused)
+   {
+      /* 합성 프레임 — 게임은 돌리지 않는다. 띠·기둥 후처리는 실제 프레임과 같은 경로 */
+      int band = ss2comm_band_h();
+      uint16_t *fbuf = (uint16_t *)surf->pixels;
+      width  = FB_WIDTH;
+      height = FB_HEIGHT;
+      if (fg_mode == 0 && !ngplink_active())                        /* 링크 플레이 중엔 예측이 통신을 먹는다 → 보간처럼 */
+      {
+         if (!fg_predict())                                        /* 합성 못 하면 실제 N 을 한 번 더 */
+            memcpy(surf->pixels, fg_real, sizeof fg_real);
+      }
+      else
+         memcpy(surf->pixels, fg_real, sizeof fg_real);            /* 보간 모드: 이제 실제 N */
+      if (band && ss2comm_band_top())
+         memmove(fbuf + band * FB_WIDTH, fbuf, (size_t)height * FB_WIDTH * sizeof(uint16_t));
+      ss2comm_draw_hold(1);                                        /* 토스트 수명은 실제 프레임에서만 줄인다 */
+      ss2comm_draw(fbuf, FB_WIDTH, (int)width, (int)height);
+      ss2comm_draw_hold(0);
+      height += band;
+      spec.SoundBufSize = 0;
+   }
    else
    {
       /* 빠른 설정이 열려 있다 — 앱판처럼 완전 일시정지: 에뮬·소리를 돌리지 않고
@@ -993,6 +1162,7 @@ void retro_run(void)
       width  = ss2_last_w;
       height = ss2_last_h;
       spec.SoundBufSize = 0;
+      fg_audio_tail_n = 0;
    }
 
    if (ss2_sides)
@@ -1016,12 +1186,36 @@ void retro_run(void)
          ss2comm_overlay_draw((uint16_t *)surf->pixels, FB_WIDTH, (int)width, (int)height);
       video_cb(surf->pixels, width, height, FB_WIDTH * 2);
    }
+
+   /* 소리 — 2배 출력 중엔 실제 프레임의 샘플을 반씩 두 호출에 나눈다 */
+   if (fg_active && !ss2_paused)
+   {
+      if (!synth)
+      {
+         int n = spec.SoundBufSize, half = n / 2;
+         ss2voice_mix(sound_buf, n);                               /* 해설 음성 — 게임 소리 위에 */
+         for (total = 0; total < half; )
+            total += audio_batch_cb(sound_buf + total*2, half - total);
+         fg_audio_tail_n = n - half;
+         if (fg_audio_tail_n > (int)(sizeof(fg_audio_tail) / 4)) fg_audio_tail_n = sizeof(fg_audio_tail) / 4;
+         memcpy(fg_audio_tail, sound_buf + half*2, (size_t)fg_audio_tail_n * 2 * sizeof(int16_t));
+      }
+      else
+      {
+         for (total = 0; total < fg_audio_tail_n; )
+            total += audio_batch_cb(fg_audio_tail + total*2, fg_audio_tail_n - total);
+         fg_audio_tail_n = 0;
+      }
+      if (!hidden) fg_phase ^= 1;
    }
-
-   ss2voice_mix(sound_buf, spec.SoundBufSize);   /* 해설 음성 — 게임 소리 위에 */
-   for (total = 0; total < spec.SoundBufSize; )
-      total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
-
+   else
+   {
+      fg_audio_tail_n = 0;
+      fg_phase = 0;
+      ss2voice_mix(sound_buf, spec.SoundBufSize);   /* 해설 음성 — 게임 소리 위에 */
+      for (total = 0; total < spec.SoundBufSize; )
+         total += audio_batch_cb(sound_buf + total*2, spec.SoundBufSize - total);
+   }
 }
 
 void retro_get_system_info(struct retro_system_info *info)
@@ -1041,7 +1235,7 @@ void retro_get_system_info(struct retro_system_info *info)
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
    memset(info, 0, sizeof(*info));
-   info->timing.fps            = MEDNAFEN_CORE_TIMING_FPS;
+   info->timing.fps            = fg_active ? MEDNAFEN_CORE_TIMING_FPS * 2.0 : MEDNAFEN_CORE_TIMING_FPS;
    info->timing.sample_rate    = 44100;
    {
       int band = ss2comm_band_h();                   /* 해설 확장 띠(20px) 사용 시에만 > 0 */
@@ -1160,6 +1354,12 @@ bool retro_serialize(void *data, size_t size)
    bool ret          = false;
    uint8_t *_dat     = (uint8_t*)malloc(size);
 
+   {  /* 프론트엔드 런어헤드/롤백용 저장인가 — 그러면 2배 출력 자동 모드는 물러난다 */
+      int ctx = 0;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_SAVESTATE_CONTEXT, &ctx) && ctx >= 1 && ctx <= 3)
+         fg_runahead_seen = fg_frames ? fg_frames : 1;
+   }
+
    if (!_dat)
       return false;
 
@@ -1182,6 +1382,8 @@ bool retro_unserialize(const void *data, size_t size)
 {
    ss2sp_reset();
    svcsp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
+   ss2fg_reset();   /* 이전 프레임 캡처도 버린다 — 불러온 상태와 보간하지 않게 */
+   fg_audio_tail_n = 0;
    StateMem st;
 
    st.data           = (uint8_t*)data;
@@ -1200,6 +1402,14 @@ void *retro_get_memory_data(unsigned type)
    if(type == RETRO_MEMORY_SYSTEM_RAM)
       return CPUExRAM;
    return NULL;
+}
+
+/* debug export: 프레임 생성 배관 상태 (스모크 하네스용) */
+void retro_ngp_fg_state(int *active, int *phase, unsigned *frames)
+{
+   if (active) *active = fg_active;
+   if (phase)  *phase  = fg_phase;
+   if (frames) *frames = fg_frames;
 }
 
 /* debug export: K1GE VRAM pointers (portrait tile reversing) */

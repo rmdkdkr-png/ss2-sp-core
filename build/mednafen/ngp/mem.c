@@ -28,6 +28,7 @@
 #include "../masmem.h"
 #endif
 
+#include <string.h>
 #include "../settings.h"
 
 /* Hack way of returning good Flash status. */
@@ -42,6 +43,26 @@ bool memory_flash_command = false;
 
 static uint8_t SC0BUF; /* Serial channel 0 buffer. */
 uint8_t COMMStatus;
+
+/* ── 프레임 생성 예측 프레임용 ──
+   ngp_fg_predict: 예측 중 롬/플래시 쓰기를 막는다(플래시 섹션은 저장·복원에서 뺐다 — 롬 전체 memcpy 비용).
+   ngp_mem_fg_extras: 어떤 StateAction 에도 들어 있지 않은 정적 변수들을 따로 저장·복원한다. */
+int ngp_fg_predict = 0;
+void ngp_mem_fg_extras(uint8_t *buf, int load)
+{
+   if (load)
+   {
+      SC0BUF = buf[0]; COMMStatus = buf[1];
+      memory_flash_command = buf[2] != 0; memory_unlock_flash_write = buf[3] != 0;
+      memcpy(&FlashStatus, buf + 4, sizeof FlashStatus);
+   }
+   else
+   {
+      buf[0] = SC0BUF; buf[1] = COMMStatus;
+      buf[2] = memory_flash_command ? 1 : 0; buf[3] = memory_unlock_flash_write ? 1 : 0;
+      memcpy(buf + 4, &FlashStatus, sizeof FlashStatus);
+   }
+}
 
 /* In very very very rare conditions(like on embedded platforms with 
  * no virtual memory and very limited RAM and malloc happens to 
@@ -128,6 +149,7 @@ static void *translate_address_write(uint32 address)
 
    if (memory_unlock_flash_write)
    {
+      if (ngp_fg_predict) return NULL;         /* 예측 프레임: 롬을 건드리지 않는다 */
       /* ROM (LOW) */
       if (address >= ROM_START && address <= ROM_END)
       {
@@ -167,6 +189,11 @@ static void *translate_address_write(uint32 address)
 
          if (memory_flash_command)
          {
+            if (ngp_fg_predict)                 /* 예측 프레임: 플래시 쓰기 생략(상태는 복원된다) */
+            {
+               memory_flash_command = false;
+               return NULL;
+            }
             //Write the 256byte block around the flash data
             flash_write(address & 0xFFFF00, 256);
 

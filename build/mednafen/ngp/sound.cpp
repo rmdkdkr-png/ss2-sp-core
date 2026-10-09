@@ -18,10 +18,14 @@ static uint8_t CurrentDACLeft = 0, CurrentDACRight = 0;
 
 static Blip_Synth<blip_good_quality, 0xFF> synth;
 extern "C" int32_t ngpc_soundTS;
+/* 프레임 생성 예측 프레임: 소리 쓰기·플러시를 전부 무시한다 (상태를 바꾸지 않으므로 복원할 것도 없다) */
+extern "C" { extern int ngp_fg_mute; }
+
 static bool schipenable = 0;
 
 extern "C" void MDFNNGPCSOUND_SetEnable(bool set)
 {
+   if(ngp_fg_mute) return;
    schipenable = set;
    if(!set)
       apu.reset();
@@ -29,18 +33,21 @@ extern "C" void MDFNNGPCSOUND_SetEnable(bool set)
 
 extern "C" void Write_SoundChipLeft(uint8_t data)
 {
+   if(ngp_fg_mute) return;
    if(schipenable)
       apu.write_data_left(ngpc_soundTS >> 1, data);
 }
 
 extern "C" void Write_SoundChipRight(uint8_t data)
 {
+   if(ngp_fg_mute) return;
    if(schipenable)
       apu.write_data_right(ngpc_soundTS >> 1, data);
 }
 
 extern "C" void dac_write_left(uint8_t data)
 {
+   if(ngp_fg_mute) return;
    CurrentDACLeft = data;
 
    synth.offset_inline(ngpc_soundTS >> 1, CurrentDACLeft - LastDACLeft, buf.left());
@@ -50,6 +57,7 @@ extern "C" void dac_write_left(uint8_t data)
 
 extern "C" void dac_write_right(uint8_t data)
 {
+   if(ngp_fg_mute) return;
    CurrentDACRight = data;
 
    synth.offset_inline(ngpc_soundTS >> 1, CurrentDACRight - LastDACRight, buf.right());
@@ -60,6 +68,8 @@ extern "C" void dac_write_right(uint8_t data)
 extern "C" int32_t MDFNNGPCSOUND_Flush(int16_t *SoundBuf, const int32_t MaxSoundFrames)
 {
    int32_t FrameCount = 0;
+
+   if(ngp_fg_mute) return 0;                   /* 예측 프레임 — Blip 버퍼를 건드리지 않는다 */
 
    apu.end_frame(ngpc_soundTS >> 1);
    buf.end_frame(ngpc_soundTS >> 1);

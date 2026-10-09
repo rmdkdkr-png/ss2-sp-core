@@ -30,7 +30,7 @@ extern "C" {
 
 struct retro_core_option_v2_category option_cats_us[] = {
    {"system",  "System",   NULL},
-   //{"video",   "Video",    NULL},
+   {"video",   "Video",    NULL},
    //{"audio",   "Audio",    NULL},
    {"input",   "Input",    NULL},
    //{"advanced","Advanced", NULL},
@@ -94,6 +94,35 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       },
       "enabled"
    },
+   {
+      "ngp_framegen",
+      "프레임 생성 (120Hz)",
+      NULL,
+      "60fps 게임을 120Hz 화면에 맞춰 중간 프레임을 합성합니다. 픽셀을 섞지 않고 스프라이트·스크롤 위치를 보간해 같은 타일로 다시 그립니다. '자동'은 RetroArch 의 주사율 설정(Vertical Refresh Rate)이 120Hz(또는 짝수 배)일 때만 켭니다. 60Hz 화면에서 '켬'으로 두면 화면이 찢어집니다.",
+      NULL,
+      "video",
+      {
+         { "auto",     "자동 (120Hz 설정일 때)" },
+         { "disabled", "끔" },
+         { "enabled",  "켬" },
+         { NULL, NULL },
+      },
+      "auto"
+   },
+   {
+      "ngp_framegen_mode",
+      "프레임 생성 방식",
+      NULL,
+      "예측: 다음 프레임을 미리 돌려 현재↔다음 사이를 그립니다 — 추가 지연 없음(런어헤드 원리, 입력이 바뀌는 순간만 반 프레임 어긋날 수 있음). 보간: 이전↔현재 사이를 먼저 보여 줘 표시가 반 프레임(8ms) 늦습니다.",
+      NULL,
+      "video",
+      {
+         { "predict", "예측 (지연 없음)" },
+         { "interp",  "보간 (+8ms)" },
+         { NULL, NULL },
+      },
+      "predict"
+   },
    { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
 };
 
@@ -124,6 +153,29 @@ struct retro_core_option_definition option_defs_us[] = {
          { NULL, NULL},
       },
       "enabled",
+   },
+   {
+      "ngp_framegen",
+      "프레임 생성 (120Hz)",
+      "60fps 게임을 120Hz 화면에 맞춰 중간 프레임을 합성합니다. '자동'은 RetroArch 주사율 설정이 120Hz 일 때만 켭니다.",
+      {
+         { "auto",     NULL },
+         { "disabled", NULL },
+         { "enabled",  NULL },
+         { NULL, NULL},
+      },
+      "auto",
+   },
+   {
+      "ngp_framegen_mode",
+      "프레임 생성 방식",
+      "예측(지연 없음) 또는 보간(+8ms).",
+      {
+         { "predict", NULL },
+         { "interp",  NULL },
+         { NULL, NULL},
+      },
+      "predict",
    },
    { NULL, NULL, NULL, { NULL, NULL }, NULL },
 };

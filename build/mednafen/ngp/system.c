@@ -48,10 +48,16 @@ void ngplink_init(void)
    ngplink_tried = 1;
    i = getenv("NGP_LINK_IN");
    o = getenv("NGP_LINK_OUT");
+#ifdef _WIN32
+   (void)i; (void)o;   /* 링크 파이프는 POSIX 전용(O_NONBLOCK) — 윈도우 빌드에선 꺼 둔다 */
+#else
    if (i && *i) ngplink_in  = open(i, O_RDWR | O_NONBLOCK);
    if (o && *o) ngplink_out = open(o, O_RDWR | O_NONBLOCK);
+#endif
 }
 static void ngplink_open(void){ ngplink_init(); }
+/* 링크 케이블이 물려 있나 — 프레임 생성 예측(한 프레임 미리 돌리기)은 통신 바이트를 먹어 버리므로 그때는 보간으로 */
+int ngplink_active(void){ return ngplink_in >= 0 || ngplink_out >= 0; }
 
 /* 들어온 것을 한 번에 긁어 온다 — 스캔라인마다 read() 를 때리지 않으려고 */
 static void ngplink_drain(void)
