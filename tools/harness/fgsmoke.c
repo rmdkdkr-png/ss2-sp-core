@@ -261,7 +261,7 @@ static void test_hidden_auto(const char *rom)
    printf("6 숨은 호출 → 자동 끔·복귀: %s\n", fails == f0 ? "통과" : "실패");
 }
 
-/* 호출 속도 감시: 설정은 120 인데 프론트가 60/s 로만 부르면(패널이 60Hz) 2초 뒤 끄고, 옵션을 만지면 다시 판정 */
+/* 호출 속도 감시: 설정은 120 인데 프론트가 60/s 로만 부르면(패널이 60Hz) 2초 뒤 끄고, 옵션 값을 바꾸면 다시 판정 */
 static void test_watchdog(const char *rom)
 {
    int i, f0 = fails; int act, ph;
@@ -273,9 +273,12 @@ static void test_watchdog(const char *rom)
    CHECK(last_fps > 60 && last_fps < 61, "복귀 fps %.2f", last_fps);
    for (i = 0; i < 100; i++) p_run();                  /* 빠르게 돌아도 판정은 유지 */
    p_fg_state(&act, &ph, 0); CHECK(act == 0, "판정은 옵션을 만질 때까지 유지돼야");
-   var_updated = 1;                                     /* 옵션 재적용 → 판정 해제 → 30 프레임 뒤 켜짐 */
+   var_updated = 1;                                     /* 값이 같은 재적용(다른 옵션을 만짐)은 판정을 안 푼다 */
    for (i = 0; i < 60; i++) p_run();
-   p_fg_state(&act, &ph, 0); CHECK(act == 1, "옵션을 만진 뒤 다시 켜져야 (act %d)", act);
+   p_fg_state(&act, &ph, 0); CHECK(act == 0, "값이 같은 옵션 재적용으론 안 켜져야 (act %d)", act);
+   opt_framegen = "enabled"; var_updated = 1;           /* 값을 바꾸면 판정 해제 → 30 프레임 뒤 켜짐 */
+   for (i = 0; i < 60; i++) p_run();
+   p_fg_state(&act, &ph, 0); CHECK(act == 1, "옵션 값을 바꾼 뒤 다시 켜져야 (act %d)", act);
    unload_game();
    printf("7 호출 속도 감시: %s\n", fails == f0 ? "통과" : "실패");
 }
@@ -316,7 +319,11 @@ static void test_retry(const char *rom)
    { int av0 = avinfo_calls;                             /* 한 점 표본이 아니라 200초 내내 꺼져 있어야(80초 뒤 재시도하는 변종도 잡는다) */
      e = run_until(1, SLOW, 200.0);
      CHECK(e < 0 && avinfo_calls == av0, "4차 뒤엔 200초 내내 꺼져 있어야 (켜짐 %.1fs, av %d→%d)", e, av0, avinfo_calls); }
-   var_updated = 1; e = run_until(1, FAST, 2); CHECK(e >= 0, "옵션 재적용 뒤 복귀");
+   { int av0 = avinfo_calls;                             /* 값이 같은 옵션 재적용(다른 옵션을 만진 경우)은 되돌리지 않는다 */
+     var_updated = 1; e = run_until(1, SLOW, 15.0);
+     CHECK(e < 0 && avinfo_calls == av0, "값이 같은 옵션 재적용으로는 재시도가 다시 시작되면 안 된다 (켜짐 %.1fs)", e); }
+   opt_framegen = "enabled"; var_updated = 1; e = run_until(1, FAST, 2); CHECK(e >= 0, "옵션 값을 바꾸면 복귀");
+   opt_framegen = "auto"; var_updated = 1; run_at(5, FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "자동으로 되돌려도 켜진 채");
    run_at((int)(31.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "120/s 31초 동안 켜져 있어야");
    e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "복원 뒤 차단 %.2fs", e); tb = fake_t;
    e = run_until(1, SLOW, 13); CHECK(e >= 0 && fake_t - tb > 10 && fake_t - tb < 12.5, "복원 뒤 다시 10초 재시도 (%.2fs)", fake_t - tb);

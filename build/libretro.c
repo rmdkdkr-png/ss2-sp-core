@@ -430,7 +430,7 @@ static int fg_want(void)
    2초 연속 90/s 미만이면 2배 출력을 끄고 알린다.
    차단은 영구가 아니다: 10 → 20 → 40 초 뒤 판정을 풀어 fg_want 가 다시 보게 한다(목표 주사율이 아직 120 이면
    30 프레임 히스테리시스를 거쳐 다시 켜진다 — 패널이 잠깐 60 으로 내려갔다 돌아온 경우를 살린다). 네 번째
-   차단은 옵션을 다시 만지거나 게임을 다시 열 때까지 유지한다. 120/s 가 30 초 이어지면 횟수를 되돌린다. */
+   차단은 프레임 생성 옵션 값을 바꾸거나 게임을 다시 열 때까지 유지한다. 120/s 가 30 초 이어지면 횟수를 되돌린다. */
 static double fg_block_wait(void)
 {
    double w = FG_BLOCK_WAIT0;
@@ -491,7 +491,7 @@ static void fg_watch_rate(void)
          if (fg_block_n <= FG_BLOCK_RETRIES)
             snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (%d초 뒤 다시 시도)", (int)fg_block_wait());
          else
-            snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (삼성 게임 부스터·주사율 설정 확인 뒤 옵션을 다시 만지면 재시도)");
+            snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (삼성 게임 부스터·주사율 설정 확인 뒤 옵션을 껐다 켜면 재시도)");
          msg.msg    = text;
          msg.frames = 300;
          environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
@@ -758,16 +758,21 @@ static void check_variables(void)
       else ss2comm_sp_band(0);
    }
 
-   var.key   = "ngp_framegen";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      fg_opt = !strcmp(var.value, "disabled") ? 0 : !strcmp(var.value, "enabled") ? 2 : 1;
+   {  /* 프레임 생성 옵션 값이 실제로 바뀔 때만 속도 감시 판정을 되돌린다 — GET_VARIABLE_UPDATE 는 아무 옵션이나
+         만져도 오므로(해설 등), 그때마다 되돌리면 60Hz 패널에서 80초짜리 재시도 주기가 다시 시작된다 */
+      int opt0 = fg_opt, mode0 = fg_mode;
+      var.key   = "ngp_framegen";
+      var.value = NULL;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+         fg_opt = !strcmp(var.value, "disabled") ? 0 : !strcmp(var.value, "enabled") ? 2 : 1;
 
-   var.key   = "ngp_framegen_mode";
-   var.value = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      fg_mode = !strcmp(var.value, "interp") ? 1 : 0;
-   fg_rate_block = 0; fg_block_n = 0;     /* 옵션을 만졌다 — 속도 감시 판정을 다시 한다 */
+      var.key   = "ngp_framegen_mode";
+      var.value = NULL;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+         fg_mode = !strcmp(var.value, "interp") ? 1 : 0;
+      if (!cv_booted || fg_opt != opt0 || fg_mode != mode0)
+      { fg_rate_block = 0; fg_block_n = 0; }   /* 프레임 생성 옵션을 바꿨다 — 다시 판정 */
+   }
 
    cv_booted = true;
 
