@@ -367,7 +367,11 @@ static bool update_video = false;
    Vertical Refresh Rate 설정값)이 60.25 의 짝수 배일 때만 켠다. 프론트엔드 런어헤드가 감지되면
    (저장 문맥이 런어헤드) 자동은 끈다 — 런어헤드는 'retro_run 1회 = 1프레임' 을 전제한다. */
 #include "ss2fg.h"
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <time.h>
+#endif
 static int      fg_opt    = 1;         /* 0 끔 · 1 자동 · 2 켬 */
 static int      fg_mode   = 0;         /* 0 예측(지연 0) · 1 보간(+8ms) */
 static int      fg_active = 0;         /* 지금 2배 fps 로 내보내는 중 */
@@ -418,12 +422,24 @@ static int fg_want(void)
 /* 호출 속도 감시 — RetroArch 설정은 120 인데 패널이 60Hz 에 묶여 있으면(삼성 게임 부스터 등) 프론트엔드가
    60 번/초만 부르고 게임은 반속이 된다. 100ms 넘는 공백(메뉴·일시정지)은 빼고 1초 창의 호출 속도를 재서
    2초 연속 90/s 미만이면 2배 출력을 끄고 알린다. 옵션을 다시 만지거나 게임을 다시 열면 풀린다. */
+static double fg_now_sec(void)
+{
+#ifdef _WIN32
+   LARGE_INTEGER f, c;                            /* mingw 엔 clock_gettime 링크가 없다 — 고해상도 카운터로 */
+   if (!QueryPerformanceFrequency(&f) || !QueryPerformanceCounter(&c) || f.QuadPart == 0) return 0;
+   return (double)c.QuadPart / (double)f.QuadPart;
+#else
+   struct timespec ts;
+   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+   return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+#endif
+}
+
 static void fg_watch_rate(void)
 {
-   struct timespec ts;
    double now, dt;
-   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return;
-   now = (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+   now = fg_now_sec();
+   if (now <= 0) return;
    dt  = now - fg_t_prev;
    fg_t_prev = now;
    if (!fg_active) { fg_win_sum = 0; fg_win_n = 0; fg_slow_secs = 0; return; }
