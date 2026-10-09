@@ -809,11 +809,11 @@ void ngpgfx_SetLayerEnableMask(ngpgfx_t *gfx, uint64_t mask)
 static void ss2fg_note_write(ngpgfx_t *gfx, uint32 address)
 {
    if (gfx->raster_line == 0 || gfx->raster_line >= SCREEN_HEIGHT) return;
-   if (address >= 0x8800 && address <= 0x88ff)      ss2fg_capture_write(SS2FG_DIRTY_SPR);
+   if ((address >= 0x8800 && address <= 0x88ff) || (address >= 0x8c00 && address <= 0x8c3f))
+      ss2fg_capture_write(SS2FG_DIRTY_SPR);        /* 스프라이트표 + 스프라이트 팔레트 번호(일치 키이자 렌더 팔레트) */
    else if (address >= 0x9000 && address <= 0x9fff) ss2fg_capture_write(SS2FG_DIRTY_SCROLL);
    else if (address >= 0xa000 && address <= 0xbfff) ss2fg_capture_write(SS2FG_DIRTY_CHR);
-   else if ((address >= 0x8200 && address <= 0x83ff) || (address >= 0x8c00 && address <= 0x8c3f))
-      ss2fg_capture_write(SS2FG_DIRTY_PAL);
+   else if (address >= 0x8200 && address <= 0x83ff) ss2fg_capture_write(SS2FG_DIRTY_PAL);
 }
 
 void ngpgfx_write8(ngpgfx_t *gfx, uint32 address, uint8 data)

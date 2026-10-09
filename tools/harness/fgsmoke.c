@@ -235,6 +235,50 @@ static void test_hidden(const char *rom)
    printf("5 숨은 호출 섞임: %s\n", fails == f0 ? "통과" : "실패");
 }
 
+#include <time.h>
+static void nap_ms(int ms) { struct timespec ts = { ms / 1000, (ms % 1000) * 1000000L }; nanosleep(&ts, 0); }
+
+/* 자동 모드 + 숨은 호출(런어헤드 2-인스턴스처럼 저장은 안 오고 비디오만 꺼짐) → 바로 꺼지고, 게임은 2배속이 아니다 */
+static void test_hidden_auto(const char *rom)
+{
+   int i, f0 = fails; int act, ph; unsigned fr0, fr1;
+   target_hz = 120; opt_framegen = "auto"; opt_mode = "predict";
+   load_game(rom);
+   for (i = 0; i < 10; i++) p_run();
+   p_fg_state(&act, &ph, 0); CHECK(act == 1, "시작 시 켜져 있어야");
+   for (i = 0; i < 6; i++) { av_enable = 0; p_run(); }
+   av_enable = 3;
+   p_fg_state(&act, &ph, &fr0);
+   CHECK(act == 0, "숨은 호출 뒤 자동 모드가 바로 꺼져야 (act %d)", act);
+   CHECK(avinfo_calls == 1 && last_fps > 60 && last_fps < 61, "60.25 로 복귀 (av %d fps %.2f)", avinfo_calls, last_fps);
+   /* 2초(240호출) 안엔 안 켜지고, 그 뒤 30 프레임 히스테리시스 지나 다시 켜진다 */
+   for (i = 0; i < 200; i++) p_run();
+   p_fg_state(&act, &ph, 0); CHECK(act == 0, "2초 안엔 다시 안 켜져야");
+   for (i = 0; i < 120; i++) p_run();
+   p_fg_state(&act, &ph, &fr1); CHECK(act == 1, "숨은 호출이 멈추면 다시 켜져야");
+   unload_game();
+   printf("6 숨은 호출 → 자동 끔·복귀: %s\n", fails == f0 ? "통과" : "실패");
+}
+
+/* 호출 속도 감시: 설정은 120 인데 프론트가 60/s 로만 부르면(패널이 60Hz) 2초 뒤 끄고, 옵션을 만지면 다시 판정 */
+static void test_watchdog(const char *rom)
+{
+   int i, f0 = fails; int act, ph;
+   target_hz = 120; opt_framegen = "auto"; opt_mode = "predict";
+   load_game(rom);
+   for (i = 0; i < 200; i++) { p_run(); nap_ms(16); }   /* 약 3.3초 동안 60/s */
+   p_fg_state(&act, &ph, 0);
+   CHECK(act == 0, "60/s 로 3초 돌았는데 안 꺼졌다 (act %d)", act);
+   CHECK(last_fps > 60 && last_fps < 61, "복귀 fps %.2f", last_fps);
+   for (i = 0; i < 100; i++) p_run();                  /* 빠르게 돌아도 판정은 유지 */
+   p_fg_state(&act, &ph, 0); CHECK(act == 0, "판정은 옵션을 만질 때까지 유지돼야");
+   var_updated = 1;                                     /* 옵션 재적용 → 판정 해제 → 30 프레임 뒤 켜짐 */
+   for (i = 0; i < 60; i++) p_run();
+   p_fg_state(&act, &ph, 0); CHECK(act == 1, "옵션을 만진 뒤 다시 켜져야 (act %d)", act);
+   unload_game();
+   printf("7 호출 속도 감시: %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(int argc, char **argv)
 {
    char rom[1200];
@@ -251,6 +295,8 @@ int main(int argc, char **argv)
    test_determinism(rom, "interp");
    test_runahead_guard(rom);
    test_hidden(rom);
+   test_hidden_auto(rom);
+   test_watchdog(rom);
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

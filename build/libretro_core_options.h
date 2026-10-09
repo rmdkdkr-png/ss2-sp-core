@@ -98,7 +98,7 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "ngp_framegen",
       "프레임 생성 (120Hz)",
       NULL,
-      "60fps 게임을 120Hz 화면에 맞춰 중간 프레임을 합성합니다. 픽셀을 섞지 않고 스프라이트·스크롤 위치를 보간해 같은 타일로 다시 그립니다. '자동'은 RetroArch 의 주사율 설정(Vertical Refresh Rate)이 120Hz(또는 짝수 배)일 때만 켭니다. 60Hz 화면에서 '켬'으로 두면 화면이 찢어집니다.",
+      "60fps 게임을 120Hz 화면에 맞춰 중간 프레임을 합성합니다. 픽셀을 섞지 않고 스프라이트·스크롤 위치를 보간해 같은 타일로 다시 그립니다. '자동'은 RetroArch 의 주사율 설정(Vertical Refresh Rate)이 120Hz(또는 짝수 배)일 때만 켭니다. 런어헤드(Run-Ahead)와는 같이 못 씁니다 — 런어헤드가 보이면 자동은 꺼집니다. 60Hz 화면에서 '켬'으로 두면 화면이 찢어집니다.",
       NULL,
       "video",
       {

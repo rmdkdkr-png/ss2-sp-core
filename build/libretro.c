@@ -367,6 +367,7 @@ static bool update_video = false;
    Vertical Refresh Rate 설정값)이 60.25 의 짝수 배일 때만 켠다. 프론트엔드 런어헤드가 감지되면
    (저장 문맥이 런어헤드) 자동은 끈다 — 런어헤드는 'retro_run 1회 = 1프레임' 을 전제한다. */
 #include "ss2fg.h"
+#include <time.h>
 static int      fg_opt    = 1;         /* 0 끔 · 1 자동 · 2 켬 */
 static int      fg_mode   = 0;         /* 0 예측(지연 0) · 1 보간(+8ms) */
 static int      fg_active = 0;         /* 지금 2배 fps 로 내보내는 중 */
@@ -377,6 +378,9 @@ static unsigned fg_runahead_seen = 0;  /* 런어헤드용 저장이 마지막으
 static int16_t  fg_audio_tail[0x8000]; /* 실제 프레임 소리의 뒷 반 — 합성 호출에서 보낸다 */
 static int      fg_audio_tail_n = 0;
 static uint16_t fg_real[FB_WIDTH * FB_HEIGHT];   /* 마지막 실제 프레임(후처리 전) */
+static int      fg_rate_block = 0;     /* 호출 속도 감시가 '화면이 120Hz 가 아님' 으로 판정 — 옵션을 다시 만질 때까지 끔 */
+static double   fg_t_prev = 0, fg_win_sum = 0;
+static int      fg_win_n = 0, fg_slow_secs = 0;
 static uint8_t *fg_state = NULL;       /* 예측용 상태 버퍼 (MDFNSS 가 필요하면 늘린다) */
 static uint32_t fg_state_cap = 0;
 static int16_t  fg_scratch_snd[0x10000];
@@ -387,6 +391,7 @@ extern int ngp_fg_predict;                /* mem.c — 예측 프레임 중 롬/
 extern void ngp_mem_fg_extras(uint8_t *buf, int load);
 extern int iline;                         /* z80_ops.c — Z80 인터럽트선, 어떤 StateAction 에도 없다 */
 
+static void fg_apply(int on);
 static int fg_want(void)
 {
    float hz = 0;
@@ -403,9 +408,43 @@ static int fg_want(void)
          want = (skew > 0.95f && skew < 1.05f);                   /* RetroArch 의 Maximum Timing Skew 기본 5% */
       }
    }
-   if (fg_runahead_seen && fg_frames - fg_runahead_seen < 240)    /* 최근 2초 안에 런어헤드 저장을 봤다 */
+   if (fg_runahead_seen && fg_frames - fg_runahead_seen < 240)    /* 최근 2초 안에 런어헤드 저장/숨은 호출을 봤다 */
+      want = 0;
+   if (fg_rate_block)                                                /* 호출 속도가 60/s 에 머물렀다 — 패널이 120Hz 가 아니다 */
       want = 0;
    return want;
+}
+
+/* 호출 속도 감시 — RetroArch 설정은 120 인데 패널이 60Hz 에 묶여 있으면(삼성 게임 부스터 등) 프론트엔드가
+   60 번/초만 부르고 게임은 반속이 된다. 100ms 넘는 공백(메뉴·일시정지)은 빼고 1초 창의 호출 속도를 재서
+   2초 연속 90/s 미만이면 2배 출력을 끄고 알린다. 옵션을 다시 만지거나 게임을 다시 열면 풀린다. */
+static void fg_watch_rate(void)
+{
+   struct timespec ts;
+   double now, dt;
+   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return;
+   now = (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+   dt  = now - fg_t_prev;
+   fg_t_prev = now;
+   if (!fg_active) { fg_win_sum = 0; fg_win_n = 0; fg_slow_secs = 0; return; }
+   if (dt <= 0 || dt > 0.1) return;
+   fg_win_sum += dt; fg_win_n++;
+   if (fg_win_sum < 1.0) return;
+   {
+      double rate = fg_win_n / fg_win_sum;
+      fg_win_sum = 0; fg_win_n = 0;
+      if (rate < 90.0) fg_slow_secs++; else fg_slow_secs = 0;
+      if (fg_slow_secs >= 2)
+      {
+         struct retro_message msg;
+         fg_slow_secs = 0;
+         fg_rate_block = 1;
+         fg_apply(0);
+         msg.msg    = "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (삼성 게임 부스터·주사율 설정 확인)";
+         msg.frames = 300;
+         environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
+      }
+   }
 }
 
 static void fg_apply(int on)
@@ -676,6 +715,7 @@ static void check_variables(void)
    var.value = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       fg_mode = !strcmp(var.value, "interp") ? 1 : 0;
+   fg_rate_block = 0;                     /* 옵션을 만졌다 — 속도 감시 판정을 다시 한다 */
 
    cv_booted = true;
 
@@ -733,6 +773,7 @@ void retro_init(void)
 
 void retro_reset(void)
 {
+   fg_phase = 0; fg_audio_tail_n = 0; fg_streak = 0;   /* 프레임 생성 위상도 처음부터 */
    ss2sp_reset();
    svcsp_reset();
    ss2comm_set_ram(&CPUExRAM[0]);
@@ -810,6 +851,7 @@ bool retro_load_game(const struct retro_game_info *info)
    /* 프레임 생성 배관 초기화 — 지난 게임의 상태가 남지 않게. 목표 주사율은 지금 바로 판정해
       retro_get_system_av_info 가 처음부터 맞는 fps 를 돌려주게 한다(재초기화 한 번 절약) */
    fg_phase = 0; fg_streak = 0; fg_frames = 0; fg_runahead_seen = 0; fg_audio_tail_n = 0;
+   fg_rate_block = 0; fg_win_sum = 0; fg_win_n = 0; fg_slow_secs = 0; fg_t_prev = 0;
    ss2fg_reset();
    fg_active = fg_want();
 
@@ -1060,15 +1102,21 @@ void retro_run(void)
       check_variables();
 
    fg_frames++;
-   {  /* 프론트엔드 런어헤드의 숨은 호출(비디오 꺼짐)엔 합성 프레임을 끼우지 않는다 */
+   {  /* 프론트엔드 런어헤드/프리엠프티브의 숨은 호출(비디오 꺼짐) — 그건 'retro_run 1회 = 1프레임' 을
+         전제하므로 2배 출력과 맞지 않는다. 자동 모드는 물러나고, 그동안도 위상은 그대로 번갈아
+         (숨은 호출의 합성 차례엔 아무것도 돌리지 않는다) — 게임이 2배속이 되지는 않는다. */
       int av_en = 3;
       if (environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &av_en) && !(av_en & 1))
+      {
          hidden = 1;
+         if (fg_active) fg_runahead_seen = fg_frames;
+      }
    }
 
    input_poll_cb();
+   if (!hidden) fg_watch_rate();
 
-   if (fg_active && fg_phase == 1 && !hidden)
+   if (fg_active && fg_phase == 1)
       synth = 1;              /* 합성 호출 — 입력 변환(원버튼 매크로)은 실제 프레임마다 한 번만 돈다 */
    else
       update_input();
@@ -1090,9 +1138,14 @@ void retro_run(void)
    }
 
    if (!synth)
-   {  /* 2배 출력 켜기/끄기 — 같은 결정이 30 실제 프레임 이어질 때만 바꾼다(AV 재초기화 비용) */
+   {  /* 2배 출력 켜기/끄기 — 켤 때는 같은 결정이 30 실제 프레임 이어져야(AV 재초기화 비용),
+         런어헤드가 보여 끌 때는 바로 */
       int want = fg_want();
-      if (want != fg_active) { if (++fg_streak >= 30) fg_apply(want); }
+      if (want != fg_active)
+      {
+         if (!want && fg_runahead_seen && fg_frames - fg_runahead_seen < 240) fg_apply(0);
+         else if (++fg_streak >= 30) fg_apply(want);
+      }
       else fg_streak = 0;
    }
 
@@ -1140,7 +1193,9 @@ void retro_run(void)
       uint16_t *fbuf = (uint16_t *)surf->pixels;
       width  = FB_WIDTH;
       height = FB_HEIGHT;
-      if (fg_mode == 0 && !ngplink_active())                        /* 링크 플레이 중엔 예측이 통신을 먹는다 → 보간처럼 */
+      if (hidden)
+         memcpy(surf->pixels, fg_real, sizeof fg_real);            /* 숨은 호출: 아무것도 안 돌리고 지난 화면 */
+      else if (fg_mode == 0 && !ngplink_active())                   /* 링크 플레이 중엔 예측이 통신을 먹는다 → 합성 없이 지난 화면 */
       {
          if (!fg_predict())                                        /* 합성 못 하면 실제 N 을 한 번 더 */
             memcpy(surf->pixels, fg_real, sizeof fg_real);
@@ -1206,7 +1261,7 @@ void retro_run(void)
             total += audio_batch_cb(fg_audio_tail + total*2, fg_audio_tail_n - total);
          fg_audio_tail_n = 0;
       }
-      if (!hidden) fg_phase ^= 1;
+      fg_phase ^= 1;
    }
    else
    {
