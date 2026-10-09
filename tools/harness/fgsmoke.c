@@ -300,43 +300,55 @@ static double run_until(int want, double dt, double maxsec)
 }
 static void test_retry(const char *rom)
 {
-   int f0 = fails; int act, ph; double e, tb;
+   int f0 = fails; int act, ph; double e, tb; int av0;
    const double SLOW = 1.0 / 60, FAST = 1.0 / 120;
+   /* 재시도 복귀 시각: 차단 뒤 wait 초에 판정이 풀리고(다음 호출), 30 실제 프레임(60/s 면 0.5초) 히스테리시스 뒤 켜진다
+      → wait+0.45 ~ wait+0.8 로 묶는다(히스테리시스를 건너뛰거나 wait 가 10 이 아니면 걸린다) */
+#define EXPECT_BACK(wait, what) do { e = run_until(1, SLOW, (wait) + 3.0); \
+      CHECK(e >= 0 && fake_t - tb > (wait) + 0.45 && fake_t - tb < (wait) + 0.8, what " (차단 뒤 %.2fs)", fake_t - tb); } while (0)
+#define EXPECT_BLOCK(what) do { e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, what " %.2fs", e); tb = fake_t; } while (0)
+#define EXPECT_STILL_OFF(secs, what) do { av0 = avinfo_calls; e = run_until(1, SLOW, (secs)); \
+      CHECK(e < 0 && avinfo_calls == av0, what " (켜짐 %.1fs, av %d→%d)", e, av0, avinfo_calls); } while (0)
+
    target_hz = 120; opt_framegen = "auto"; opt_mode = "predict";
    load_game(rom);
    p_fg_set_clock(fake_clock);
    p_fg_state(&act, &ph, 0); CHECK(act == 1, "시작 시 켜져 있어야");
-   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "1차 차단 %.2fs", e); tb = fake_t;
-   run_at((int)(9.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "10초 전엔 재시도 없어야");
-   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 10 && fake_t - tb < 12.5, "1차 재시도 복귀 (차단 뒤 %.2fs)", fake_t - tb);
-   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "2차 차단 %.2fs", e); tb = fake_t;
-   run_at((int)(19.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "20초 전엔 재시도 없어야");
-   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 20 && fake_t - tb < 22.5, "2차 재시도 복귀 (%.2fs)", fake_t - tb);
-   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "3차 차단 %.2fs", e); tb = fake_t;
-   run_at((int)(39.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "40초 전엔 재시도 없어야");
-   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 40 && fake_t - tb < 42.5, "3차 재시도 복귀 (%.2fs)", fake_t - tb);
-   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "4차 차단 %.2fs", e); tb = fake_t;
-   { int av0 = avinfo_calls;                             /* 한 점 표본이 아니라 200초 내내 꺼져 있어야(80초 뒤 재시도하는 변종도 잡는다) */
-     e = run_until(1, SLOW, 200.0);
-     CHECK(e < 0 && avinfo_calls == av0, "4차 뒤엔 200초 내내 꺼져 있어야 (켜짐 %.1fs, av %d→%d)", e, av0, avinfo_calls); }
-   { int av0 = avinfo_calls;                             /* 값이 같은 옵션 재적용(다른 옵션을 만진 경우)은 되돌리지 않는다 */
-     var_updated = 1; e = run_until(1, SLOW, 15.0);
-     CHECK(e < 0 && avinfo_calls == av0, "값이 같은 옵션 재적용으로는 재시도가 다시 시작되면 안 된다 (켜짐 %.1fs)", e); }
+
+   /* A. 1·2·3 차: 10·20·40 초 뒤 복귀, 그 전엔 꺼진 채 */
+   EXPECT_BLOCK("1차 차단");  EXPECT_STILL_OFF(9.0,  "10초 전엔 재시도 없어야");  EXPECT_BACK(10, "1차 재시도 복귀");
+   EXPECT_BLOCK("2차 차단");  EXPECT_STILL_OFF(19.0, "20초 전엔 재시도 없어야");  EXPECT_BACK(20, "2차 재시도 복귀");
+   EXPECT_BLOCK("3차 차단");  EXPECT_STILL_OFF(39.0, "40초 전엔 재시도 없어야");  EXPECT_BACK(40, "3차 재시도 복귀");
+   /* B. 4 차는 200초 내내 꺼진 채(80초 뒤 재시도하는 변종도 잡는다) */
+   EXPECT_BLOCK("4차 차단");  EXPECT_STILL_OFF(200.0, "4차 뒤엔 200초 내내 꺼져 있어야");
+   /* C. 값이 같은 옵션 재적용(다른 옵션을 만진 경우)은 안 푼다 — 값을 바꾸면 푼다 */
+   var_updated = 1; EXPECT_STILL_OFF(15.0, "값이 같은 옵션 재적용으론 재시도가 다시 시작되면 안 된다");
    opt_framegen = "enabled"; var_updated = 1; e = run_until(1, FAST, 2); CHECK(e >= 0, "옵션 값을 바꾸면 복귀");
    opt_framegen = "auto"; var_updated = 1; run_at(5, FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "자동으로 되돌려도 켜진 채");
-   run_at((int)(31.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "120/s 31초 동안 켜져 있어야");
-   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "복원 뒤 차단 %.2fs", e); tb = fake_t;
-   e = run_until(1, SLOW, 13); CHECK(e >= 0 && fake_t - tb > 10 && fake_t - tb < 12.5, "복원 뒤 다시 10초 재시도 (%.2fs)", fake_t - tb);
-   run_at((int)(31.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "다시 31초 건강");
-   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "차단 %.2fs", e); tb = fake_t;
-   target_hz = 60; run_at((int)(30.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "목표 60 이면 재시도해도 안 켜져야");
-   target_hz = 120; e = run_until(1, SLOW, 3); CHECK(e >= 0, "목표가 120 으로 돌아오면 켜져야 (%.2f)", e);
-   e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "차단 %.2fs", e); tb = fake_t;
-   run_at((int)(19.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 0, "2차니 20초 전엔 재시도 없어야");
-   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 20 && fake_t - tb < 22.5, "2차 20초 복귀 (%.2fs)", fake_t - tb);
+   /* D. 값 변경이 횟수를 0 으로 되돌렸는지: 바로 차단되면 1차(10초)여야 한다(안 되돌렸으면 영구) */
+   EXPECT_BLOCK("값 변경 뒤 차단");  EXPECT_BACK(10, "값 변경이 횟수를 되돌려 10초 재시도");
+   /* E. 건강 복원 문턱 아래쪽: 20초 건강은 안 되돌린다 → 다음은 2차(20초) */
+   run_at((int)(20.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "20초 건강 동안 켜진 채");
+   EXPECT_BLOCK("20초 건강 뒤 차단");  EXPECT_STILL_OFF(19.0, "20초 건강은 횟수를 안 되돌려야(20초 전 재시도 없음)");  EXPECT_BACK(20, "2차 20초 복귀");
+   /* F. 연속이어야 한다: 20초 건강 + 느린 창 하나(차단은 안 됨) + 20초 건강 = 비연속 40초 → 안 되돌린다 → 3차(40초) */
+   run_at((int)(20.0 / FAST), FAST);
+   run_at((int)(1.2 / SLOW), SLOW); p_fg_state(&act, &ph, 0); CHECK(act == 1, "느린 창 하나로는 차단되지 않아야");
+   run_at((int)(20.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "다시 20초 건강 동안 켜진 채");
+   EXPECT_BLOCK("비연속 40초 뒤 차단");  EXPECT_STILL_OFF(39.0, "비연속 건강은 횟수를 안 되돌려야(40초 전 재시도 없음)");  EXPECT_BACK(40, "3차 40초 복귀");
+   /* G. 문턱 위쪽: 31초 연속 건강은 되돌린다 → 다음은 1차(10초) */
+   run_at((int)(31.0 / FAST), FAST); p_fg_state(&act, &ph, 0); CHECK(act == 1, "31초 건강 동안 켜진 채");
+   EXPECT_BLOCK("31초 건강 뒤 차단");  EXPECT_BACK(10, "31초 연속 건강이 횟수를 되돌려 10초 재시도");
+   /* H. 목표가 60 인 동안엔 판정이 풀려도 안 켜지고(횟수도 안 쓴다), 120 으로 돌아오면 히스테리시스만 거쳐 켜진다 */
+   EXPECT_BLOCK("차단(2차)");
+   target_hz = 60; EXPECT_STILL_OFF(30.0, "목표 60 이면 재시도해도 안 켜져야");
+   target_hz = 120; e = run_until(1, SLOW, 3); CHECK(e >= 0.45 && e < 0.8, "목표가 120 으로 돌아오면 30 프레임 뒤 켜져야 (%.2f)", e);
+   EXPECT_BLOCK("차단(3차)");  EXPECT_STILL_OFF(39.0, "목표 60 기간은 횟수를 안 썼으니 3차=40초(40초 전 재시도 없음)");  EXPECT_BACK(40, "3차 40초 복귀");
    p_fg_set_clock(NULL);
    unload_game();
-   printf("8 차단 재시도(10·20·40초, 4차 영구, 30초 건강 복원): %s\n", fails == f0 ? "통과" : "실패");
+   printf("8 차단 재시도(10·20·40초, 4차 영구, 옵션 값 변경 복원, 30초 연속 건강 복원): %s\n", fails == f0 ? "통과" : "실패");
+#undef EXPECT_BACK
+#undef EXPECT_BLOCK
+#undef EXPECT_STILL_OFF
 }
 
 /* '켬'(강제)도 차단을 따른다 — 안 그러면 2.5초마다 껐다 켰다 한다. 재시도 일정은 같다 */
@@ -351,7 +363,7 @@ static void test_retry_forced(const char *rom)
    e = run_until(0, SLOW, 5); CHECK(e > 1.5 && e < 3.5, "강제 켬 1차 차단 %.2fs", e); tb = fake_t; av0 = avinfo_calls;
    run_at((int)(9.0 / SLOW), SLOW); p_fg_state(&act, &ph, 0);
    CHECK(act == 0 && avinfo_calls == av0, "강제 켬이 차단 중 다시 켜지면 안 된다 (act %d, av %d→%d)", act, av0, avinfo_calls);
-   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 10 && fake_t - tb < 12.5, "강제 켬 10초 재시도 (%.2fs)", fake_t - tb);
+   e = run_until(1, SLOW, 3); CHECK(e >= 0 && fake_t - tb > 10.45 && fake_t - tb < 10.8, "강제 켬 10초 재시도 (%.2fs)", fake_t - tb);
    p_fg_set_clock(NULL);
    unload_game();
    printf("9 강제 켬도 차단·재시도를 따름: %s\n", fails == f0 ? "통과" : "실패");
