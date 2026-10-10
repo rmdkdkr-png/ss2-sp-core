@@ -1,7 +1,7 @@
 /* fgrom — 실제 롬으로 프레임 생성 품질을 잰다 (롬은 저장소 밖에 둔다 — 절대 커밋하지 않는다).
  * 사용: fgrom <core.so> <rom> <workdir> <mode:off|interp|predict> <frames> <script> [dump_every] [metric_from]
  * 환경: FGROM_MULT=2|4 (프레임 생성 배수, 기본 4) · FGROM_REF=<off 실행 dump_every=1 디렉터리> (출력 프레임을 기준 N·N+1·N+2 와 대조)
- *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로)
+ *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로) · FGROM_RAM=<파일> (실제 프레임마다 시스템 RAM 16KB)
  *   script: "s-e:BTN,..."  BTN 글자: U D L R A B S(option)  예) "200-205:S,400-405:A"
  *   매 합성 프레임: 앞 실제 N, 뒤 실제 N+1 과 비교해 3x3 이웃 어디에도 없는 색의 픽셀 수(=깨진 픽셀) 기록
  */
@@ -62,6 +62,7 @@ static fv p_init, p_deinit, p_run, p_unload; static bool (*p_load)(const struct 
 static void (*p_fg_state)(int*, int*, unsigned*);
 static void *(*p_spriteram)(void); static void *(*p_spritecol)(void); static void *(*p_charram)(void); static FILE *oamf = NULL, *chrf = NULL, *csvf = NULL;
 static size_t (*p_ser_size)(void); static bool (*p_ser)(void*, size_t); static bool (*p_unser)(const void*, size_t);
+static void *(*p_memdata)(unsigned); static FILE *ramf = NULL;   /* FGROM_RAM: 실제 프레임마다 시스템 RAM 16KB (몸 위치 검증용) */
 #define SYM(v, n) do { v = dlsym(Hd, n); if (!v) { fprintf(stderr, "dlsym %s\n", n); exit(2); } } while (0)
 
 typedef struct { int s, e; unsigned mask; } seg;
@@ -121,12 +122,12 @@ int main(int argc, char **argv)
    SYM(p_set_audio, "retro_set_audio_sample"); SYM(p_set_audio_batch, "retro_set_audio_sample_batch");
    SYM(p_set_input_poll, "retro_set_input_poll"); SYM(p_set_input_state, "retro_set_input_state");
    SYM(p_init, "retro_init"); SYM(p_deinit, "retro_deinit"); SYM(p_run, "retro_run"); SYM(p_unload, "retro_unload_game"); SYM(p_load, "retro_load_game");
-   SYM(p_fg_state, "retro_ngp_fg_state"); SYM(p_spriteram, "retro_ngp_spriteram"); SYM(p_spritecol, "retro_ngp_spritecol"); SYM(p_charram, "retro_ngp_charram"); SYM(p_ser_size, "retro_serialize_size"); SYM(p_ser, "retro_serialize"); SYM(p_unser, "retro_unserialize");
+   SYM(p_fg_state, "retro_ngp_fg_state"); SYM(p_spriteram, "retro_ngp_spriteram"); SYM(p_spritecol, "retro_ngp_spritecol"); SYM(p_charram, "retro_ngp_charram"); SYM(p_ser_size, "retro_serialize_size"); SYM(p_ser, "retro_serialize"); SYM(p_unser, "retro_unserialize"); SYM(p_memdata, "retro_get_memory_data");
    p_set_environment(env_cb); p_set_video(video_cb); p_set_audio(audio_cb); p_set_audio_batch(audio_batch_cb);
    p_set_input_poll(input_poll_cb); p_set_input_state(input_state_cb);
    memset(&gi, 0, sizeof gi); gi.path = argv[2];
    p_init(); if (!p_load(&gi)) { fprintf(stderr, "load 실패\n"); return 2; }
-   { const char *o = getenv("FGROM_OAM"); if (o) oamf = fopen(o, "wb"); o = getenv("FGROM_CHR"); if (o) chrf = fopen(o, "wb"); o = getenv("FGROM_CSV"); if (o) csvf = fopen(o, "w"); }
+   { const char *o = getenv("FGROM_OAM"); if (o) oamf = fopen(o, "wb"); o = getenv("FGROM_CHR"); if (o) chrf = fopen(o, "wb"); o = getenv("FGROM_CSV"); if (o) csvf = fopen(o, "w"); o = getenv("FGROM_RAM"); if (o) ramf = fopen(o, "wb"); }
    { const char *st = getenv("FGROM_LOAD"); if (st) { FILE *f = fopen(st, "rb"); if (f) { size_t n = p_ser_size(); void *b = malloc(n); size_t got = fread(b, 1, n, f); fclose(f); if (!p_unser(b, got)) fprintf(stderr, "unserialize 실패\n"); else fprintf(stderr, "상태 불러옴 %s (%zu)\n", st, got); free(b); } } }
    while (real < frames)
    {
@@ -156,6 +157,7 @@ int main(int argc, char **argv)
       haveS = 0;
       if (oamf) { fwrite(p_spriteram(), 1, 256, oamf); fwrite(p_spritecol(), 1, 64, oamf); }
       if (chrf) fwrite(p_charram(), 1, 8192, chrf);
+      if (ramf) { const void *r = p_memdata(RETRO_MEMORY_SYSTEM_RAM); if (r) fwrite(r, 1, 16384, ramf); }
       if (dump_every && real % dump_every == 0) { char nm[64]; snprintf(nm, sizeof nm, "f%06d", real); dump(nm, cur); }
       real++;
    }
@@ -163,7 +165,7 @@ int main(int argc, char **argv)
    printf("mode=%s real=%d calls=%d synth_measured=%d artifacts: mean=%.2f max=%d (at real %d) frames>40px=%d  mean|A-B|=%.1f\n",
           mode, real, calls, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0);
    if (refdir) printf("ref-score(mult=%s): frames=%d mean=%.2f max=%d (at real %d phase %d) frames>40px=%d\n", opt_mult, nR, nR ? (double)sumR / nR : 0.0, maxR, maxRat, maxRph, badR);
-   if (oamf) fclose(oamf); if (chrf) fclose(chrf); if (csvf) fclose(csvf);
+   if (oamf) fclose(oamf); if (chrf) fclose(chrf); if (csvf) fclose(csvf); if (ramf) fclose(ramf);
    p_unload(); p_deinit();
    return 0;
 }

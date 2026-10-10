@@ -656,9 +656,97 @@ static void t_four(void)
    printf("10 4배 — render2·motion·hist: %s\n", fails == f0 ? "통과" : "실패");
 }
 
+
+/* 몸 위치(사무쇼2 RAM) — 포즈가 통째로 바뀌어 겉모습 짝이 없는 무리도 몸의 궤적대로. 캡처 순간 RAM 의 몸 위치가
+   «다음 프레임 화면의 몸 위치»이므로, 더미 → A → B 순으로 캡처하며 RAM 을 바꾼다 */
+static void t_body(void)
+{
+   int f0 = fails, i, r;
+   static uint8_t ram[16384];
+   static const uint16_t pat[6] = { 0x5AA5, 0xA55A, 0x5FF5, 0xF55F, 0xAFFA, 0xFAAF };
+#define BODY_RAM(x, y, cam) do { ram[0x00A7] = 241; ram[0x0E38] = (uint8_t)((x) + (cam)); ram[0x0E3A] = (uint8_t)(y); ram[0x176D] = (uint8_t)(cam); } while (0)
+   ss2fg_set_ram(ram);
+   /* 3x2 조각 몸(팔레트 0 = P1)이 +8 걷는데 여섯 조각 그림이 전부 바뀐다(회전 포즈) → 겉모습 표 없음.
+      몸 위치 RAM: 더미 캡처 때 (40,100) = A 화면의 몸, A 캡처 때 (48,100) = B 화면의 몸 → 무리 벡터 -8(B→A), 중점 -4 */
+   ss2fg_reset(); memset(ram, 0, sizeof ram);
+   base_state(&GA); base_state(&GB); base_state(&GM);
+   for (i = 0; i < 6; i++) for (r = 0; r < 8; r++) { ((uint16_t*)GA.CharacterRAM)[(1+i)*8 + r] = 0xFFFF; ((uint16_t*)GB.CharacterRAM)[(1+i)*8 + r] = pat[i]; }
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); }
+   BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);          /* 더미: 이 RAM 값이 다음 프레임(A) 화면의 몸 위치 */
+   BODY_RAM(48, 100, 0); frame(&GA, fa, 0, 0, 0);
+   BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
+   CHECK(ss2fg_prev()->body_ok && ss2fg_prev()->body_x[0] == 40 && ss2fg_cur()->body_ok && ss2fg_cur()->body_x[0] == 48, "capture_body: A body 40, B body 48 (from previous capture's RAM)");
+   RENDER(128);
+   CHECK(lit(fm, 24, 76) && !lit(fm, 23, 76) && lit(fm, 47, 84) && !lit(fm, 48, 84), "body: all-changed body follows RAM trajectory to mid x=24..47");
+   /* 같은 상황에 몸이 그대로면(RAM 변화 0) 제자리 — 포즈만 바뀐 것 */
+   ss2fg_reset();
+   BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(40, 100, 0); frame(&GA, fa, 0, 0, 0);
+   BODY_RAM(40, 100, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 28, 76) && !lit(fm, 27, 76) && lit(fm, 51, 84) && !lit(fm, 52, 84), "body still: stays at base x=28..51");
+   /* 몸에서 먼 무리(같은 팔레트, 몸 위치에서 80px 밖)는 몸 위치를 안 쓴다 → 정지 */
+   ss2fg_reset();
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 120 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); put_sprite(&GB, i, 1 + i, 128 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); }
+   BODY_RAM(20, 100, 0); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(28, 100, 0); frame(&GA, fa, 0, 0, 0);
+   BODY_RAM(36, 100, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 128, 76) && !lit(fm, 127, 76), "far cluster: body rule not applied, stays at base x=128");
+   /* 다른 팔레트(7: 효과)는 몸 규칙 없음 → 정지 */
+   ss2fg_reset();
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 7); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 7); }
+   BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(48, 100, 0); frame(&GA, fa, 0, 0, 0);
+   BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 28, 76) && !lit(fm, 27, 76), "non-body palette: stays at base x=28");
+   /* P2(팔레트 5)는 +0x40 주소. 카메라가 움직여도 화면 몸 위치 = 월드 X - 카메라 */
+   ss2fg_reset();
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 5); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 5); }
+   ram[0x00A7] = 241; ram[0x0E78] = 140; ram[0x0E7A] = 100; ram[0x176D] = 100; frame(&GM, fm, 0, 0, 0);   /* 화면 40 */
+   ram[0x0E78] = 158; ram[0x176D] = 110; frame(&GA, fa, 0, 0, 0);                                           /* 화면 48 */
+   frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 24, 76) && !lit(fm, 23, 76), "P2 palette 5 with camera: mid x=24");
+   /* 대전 중이 아니면(0x00A7 != 241) 몸 규칙 없음 */
+   ss2fg_reset();
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); }
+   BODY_RAM(40, 100, 0); ram[0x00A7] = 0; frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(48, 100, 0); ram[0x00A7] = 0; frame(&GA, fa, 0, 0, 0);
+   BODY_RAM(56, 100, 0); ram[0x00A7] = 0; frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(!ss2fg_cur()->body_ok && lit(fm, 28, 76) && !lit(fm, 27, 76), "not in fight: no body rule, stays at base");
+   /* 겉모습 표가 몸 이동과 4px 넘게 어긋나면 우연한 짝 → 몸 위치: 그림이 그대로인 몸이 슬롯상 -8 로 보이지만 RAM 은 +8 */
+   ss2fg_reset();
+   for (i = 0; i < 6; i++) for (r = 0; r < 8; r++) ((uint16_t*)GB.CharacterRAM)[(1+i)*8 + r] = 0xFFFF;   /* A·B 같은 그림 */
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 36 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); }
+   BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(48, 100, 0); frame(&GA, fa, 0, 0, 0);          /* 겉모습: B→A 는 +8, 몸: B→A 는 -8 → 어긋남 16 → 몸 */
+   BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 24, 76) && !lit(fm, 23, 76) && lit(fm, 47, 76) && !lit(fm, 48, 76), "look vs body conflict (>4px): body wins, mid x=24..47 (not 32..55)");
+   /* 외톨이 조각: 몸 근처 조각 하나, 같은 조각이 to 에 딱 하나면 그 거리(-12), 없으면 몸 위치(-8) */
+   ss2fg_reset();
+   for (r = 0; r < 8; r++) { ((uint16_t*)GA.CharacterRAM)[1*8 + r] = 0x5555; ((uint16_t*)GB.CharacterRAM)[1*8 + r] = 0x5555; ((uint16_t*)GA.CharacterRAM)[2*8 + r] = 0xAAAA; ((uint16_t*)GB.CharacterRAM)[2*8 + r] = 0xFAAF; }
+   base_state(&GA); base_state(&GB);
+   put_sprite(&GA, 0, 1, 20, 60, 3, 0, 0); put_sprite(&GB, 0, 1, 32, 60, 3, 0, 0);          /* 같은 그림, 딱 하나 → B→A -12 → 중점 26 */
+   put_sprite(&GA, 5, 2, 20, 100, 3, 0, 0); put_sprite(&GB, 5, 2, 28, 100, 3, 0, 0);        /* 그림 바뀜 → 몸 위치 -8 → 중점 24 */
+   for (r = 0; r < 8; r++) { ((uint16_t*)GB.CharacterRAM)[2*8 + r] = 0xFAAF; }
+   BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(48, 100, 0); frame(&GA, fa, 0, 0, 0);
+   BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 26, 60) && !lit(fm, 25, 60) && lit(fm, 33, 60) && !lit(fm, 34, 60), "single near body with unique look match: x=26..33");
+   CHECK(lit(fm, 24, 100) && !lit(fm, 23, 100) && lit(fm, 31, 100) && !lit(fm, 32, 100), "single near body, picture changed: body vector, x=24..31");
+   ss2fg_set_ram(0);
+#undef BODY_RAM
+   printf("11 몸 위치(RAM): %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(void)
 {
-   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster(); t_four();
+   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster(); t_four(); t_body();
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

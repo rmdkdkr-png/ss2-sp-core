@@ -1014,6 +1014,7 @@ void retro_reset(void)
    svcsp_reset();
    ss2comm_set_ram(&CPUExRAM[0]);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
+   ss2fg_set_ram(ss2comm_rom_is_ss2() ? &CPUExRAM[0] : NULL);   /* 프레임 생성: 몸 위치(사무쇼2 램) — 다른 롬은 끔 */
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);  /* 해설 초상은 사용자 롬에서 그린다 */
    ss2comm_overlay_spmode(svcsp_rom_ok());
    if (svcsp_rom_ok())
@@ -1101,6 +1102,7 @@ bool retro_load_game(const struct retro_game_info *info)
    /* 해설 엔진: 램·롬을 물리고 상태를 비운다 (retro_reset() 에도 같은 줄이 있다) */
    ss2comm_set_ram(&CPUExRAM[0]);
    ss2comm_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
+   ss2fg_set_ram(ss2comm_rom_is_ss2() ? &CPUExRAM[0] : NULL);   /* 프레임 생성: 몸 위치(사무쇼2 램) — 다른 롬은 끔 */
    svcsp_set_rom(ngpc_rom.orig_data, (unsigned)ngpc_rom.length);
    ss2comm_overlay_spmode(svcsp_rom_ok());
    if (svcsp_rom_ok())

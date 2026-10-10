@@ -66,11 +66,39 @@ static void resolve_chain(ss2fg_frame *f)
    }
 }
 
+/* 사무쇼2 RAM 의 몸 위치 (PocketCore 방 리버싱 실측; 이쪽 롬 덤프 600프레임에서도 몸 근처 조각의 겉모습 벡터와 1867:19 일치)
+   P1 X 0x0E38 · Y 0x0E3A(땅 = 128), P2 는 +0x40, 카메라 X 0x176D, 대전 중 = 0x00A7 이 241 */
+#define FG_RAM_MODE   0x00A7
+#define FG_RAM_FIGHT  241
+#define FG_RAM_CAMX   0x176D
+static const uint16_t fg_ram_x[2] = { 0x0E38, 0x0E78 }, fg_ram_y[2] = { 0x0E3A, 0x0E7A };
+static const uint8_t *fg_ram = 0;
+void ss2fg_set_ram(const uint8_t *ram) { fg_ram = ram; }
+
+static void capture_body(ss2fg_frame *f)
+{
+   const ss2fg_frame *pv = fg_hist[0] >= 0 ? &fg_slot[fg_hist[0]] : 0;   /* 직전 캡처 */
+   int p;
+   f->now_ok = (uint8_t)(fg_ram && fg_ram[FG_RAM_MODE] == FG_RAM_FIGHT);
+   for (p = 0; p < 2; p++)
+   {
+      f->now_x[p] = f->now_ok ? (uint8_t)(fg_ram[fg_ram_x[p]] - fg_ram[FG_RAM_CAMX]) : 0;
+      f->now_y[p] = f->now_ok ? fg_ram[fg_ram_y[p]] : 0;
+   }
+   f->body_ok = (uint8_t)(f->now_ok && pv && pv->valid && pv->now_ok);
+   for (p = 0; p < 2; p++)
+   {
+      f->body_x[p] = f->body_ok ? pv->now_x[p] : 0;
+      f->body_y[p] = f->body_ok ? pv->now_y[p] : 0;
+   }
+}
+
 void ss2fg_capture_end(const uint8_t *scroll, const uint8_t *chr, const uint8_t *spr,
                        const uint8_t *sprcol, const uint8_t *pal, int mono, int layers)
 {
    ss2fg_frame *f = &fg_slot[fg_build];
    int k;
+   capture_body(f);
    memcpy(f->scroll, scroll, sizeof f->scroll);
    memcpy(f->chr,    chr,    sizeof f->chr);
    memcpy(f->spr,    spr,    sizeof f->spr);
@@ -276,6 +304,59 @@ static int16_t round_div(int sum, int n)
    return (int16_t)(sum >= 0 ? (2 * sum + n) / (2 * n) : -((-2 * sum + n) / (2 * n)));
 }
 
+/* 몸 위치로 무리 벡터 정하기 — 사무쇼2는 포즈가 바뀔 때 조각 내용·배치를 통째로 새로 쓴다. 맞고 빙글빙글 날아갈 때는
+   2프레임마다 회전 포즈가 새로 그려져 겉모습이 맞는 조각이 없어, 그 몸만 보간 없이 30Hz 로 끊겼다. 게임이 RAM 에 둔
+   몸 위치(=실제 궤적)를 쓰면 지금 포즈를 그 궤적으로 옮길 수 있다(회전 그림을 만들어 내진 않는다). 몸이 그대로면
+   0 = 제자리. 몸 팔레트(P1 = 0, P2 = 5)이고 무리가 그 몸 위치 근처일 때만 1. (PocketCore 방 30_ss2fg_body.patch) */
+static int body_vec(const ss2fg_frame *base, const ss2fg_frame *to, int gstart, int g, int *vx, int *vy)
+{
+   const ss2fg_regs *rb = &base->line[0];
+   int pal = base->sprcol[gstart] & 0x0F, p, k, dx, dy;
+   int l = 999, r = -999, t = 999, b = -999;
+   if (!base->body_ok || !to->body_ok) return 0;
+   p = pal == 0 ? 0 : pal == 5 ? 1 : -1;
+   if (p < 0) return 0;
+   dx = (int8_t)(uint8_t)(to->body_x[p] - base->body_x[p]);
+   dy = (int8_t)(uint8_t)(to->body_y[p] - base->body_y[p]);
+   if (dx > SS2FG_SPR_MAX_STEP || dx < -SS2FG_SPR_MAX_STEP || dy > SS2FG_SPR_MAX_STEP || dy < -SS2FG_SPR_MAX_STEP) return 0;
+   for (k = gstart; k < g; k++)                                /* 몸 위치 기준 상대 좌표(8비트 랩) 테두리 */
+   {
+      int sx, sy;
+      if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
+      sx = (int8_t)(uint8_t)(base->ax[k] + rb->spx - base->body_x[p]);
+      sy = (int8_t)(uint8_t)(base->ay[k] + rb->spy - base->body_y[p]);
+      if (sx < l) l = sx;
+      if (sx + 8 > r) r = sx + 8;
+      if (sy < t) t = sy;
+      if (sy + 8 > b) b = sy + 8;
+   }
+   if (l > r) return 0;
+   /* 몸 위치(발 가운데)가 무리 테두리 옆 40px 안, 세로는 무리 위 16px ~ 아래 56px 안(머리만 떨어진 무리 포함) */
+   if (l > 40 || r < -40 || t > 16 || b < -56) return 0;
+   *vx = dx; *vy = dy;
+   return 1;
+}
+
+/* 외톨이 조각 하나 — to 에 같은 조각(플립·우선순위·팔레트·그림)이 임계 안에 «딱 하나» 있으면 그 거리 */
+static int single_look(const ss2fg_frame *base, const ss2fg_frame *to, int k, int *vx, int *vy)
+{
+   const ss2fg_regs *rb = &base->line[0], *rt = &to->line[0];
+   uint16_t dk = ld16(base->spr + k * 4);
+   int j, c = 0, bx, by;
+   if (blank_tile(base->chr + (dk & 0x1FF) * 16)) return 0;
+   bx = wrapx(base->ax[k] + rb->spx); by = wrapc(base->ay[k] + rb->spy);
+   for (j = 0; j < 64; j++)
+   {
+      int dx, dy;
+      if (!same_piece(base, k, to, j)) continue;
+      dx = wrapx(to->ax[j] + rt->spx) - bx; dy = wrapc(to->ay[j] + rt->spy) - by;
+      if (dx > SS2FG_SPR_MAX_STEP || dx < -SS2FG_SPR_MAX_STEP || dy > SS2FG_SPR_MAX_STEP || dy < -SS2FG_SPR_MAX_STEP) continue;
+      if (++c > 1) return 0;
+      *vx = dx; *vy = dy;
+   }
+   return c == 1;
+}
+
 static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move mv[64])
 {
    const ss2fg_regs *rb = &base->line[0], *rt = &to->line[0];
@@ -349,6 +430,7 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
    {
       uint16_t w0 = ld16(base->spr + gstart * 4);
       int vdx[256], vdy[256], vw[256], pm[64], pdx[64][4], pdy[64][4], nvote = 0, nvis = 0, nlook = 0, npc = 0, k, a, best = -1, bestw = 0, second = 0, sumx = 0, sumy = 0;
+      int body, bvx = 0, bvy = 0;
       int bx0 = base->ax[gstart], bx1 = base->ax[gstart] + 8, by0 = base->ay[gstart], by1 = base->ay[gstart] + 8;
       if (w0 & 0x0600) { g = gstart + 1; continue; }             /* 체인 비트가 달린 슬롯은 체인 규칙 몫 */
       if (gstart + 1 < 64 && (ld16(base->spr + (gstart + 1) * 4) & 0x0600))
@@ -372,9 +454,22 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
          g--;                                                    /* 체인 앵커(g-1)는 무리에서 뺀다 — 다음 반복이 앵커로 시작해 위에서 건너뛴다 */
       for (k = gstart; k < g; k++)
          if (ld16(base->spr + k * 4) & 0x1800) nvis++;
+      body = body_vec(base, to, gstart, g, &bvx, &bvy);
       if (nvis < 2)
       {
-         for (k = gstart; k < g; k++) if (cand[k].has) mv[k] = cand[k];   /* 단독 스프라이트 — 슬롯 규칙 */
+         if (body && nvis == 1)
+         {  /* 외톨이 조각(돌며 날아갈 때 몸에서 떨어져 나온 조각 등) — 몸 위치를 알면 슬롯 번호 짝(엉뚱한 +22px 따위) 대신,
+               같은 조각이 딱 하나면 그 거리, 아니면 몸 위치로 */
+            for (k = gstart; k < g; k++)
+               if (ld16(base->spr + k * 4) & 0x1800)
+               {
+                  int vx = bvx, vy = bvy;
+                  single_look(base, to, k, &vx, &vy);
+                  mv[k].dx = (int16_t)vx; mv[k].dy = (int16_t)vy; mv[k].has = 1;
+               }
+         }
+         else
+            for (k = gstart; k < g; k++) if (cand[k].has) mv[k] = cand[k];   /* 단독 스프라이트 — 슬롯 규칙 */
          continue;
       }
       for (k = gstart; k < g; k++)
@@ -404,7 +499,7 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
             vw[a] += FG_VOTE / m;
          }
       }
-      if (nvote == 0) continue;                                 /* 믿을 조각이 없다(포즈 전체 교체) → 무리 정지 */
+      if (nvote == 0) goto body_or_stop;                        /* 믿을 조각이 없다(포즈 전체 교체) → 몸 위치가 있으면 그것으로, 없으면 무리 정지 */
       for (a = 0; a < nvote; a++)
       {
          int w = 0, b;
@@ -439,7 +534,7 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
             if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) { npc++; break; }
          }
       }
-      if (npc < 2 || bestw < 2 * second || bestw * 4 < nlook * FG_VOTE) continue;   /* 표 부족 → 무리 정지 */
+      if (npc < 2 || bestw < 2 * second || bestw * 4 < nlook * FG_VOTE) goto body_or_stop;   /* 표 부족 */
       for (a = 0; a < nvote; a++)
       {
          int ddx = vdx[a] - vdx[best], ddy = vdy[a] - vdy[best];
@@ -447,10 +542,17 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       }
       {  /* 자리 겹침 검증: 벡터만큼 옮긴 자리에 같은 조각이 있는 수가 제자리보다 많아야 몸이 움직인 것 */
          int vx = round_div(sumx, bestw), vy = round_div(sumy, bestw);
-         if ((vx || vy) && overlap_count(base, to, gstart, g, 0, 0) >= overlap_count(base, to, gstart, g, vx, vy)) continue;
+         if ((vx || vy) && overlap_count(base, to, gstart, g, 0, 0) >= overlap_count(base, to, gstart, g, vx, vy)) goto body_or_stop;
+         /* 몸이 움직였는데 겉모습 표가 딴 데(4px 넘게)를 가리키면 우연한 짝 — 몸 위치를 따른다 */
+         if (body && (bvx || bvy) && (vx - bvx > 4 || bvx - vx > 4 || vy - bvy > 4 || bvy - vy > 4)) goto body_or_stop;
          for (k = gstart; k < g; k++)
             if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)vx; mv[k].dy = (int16_t)vy; mv[k].has = 1; }
+         continue;
       }
+body_or_stop:
+      if (!body) continue;                                      /* 몸 위치를 모른다 → 무리 정지 */
+      for (k = gstart; k < g; k++)                              /* 2순위: 몸 위치 — 포즈가 통째로 바뀌어도 궤적대로 */
+         if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)bvx; mv[k].dy = (int16_t)bvy; mv[k].has = 1; }
    }
 
    /* 체인 그룹: 슬롯 k 에 체인 비트(0x0600)가 있으면 k-1 과 같은 그룹 */
