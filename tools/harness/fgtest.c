@@ -395,6 +395,33 @@ static void t_cluster(void)
    CHECK(lit(fm, 108, 120) && lit(fm, 115, 120) && !lit(fm, 107, 120) && !lit(fm, 116, 120) && lit(fm, 20, 120) && !lit(fm, 19, 120),
          "far piece is its own cluster: projectile at mid 108..115, body static at 20");
    if (getenv("FGTEST_V")) { dump_row(fb, 120); dump_row(fm, 120); }
+   /* 슬롯 밀림(유파선택 재현): to(A) 에서 머리 조각이 슬롯 0 에 끼어들어 나머지가 한 칸씩 밀린다. 슬롯별로 보면
+      같은 그림(기모노 K)인 조각들이 -8 로 짝지어 표를 내지만 자리로 보면 몸은 그대로 → 무리 정지여야 한다.
+      base(B): s0 H@20 s1 K@28 s2 K@36 s3 K@44 (타일 1·2·3·4; 2·3·4 는 같은 그림)
+      to(A):   s0 X@12 s1 H@20 s2 K@28 s3 K@36 s4 K@44 (타일 1·2·3·4·5; 번호는 슬롯에 묶여 그림이 밀림) */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   { int r;
+     for (r = 0; r < 8; r++) { ((uint16_t*)GB.CharacterRAM)[1*8 + r] = 0x5555; ((uint16_t*)GB.CharacterRAM)[2*8 + r] = 0xAAAA; ((uint16_t*)GB.CharacterRAM)[3*8 + r] = 0xAAAA; ((uint16_t*)GB.CharacterRAM)[4*8 + r] = 0xAAAA; }
+     for (r = 0; r < 8; r++) { ((uint16_t*)GA.CharacterRAM)[1*8 + r] = 0xFFFF; ((uint16_t*)GA.CharacterRAM)[2*8 + r] = 0x5555; ((uint16_t*)GA.CharacterRAM)[3*8 + r] = 0xAAAA; ((uint16_t*)GA.CharacterRAM)[4*8 + r] = 0xAAAA; ((uint16_t*)GA.CharacterRAM)[5*8 + r] = 0xAAAA; } }
+   put_sprite(&GB, 0, 1, 20, 140, 3, 0, 2); put_sprite(&GB, 1, 2, 28, 140, 3, 0, 2); put_sprite(&GB, 2, 3, 36, 140, 3, 0, 2); put_sprite(&GB, 3, 4, 44, 140, 3, 0, 2);
+   put_sprite(&GA, 0, 1, 12, 140, 3, 0, 2); put_sprite(&GA, 1, 2, 20, 140, 3, 0, 2); put_sprite(&GA, 2, 3, 28, 140, 3, 0, 2); put_sprite(&GA, 3, 4, 36, 140, 3, 0, 2); put_sprite(&GA, 4, 5, 44, 140, 3, 0, 2);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 20, 140) && !lit(fm, 19, 140) && !lit(fm, 16, 140) && lit(fm, 51, 140) && !lit(fm, 52, 140),
+         "slot shift (head inserted at slot 0): body must stay at base 20..51, not jump -4");
+   if (getenv("FGTEST_V")) { dump_row(fb, 140); dump_row(fm, 140); }
+   /* 같은 배치에서 몸이 정말 -8 움직였으면(to 의 모든 조각이 8 왼쪽) 겹침 검증을 통과해 -4 로 움직여야 한다 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   { int r; for (r = 0; r < 8; r++) { ((uint16_t*)GB.CharacterRAM)[2*8 + r] = 0xAAAA; ((uint16_t*)GB.CharacterRAM)[3*8 + r] = 0xAAAA; ((uint16_t*)GB.CharacterRAM)[4*8 + r] = 0xAAAA;
+                                       ((uint16_t*)GA.CharacterRAM)[2*8 + r] = 0xAAAA; ((uint16_t*)GA.CharacterRAM)[3*8 + r] = 0xAAAA; ((uint16_t*)GA.CharacterRAM)[4*8 + r] = 0xAAAA; } }
+   put_sprite(&GB, 0, 1, 20, 148, 3, 0, 2); put_sprite(&GB, 1, 2, 28, 148, 3, 0, 2); put_sprite(&GB, 2, 3, 36, 148, 3, 0, 2); put_sprite(&GB, 3, 4, 44, 148, 3, 0, 2);
+   put_sprite(&GA, 0, 1, 12, 148, 3, 0, 2); put_sprite(&GA, 1, 2, 20, 148, 3, 0, 2); put_sprite(&GA, 2, 3, 28, 148, 3, 0, 2); put_sprite(&GA, 3, 4, 36, 148, 3, 0, 2);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 16, 148) && !lit(fm, 15, 148) && lit(fm, 47, 148) && !lit(fm, 48, 148), "real -8 body move with repeated tiles: mid 16..47");
+   if (getenv("FGTEST_V")) { dump_row(fb, 148); dump_row(fm, 148); }
    printf("4b 무리(체인 없음): %s\n", fails == f0 ? "통과" : "실패");
 #undef SOLID48
 }

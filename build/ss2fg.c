@@ -214,6 +214,33 @@ static void draw_scroll(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *sca
    이동만 보간하고 포즈는 base 그대로. 체인 밖 단독 스프라이트는 믿을 수 있는 후보일 때만 움직인다. */
 typedef struct { int16_t dx, dy; uint8_t has; } fg_move;
 
+/* 무리 [gs,ge) 의 보이는 조각 가운데, 「자리 + v」(±1px) 에 같은 그림·플립·팔레트·우선순위의 조각이 to 에 있는 수.
+   슬롯·타일 번호는 보지 않는다 — 머리 조각 하나가 슬롯 0 에 끼어들어 번호가 한 칸씩 밀리면 슬롯별 짝은 타일 간격(-8px)
+   만큼의 가짜 이동량을 내지만, 자리로 보면 몸은 그대로다(PocketCore 방 c0e2f79 의 검증 규칙). */
+static int overlap_count(const ss2fg_frame *base, const ss2fg_frame *to, int gs, int ge, int vx, int vy)
+{
+   const ss2fg_regs *rb = &base->line[0], *rt = &to->line[0];
+   int k, j, n = 0;
+   for (k = gs; k < ge; k++)
+   {
+      uint16_t dk = ld16(base->spr + k * 4);
+      int bx, by;
+      if (!(dk & 0x1800)) continue;
+      bx = wrapx(base->ax[k] + rb->spx) + vx; by = wrapc(base->ay[k] + rb->spy) + vy;
+      for (j = 0; j < 64; j++)
+      {
+         uint16_t dj = ld16(to->spr + j * 4);
+         int tx, ty;
+         if (!(dj & 0x1800) || ((dj ^ dk) & 0xD800) || to->sprcol[j] != base->sprcol[k]) continue;   /* 플립·우선순위·팔레트 */
+         tx = wrapx(to->ax[j] + rt->spx); ty = wrapc(to->ay[j] + rt->spy);
+         if (tx - bx > 1 || bx - tx > 1 || ty - by > 1 || by - ty > 1) continue;
+         if (memcmp(base->chr + (dk & 0x1FF) * 16, to->chr + (dj & 0x1FF) * 16, 16) != 0) continue;
+         n++; break;
+      }
+   }
+   return n;
+}
+
 static int16_t round_div(int sum, int n)
 {
    return (int16_t)(sum >= 0 ? (2 * sum + n) / (2 * n) : -((-2 * sum + n) / (2 * n)));
@@ -337,13 +364,12 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
          int ddx = cand[voters[a]].dx - cand[voters[best]].dx, ddy = cand[voters[a]].dy - cand[voters[best]].dy;
          if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) { sumx += cand[voters[a]].dx; sumy += cand[voters[a]].dy; }
       }
-      for (k = gstart; k < g; k++)
-         if (ld16(base->spr + k * 4) & 0x1800)
-         {
-            mv[k].dx = round_div(sumx, bestn);
-            mv[k].dy = round_div(sumy, bestn);
-            mv[k].has = 1;
-         }
+      {  /* 자리 겹침 검증: 벡터만큼 옮긴 자리에 같은 조각이 있는 수가 제자리보다 많아야 몸이 움직인 것 */
+         int vx = round_div(sumx, bestn), vy = round_div(sumy, bestn);
+         if ((vx || vy) && overlap_count(base, to, gstart, g, 0, 0) >= overlap_count(base, to, gstart, g, vx, vy)) continue;
+         for (k = gstart; k < g; k++)
+            if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)vx; mv[k].dy = (int16_t)vy; mv[k].has = 1; }
+      }
    }
 
    /* 체인 그룹: 슬롯 k 에 체인 비트(0x0600)가 있으면 k-1 과 같은 그룹 */
@@ -372,13 +398,12 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
          int ddx = cand[voters[a]].dx - cand[voters[best]].dx, ddy = cand[voters[a]].dy - cand[voters[best]].dy;
          if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) { sumx += cand[voters[a]].dx; sumy += cand[voters[a]].dy; }
       }
-      for (k = gstart; k < g; k++)
-         if (ld16(base->spr + k * 4) & 0x1800)
-         {
-            mv[k].dx = round_div(sumx, bestn);
-            mv[k].dy = round_div(sumy, bestn);
-            mv[k].has = 1;
-         }
+      {
+         int vx = round_div(sumx, bestn), vy = round_div(sumy, bestn);
+         if ((vx || vy) && overlap_count(base, to, gstart, g, 0, 0) >= overlap_count(base, to, gstart, g, vx, vy)) continue;
+         for (k = gstart; k < g; k++)
+            if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)vx; mv[k].dy = (int16_t)vy; mv[k].has = 1; }
+      }
    }
 }
 
