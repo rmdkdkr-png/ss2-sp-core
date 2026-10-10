@@ -1053,6 +1053,159 @@ body_or_stop:
    }
 }
 
+/* ───────────── 포즈 섞기 (PocketCore 방 80_ss2fg_pose_blend.patch b4b3b3c) ─────────────
+   맞고 빙글빙글 날아가는 동안 사무쇼2 는 몸 포즈 두 장(쭉 뻗음·웅크림)을 실제 2 프레임(1/30초)마다 번갈아 그린다 — 60Hz 원판에도
+   그대로라 «깜빡이며 날아가는» 느낌이 난다(유저 2026-10-10 「다 깜빡이는 거마냥 날아가는데 원래 그런가 보네 — 연구 좀 해 봐」).
+   포즈는 그림이 통째로 바뀌어 조각을 옮겨 이어 줄 수 없으니, «번갈아 바뀌는 몸»만 중간 그림에서 지금 포즈(1−t)와 다음 포즈(t)를
+   반투명으로 겹친다(잔상). 그 몸을 지금 포즈로 그린 줄과 다음 포즈로 그린 줄을 따로 만들어 화소마다 섞으므로, 앞에 있는
+   다른 조각·배경과의 앞뒤는 원래 그리기 순서 그대로다. 다음 포즈는 몸 이동(RAM)만큼 되돌린 자리에서 출발해 t 와 함께 제자리로.
+   켜지는 때: 몸 포즈가 base→to 에서 바뀌고, 포즈가 3 프레임 이하씩 돌아가는 중이고(to 포즈가 최근에 나왔던 것 = 순환),
+   몸이 공중에서 움직이는 중(pose_alternates). 몸 따로 박자가 걸린 몸은 안 섞는다. 코어 옵션 ngp_framegen_pose(blend·off). */
+static int pose_mode = 1;
+static int pose_stats[4];          /* [0] 몸 포즈가 바뀐 그림 [1] 번갈음 아님 [2] 섞음 [3] 안 움직임 */
+void ss2fg_set_pose(int on) { pose_mode = on ? 1 : 0; }
+int  ss2fg_get_pose(void) { return pose_mode; }
+void ss2fg_pose_stats(int *out4) { int i; for (i = 0; i < 4; i++) out4[i] = pose_stats[i]; }
+static int pp_on = 0;
+static uint8_t pp_skip[64], pp_add[64];
+static int16_t pp_dx[64], pp_dy[64];
+static const ss2fg_frame *pp_to = 0;
+static int pp_ymin, pp_ymax;
+
+/* 조각의 겉모습 지문 — 플립·우선순위 비트, 팔레트, 타일 그림 16바이트 (same_piece 와 같은 것을 본다) */
+static uint64_t piece_look(const ss2fg_frame *f, int k)
+{
+   uint16_t w = ld16(f->spr + k * 4);
+   const uint8_t *t = f->chr + (w & 0x1FF) * 16;
+   uint64_t h = 1469598103934665603ULL;
+   int i;
+   h = (h ^ (uint64_t)(w & 0xD800)) * 1099511628211ULL;
+   h = (h ^ (uint64_t)f->sprcol[k]) * 1099511628211ULL;
+   for (i = 0; i < 16; i++) h = (h ^ (uint64_t)t[i]) * 1099511628211ULL;
+   return h;
+}
+
+/* f 의 몸 p 조각 — 몸 팔레트(P1 0 · P2 5) 무리(sprite_moves 와 같은 무리 나누기) 중 테두리가 몸 자리 근처(body_vec 과 같은 창) */
+static int body_mask(const ss2fg_frame *f, int p, uint8_t *mask)
+{
+   const ss2fg_regs *r = &f->line[0];
+   int gstart, g, n = 0, bp = p ? 5 : 0;
+   memset(mask, 0, 64);
+   if (!f->valid || f->mono || !f->body_ok || !(f->ob_act & (1u << p))) return 0;
+   for (gstart = 0; gstart < 64; gstart = g)
+   {
+      uint16_t key = ld16(f->spr + gstart * 4) & 0x1800;
+      uint8_t pal = f->sprcol[gstart];
+      int bx0 = f->ax[gstart], bx1 = f->ax[gstart] + 8, by0 = f->ay[gstart], by1 = f->ay[gstart] + 8, k;
+      int l = 999, rr = -999, t = 999, b = -999;
+      for (g = gstart + 1; g < 64; g++)
+      {
+         uint16_t w = ld16(f->spr + g * 4);
+         int sx = f->ax[g], sy = f->ay[g];
+         if ((w & 0x1800) != key || f->sprcol[g] != pal) break;
+         if (sx + 8 < bx0 - 16 || sx > bx1 + 16 || sy + 8 < by0 - 16 || sy > by1 + 16) break;
+         if (sx < bx0) bx0 = sx;
+         if (sx + 8 > bx1) bx1 = sx + 8;
+         if (sy < by0) by0 = sy;
+         if (sy + 8 > by1) by1 = sy + 8;
+      }
+      if (!key || (pal & 0x0F) != bp) continue;
+      for (k = gstart; k < g; k++)
+      {
+         int sx, sy;
+         if (!(ld16(f->spr + k * 4) & 0x1800)) continue;
+         sx = (int8_t)(uint8_t)(f->ax[k] + r->spx - f->ob_x[p]);
+         sy = (int8_t)(uint8_t)(f->ay[k] + r->spy - f->ob_y[p]);
+         if (sx < l) l = sx;
+         if (sx + 8 > rr) rr = sx + 8;
+         if (sy < t) t = sy;
+         if (sy + 8 > b) b = sy + 8;
+      }
+      if (l > rr || l > 40 || rr < -40 || t > 16 || b < -56) continue;
+      for (k = gstart; k < g; k++)
+         if (ld16(f->spr + k * 4) & 0x1800) { mask[k] = 1; n++; }
+   }
+   return n;
+}
+
+/* 몸 포즈의 지문 — 조각마다 (겉모습, 몸 테두리 왼쪽 위 기준 자리)를 줄·칸 순으로 늘어놓은 해시. 자리(몸 이동)와 슬롯 번호에 무관 */
+static uint64_t body_sig(const ss2fg_frame *f, const uint8_t *mask)
+{
+   const ss2fg_regs *r = &f->line[0];
+   int k, n = 0, i, j, x0 = 9999, y0 = 9999;
+   int px[64], py[64];
+   uint64_t lk[64], h = 1469598103934665603ULL;
+   for (k = 0; k < 64; k++)
+   {
+      if (!mask[k]) continue;
+      px[n] = wrapx(f->ax[k] + r->spx); py[n] = wrapc(f->ay[k] + r->spy); lk[n] = piece_look(f, k);
+      if (px[n] < x0) x0 = px[n];
+      if (py[n] < y0) y0 = py[n];
+      n++;
+   }
+   if (!n) return 0;
+   for (i = 1; i < n; i++)                                       /* 줄(y)·칸(x)·겉모습 순으로 */
+      for (j = i; j > 0; j--)
+      {
+         int sw = py[j] < py[j - 1] || (py[j] == py[j - 1] && (px[j] < px[j - 1] || (px[j] == px[j - 1] && lk[j] < lk[j - 1])));
+         int tx, ty; uint64_t tl;
+         if (!sw) break;
+         tx = px[j]; px[j] = px[j - 1]; px[j - 1] = tx;
+         ty = py[j]; py[j] = py[j - 1]; py[j - 1] = ty;
+         tl = lk[j]; lk[j] = lk[j - 1]; lk[j - 1] = tl;
+      }
+   for (i = 0; i < n; i++)
+   {
+      h = (h ^ (uint64_t)(uint8_t)(px[i] - x0)) * 1099511628211ULL;
+      h = (h ^ (uint64_t)(uint8_t)(py[i] - y0)) * 1099511628211ULL;
+      h = (h ^ lk[i]) * 1099511628211ULL;
+   }
+   return h | 1;
+}
+
+static int ring_index(const ss2fg_frame *f)
+{
+   int i;
+   for (i = 0; i < FG_RING; i++) if (fg_hist[i] >= 0 && &fg_slot[fg_hist[i]] == f) return i;
+   return -1;
+}
+
+/* 몸 p 를 섞을지 — 맞고 날아가는 몸은 포즈를 1~3 프레임마다 돌려 가며 그린다(그쪽 하니스 실측 나코루루: 웅크림 14조각 ·
+   뻗음 20조각 두 가지가 «뻗음1·웅크림·뻗음2·웅크림…» 으로 2 프레임씩). 그래서 «A·B·A» 하나만 보지 않고:
+   base 포즈가 3 프레임 이하로 이어졌고, 그 앞으로도 3 프레임 이하짜리 포즈가 둘 이상 이어졌고(짧게 돌아가는 중),
+   다음 포즈(st)가 최근에 이미 나왔고(돌아오는 포즈 = 순환), 몸이 공중(발 높이 < 땅 128 − 4)에서 움직이는 중일 때.
+   걷기·대시(한 포즈 4 프레임 넘게, 또는 땅 위)와 제자리 연타(안 움직임)는 안 걸린다.
+   몸 조각을 못 찾는 프레임(맞는 순간 번쩍임 — 다른 팔레트)을 만나면 거기서 멈춘다. */
+#define FG_GROUND_Y 128
+static int pose_alternates(const ss2fg_frame *base, const ss2fg_frame *to, int p, uint64_t sb, uint64_t st)
+{
+   int i = ring_index(base), j, cur_len = 1, changes = 0, seen_st = 0, moved = 0;
+   uint64_t cur = sb;
+   uint8_t m[64];
+   if (i < 0) return 0;
+   if (base->ob_y[p] > FG_GROUND_Y - 4 && to->ob_y[p] > FG_GROUND_Y - 4) return 0;      /* 땅 위 */
+   if (to->ob_x[p] != base->ob_x[p] || to->ob_y[p] != base->ob_y[p]) moved = 1;
+   for (j = i + 1; j < FG_RING; j++)
+   {
+      const ss2fg_frame *f = fg_hist[j] >= 0 ? &fg_slot[fg_hist[j]] : 0;
+      uint64_t sg;
+      if (!f || !body_mask(f, p, m)) break;
+      sg = body_sig(f, m);
+      if (f->ob_x[p] != base->ob_x[p] || f->ob_y[p] != base->ob_y[p]) moved = 1;
+      if (sg == cur)
+      {
+         if (++cur_len > 3) { if (!changes) return 0; break; }  /* base 포즈가 오래 머묾 → 아님 / 앞쪽 긴 포즈 → 거기까지 */
+         continue;
+      }
+      changes++;                                                 /* cur 포즈가 3 프레임 이하로 끝남 */
+      cur = sg; cur_len = 1;
+      if (sg == st) seen_st = 1;
+   }
+   if (changes < 2 || !seen_st) return 0;
+   if (!moved) { pose_stats[3]++; return 0; }
+   return 1;
+}
+
 static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const int16_t *offx, const int16_t *offy,
                         int t, int y, uint16_t *scan)
 {
@@ -1102,23 +1255,39 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const in
       }
    }
 
-   /* 스프라이트 — base 의 것을 이동량만큼 옮겨 그린다 */
+   /* 스프라이트 — base 의 것을 이동량만큼 옮겨 그린다.
+      포즈 섞기 둘째 판(pp_on == 2)에서는 섞을 몸의 base 조각을 빼고, 그 자리 순서(슬롯 번호)에 다음 포즈(pp_to) 조각을 넣는다 */
    if (base->layers & 4)
    for (spr = 0; spr < 64; spr++)
    {
       uint16_t d = ld16(base->spr + spr * 4);
       unsigned priority = (d & 0x1800) >> 11;
       int sx, sy;
-      if (priority == 0) continue;
-      sx = wrapx(base->ax[spr] + rb->spx);
-      sy = wrapc(base->ay[spr] + rb->spy);
-      if (offx) { sx += offx[spr]; sy += offy[spr]; }
-      if (fx_fade_on && fx_fade_b[spr]) continue;              /* 섞어 그릴 이펙트 — 아래 반투명 단계에서 */
-      if (y >= sy && y <= sy + 7)
+      if (priority != 0 && !(pp_on == 2 && pp_skip[spr]) && !(fx_fade_on && fx_fade_b[spr]))   /* 섞어 그릴 이펙트 — 아래 반투명 단계에서 */
       {
-         unsigned row = (unsigned)(y - sy) & 7;
-         draw_pattern(base, rb, scan, zbuf, sx, d & 0x01FF, (d & 0x4000) ? 7 - row : row,
-                      d & 0x8000, base->pal, base->sprcol[spr] & 0xF, (uint8_t)(priority << 1));
+         sx = wrapx(base->ax[spr] + rb->spx);
+         sy = wrapc(base->ay[spr] + rb->spy);
+         if (offx) { sx += offx[spr]; sy += offy[spr]; }
+         if (y >= sy && y <= sy + 7)
+         {
+            unsigned row = (unsigned)(y - sy) & 7;
+            draw_pattern(base, rb, scan, zbuf, sx, d & 0x01FF, (d & 0x4000) ? 7 - row : row,
+                         d & 0x8000, base->pal, base->sprcol[spr] & 0xF, (uint8_t)(priority << 1));
+         }
+      }
+      if (pp_on == 2 && pp_add[spr])
+      {
+         const ss2fg_regs *rt = &pp_to->line[y];
+         uint16_t dt = ld16(pp_to->spr + spr * 4);
+         unsigned pt = (dt & 0x1800) >> 11;
+         sx = wrapx(pp_to->ax[spr] + rt->spx) + pp_dx[spr];
+         sy = wrapc(pp_to->ay[spr] + rt->spy) + pp_dy[spr];
+         if (pt && y >= sy && y <= sy + 7)
+         {
+            unsigned row = (unsigned)(y - sy) & 7;
+            draw_pattern(pp_to, rb, scan, zbuf, sx, dt & 0x01FF, (dt & 0x4000) ? 7 - row : row,
+                         dt & 0x8000, pp_to->pal, pp_to->sprcol[spr] & 0xF, (uint8_t)(pt << 1));
+         }
       }
    }
    if (fx_fade_on && (base->layers & 4))
@@ -1237,9 +1406,65 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
       if (any) { fx_fade_on = 1; fx_fade_to = to_spr; fx_fade_t = t_spr; }
    }
 
+   /* 포즈 섞기 — 번갈아 바뀌는 몸(들)을 고른다 */
+   pp_on = 0;
+   if (pose_mode && to_spr && t_spr > 0 && t_spr < 256 && base->body_ok && to_spr->body_ok)
+   {
+      int p, ymin = 999, ymax = -999;
+      uint8_t mb[64], mt[64];
+      memset(pp_skip, 0, sizeof pp_skip); memset(pp_add, 0, sizeof pp_add);
+      for (p = 0; p < 2; p++)
+      {
+         uint64_t sb, st;
+         int k, vx, vy, ox, oy;
+         if (fg_ov_on[p]) continue;                              /* 몸 따로 박자 중 — 박자가 달라 안 섞는다 */
+         if (!body_mask(base, p, mb) || !body_mask(to_spr, p, mt)) continue;
+         sb = body_sig(base, mb); st = body_sig(to_spr, mt);
+         if (sb == st) continue;
+         pose_stats[0]++;
+         if (!pose_alternates(base, to_spr, p, sb, st)) { pose_stats[1]++; continue; }
+         pose_stats[2]++;
+         vx = (int8_t)(uint8_t)(to_spr->ob_x[p] - base->ob_x[p]);
+         vy = (int8_t)(uint8_t)(to_spr->ob_y[p] - base->ob_y[p]);
+         if (vx > SS2FG_SPR_MAX_STEP || vx < -SS2FG_SPR_MAX_STEP || vy > SS2FG_SPR_MAX_STEP || vy < -SS2FG_SPR_MAX_STEP) vx = vy = 0;
+         ox = lerp_i(0, vx, t_spr) - vx; oy = lerp_i(0, vy, t_spr) - vy;   /* 다음 포즈: 몸 이동만큼 뒤에서 출발 */
+         for (k = 0; k < 64; k++)
+         {
+            int sy;
+            if (mb[k])
+            {
+               pp_skip[k] = 1;
+               sy = wrapc(base->ay[k] + base->line[0].spy) + (have_off ? offy[k] : 0);
+               if (sy < ymin) ymin = sy;
+               if (sy + 7 > ymax) ymax = sy + 7;
+            }
+            if (mt[k])
+            {
+               pp_add[k] = 1; pp_dx[k] = (int16_t)ox; pp_dy[k] = (int16_t)oy;
+               sy = wrapc(to_spr->ay[k] + to_spr->line[0].spy) + oy;
+               if (sy < ymin) ymin = sy;
+               if (sy + 7 > ymax) ymax = sy + 7;
+            }
+         }
+         pp_on = 1;
+      }
+      pp_to = to_spr;
+      pp_ymin = ymin; pp_ymax = ymax;
+   }
+
    for (y = 0; y < SS2FG_H; y++)
    {
       render_line(base, to_scr, have_off ? offx : 0, offy, t_scr, y, scan);
+      if (pp_on && y >= pp_ymin && y <= pp_ymax)
+      {
+         uint16_t scan2[256];
+         int a = t_spr;
+         pp_on = 2;                                             /* 둘째 판: 섞을 몸을 다음 포즈로 */
+         render_line(base, to_scr, have_off ? offx : 0, offy, t_scr, y, scan2);
+         pp_on = 1;
+         for (x = 0; x < SS2FG_W; x++)
+            if (scan2[x] != scan[x]) scan[x] = mix12(scan[x], scan2[x], a);
+      }
       if (bpp == 4)
       {
          uint32_t *row = (uint32_t *)dst + (size_t)y * pitch_px;
@@ -1254,6 +1479,7 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
       }
    }
    fg_ov_on[0] = fg_ov_on[1] = 0;                              /* 몸 따로 박자는 한 번 그리기용 */
+   pp_on = 0;
    return 1;
 }
 

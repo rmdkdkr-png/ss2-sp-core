@@ -895,9 +895,65 @@ static void t_fx(void)
    printf("12 이펙트·장풍: %s\n", fails == f0 ? "통과" : "실패");
 }
 
+/* 14. 포즈 섞기(PocketCore 패치 80) — 맞고 날아갈 때 번갈아 바뀌는 몸 포즈(A·B·A·B, 공중, 움직이는 중)는 중간 그림에서
+   지금 포즈(1-t)와 다음 포즈(t)를 반투명으로 겹친다. 땅 위면 안 섞는다. 끄면 예전 그림 그대로 */
+static void t_pose(void)
+{
+   int f0 = fails, i, r;
+   static uint8_t ram[16384];
+   static uint16_t fo[SCREEN_WIDTH*SCREEN_HEIGHT];
+   static const uint16_t pat[5] = { 0x5AA5, 0xA55A, 0x5FF5, 0xF55F, 0xAFFA };
+#define PB_BODY(x, y) do { ram[0x00A7] = 241; ram[0x0E38] = (uint8_t)(x); ram[0x0E3A] = (uint8_t)(y); ram[0x176D] = 0; ram[0x0E36] = 1; ram[0x0E37] = 0; } while (0)
+#define POSE_A(bx) do { put_sprite(&GA, 0, 1, (bx) - 8, 76, 3, 0, 0); put_sprite(&GA, 1, 2, (bx), 76, 3, 0, 0); } while (0)
+#define POSE_B(bx) do { put_sprite(&GB, 0, 3, (bx) - 8, 84, 3, 0, 0); put_sprite(&GB, 1, 4, (bx), 84, 3, 0, 0); put_sprite(&GB, 2, 5, (bx) + 8, 84, 3, 0, 0); } while (0)
+   ss2fg_set_ram(ram); ss2fg_set_fx(1); ss2fg_set_pose(1);
+   ss2fg_reset(); memset(ram, 0, sizeof ram);
+   for (i = 0; i < 8; i++) { ram[0x0E00 + 0x40*i + 0x36] = 0xFF; ram[0x0E00 + 0x40*i + 0x37] = 0xFF; }
+   base_state(&GM); base_state(&GA); base_state(&GB);
+   for (r = 0; r < 8; r++) { ((uint16_t*)GA.CharacterRAM)[1*8+r] = pat[0]; ((uint16_t*)GA.CharacterRAM)[2*8+r] = pat[1];
+                             ((uint16_t*)GB.CharacterRAM)[3*8+r] = pat[2]; ((uint16_t*)GB.CharacterRAM)[4*8+r] = pat[3]; ((uint16_t*)GB.CharacterRAM)[5*8+r] = pat[4]; }
+   /* 포즈 A = 조각 2(y 76), 포즈 B = 조각 3(y 84). 몸은 공중(y 100)에서 +8 씩. 캡처: 더미, A@40, B@48, A@56, B@64 → base=A@56, to=B@64 */
+   PB_BODY(40, 100); frame(&GM, fm, 0, 0, 0);
+   POSE_A(40); PB_BODY(48, 100); frame(&GA, fa, 0, 0, 0);
+   POSE_B(48); PB_BODY(56, 100); frame(&GB, fb, 0, 0, 0);
+   POSE_A(56); PB_BODY(64, 100); frame(&GA, fa, 0, 0, 0);
+   POSE_B(64); PB_BODY(72, 100); frame(&GB, fb, 0, 0, 0);
+   CHECK(ss2fg_hist(1) && ss2fg_hist(1)->ob_x[0] == 56 && ss2fg_cur()->ob_x[0] == 64, "pose: base body 56, to body 64");
+   ss2fg_set_pose(0); RENDER_FWD(128); memcpy(fo, fm, sizeof fo);
+   CHECK(lit(fo, 52, 76) && !lit(fo, 51, 76) && lit(fo, 67, 76) && !lit(fo, 68, 76), "pose off: pose A moved by body (+4) -> x=52..67 at y=76");
+   CHECK(!lit(fo, 60, 84), "pose off: pose B not drawn (y=84 unlit)");
+   ss2fg_set_pose(1); RENDER_FWD(128);
+   CHECK(fm[76*SCREEN_WIDTH + 54] != 0 && fm[76*SCREEN_WIDTH + 54] != fo[76*SCREEN_WIDTH + 54], "pose blend: pose A pixel half-transparent at (54,76)");
+   CHECK(lit(fm, 60, 84) && lit(fm, 75, 84) && !lit(fm, 76, 84) && !lit(fm, 51, 84), "pose blend: pose B appears at y=84, x=52..75 (to 56..79 pulled back by -4)");
+   CHECK(memcmp(fm + 100*SCREEN_WIDTH, fo + 100*SCREEN_WIDTH, 20 * SCREEN_WIDTH * 2) == 0, "pose blend: rows without body identical");
+   ss2fg_set_pose(0); RENDER_FWD(128);
+   CHECK(memcmp(fm, fo, sizeof fo) == 0, "pose off again: identical to first off render");
+   /* 땅 위(y 128)면 안 섞는다 */
+   ss2fg_set_pose(1);
+   ss2fg_reset();
+   PB_BODY(40, 128); frame(&GM, fm, 0, 0, 0);
+   POSE_A(40); PB_BODY(48, 128); frame(&GA, fa, 0, 0, 0);
+   POSE_B(48); PB_BODY(56, 128); frame(&GB, fb, 0, 0, 0);
+   POSE_A(56); PB_BODY(64, 128); frame(&GA, fa, 0, 0, 0);
+   POSE_B(64); PB_BODY(72, 128); frame(&GB, fb, 0, 0, 0);
+   RENDER_FWD(128);
+   CHECK(!lit(fm, 60, 84) && lit(fm, 52, 76), "pose: on the ground -> no blend (pose A only)");
+   /* 포즈가 안 돌아가면(A 만 네 장) 안 섞는다 — 몸 이동만 */
+   ss2fg_reset();
+   PB_BODY(40, 100); frame(&GM, fm, 0, 0, 0);
+   POSE_A(40); PB_BODY(48, 100); frame(&GA, fa, 0, 0, 0);
+   POSE_A(48); PB_BODY(56, 100); frame(&GA, fa, 0, 0, 0);
+   POSE_A(56); PB_BODY(64, 100); frame(&GA, fa, 0, 0, 0);
+   POSE_B(64); PB_BODY(72, 100); frame(&GB, fb, 0, 0, 0);
+   RENDER_FWD(128);
+   CHECK(!lit(fm, 60, 84) && lit(fm, 52, 76), "pose: first pose change after 3 same frames -> no blend");
+   ss2fg_set_ram(0);
+   printf("14 포즈 섞기: %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(void)
 {
-   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster(); t_four(); t_body(); t_fx();
+   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster(); t_four(); t_body(); t_fx(); t_pose();
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

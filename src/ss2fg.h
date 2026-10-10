@@ -97,6 +97,10 @@ int ss2fg_render_ex(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
 void ss2fg_set_fx(int mode);
 int  ss2fg_get_fx(void);
 void ss2fg_fx_stats(int *out8);   /* 시험용 계기 8칸 */
+/* 포즈 섞기 — 번갈아 바뀌는 몸 포즈(맞고 빙글빙글 날아가기)를 중간 그림에서 반투명으로 잇는다. 0 끔 · 1 켬(기본). 코어 옵션 ngp_framegen_pose */
+void ss2fg_set_pose(int on);
+int  ss2fg_get_pose(void);
+void ss2fg_pose_stats(int *out4);  /* 시험용 계기 */
 /* 몸 p(0·1)를 이번 합성에서 x256/256, y256/256 px 옮긴다(on=0 이면 끔). 몸 박자가 다른 조각과 어긋날 때 libretro.c·앱이 넣는다 */
 void ss2fg_body_override(int p, int on, int x256, int y256);
 int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,

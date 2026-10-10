@@ -153,6 +153,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "move"
    },
    {
+      "ngp_framegen_pose",
+      "프레임 생성 — 날아가는 몸 포즈",
+      NULL,
+      "맞고 빙글빙글 날아갈 때 게임은 몸 포즈 두 장을 1/30초마다 번갈아 그려 깜빡이는 듯 보인다. 섞기 = 그 몸만 중간 그림에서 지금 포즈와 다음 포즈를 반투명으로 이어 덜 깜빡이게(잔상). 끔 = 원래대로 포즈가 툭툭 바뀜.",
+      NULL,
+      "video",
+      {
+         { "blend", "섞기" },
+         { "off",   "끔" },
+         { NULL, NULL },
+      },
+      "blend"
+   },
+   {
       "ngp_runahead",
       "런어헤드 (입력 지연 줄이기)",
       NULL,
@@ -255,6 +269,17 @@ struct retro_core_option_definition option_defs_us[] = {
          { NULL, NULL},
       },
       "move",
+   },
+   {
+      "ngp_framegen_pose",
+      "프레임 생성 — 날아가는 몸 포즈",
+      "섞기 = 맞고 날아갈 때 번갈아 바뀌는 몸 포즈를 중간 그림에서 반투명으로 이음. 끔 = 원래대로.",
+      {
+         { "blend", NULL },
+         { "off", NULL },
+         { NULL, NULL},
+      },
+      "blend",
    },
    { NULL, NULL, NULL, { NULL, NULL }, NULL },
 };
