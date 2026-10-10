@@ -119,7 +119,9 @@ int main(int argc, char **argv)
    {
       int act, ph, is_synth;
       btn_mask = mask_at(real);
-      p_fg_state(&act, &ph, 0); is_synth = act && ph == 1;
+      /* 위상 0 = 에뮬레이션이 도는 호출, 1 = 안 도는 호출. 예측 모드는 0 에 실제 N·1 에 예측 N+½ 을 내지만,
+         보간 모드는 0 에 중간(N-1→N)·1 에 실제 N 을 낸다(N 을 한 호출 미룸) — 합성 프레임 판정을 모드에 맞춘다 */
+      p_fg_state(&act, &ph, 0); is_synth = act && ph == (!strcmp(mode, "interp") ? 0 : 1);
       have_frame = 0; p_run(); calls++;
       if (!have_frame) continue;
       if (is_synth) { memcpy(Sy, cur, sizeof Sy); haveS = 1; continue; }

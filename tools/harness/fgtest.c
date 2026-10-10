@@ -348,12 +348,13 @@ static void t_chain(void)
 static void t_cluster(void)
 {
    int f0 = fails, i;
-#define SOLID48(g) do { int t_, r_; for (t_ = 4; t_ <= 8; t_++) for (r_ = 0; r_ < 8; r_++) ((uint16_t*)(g)->CharacterRAM)[t_*8 + r_] = 0xFFFF; } while (0)   /* 타일 4..8 도 단색으로 */
+   static const uint16_t pat48[5] = { 0x5A5A, 0xA5A5, 0xF5F5, 0x5F5F, 0xAFAF };   /* 빈 픽셀 없는 서로 다른 무늬 */
+#define SOLID48(g) do { int t_, r_; for (t_ = 4; t_ <= 8; t_++) for (r_ = 0; r_ < 8; r_++) ((uint16_t*)(g)->CharacterRAM)[t_*8 + r_] = pat48[t_ - 4]; } while (0)   /* 타일 4..8 도 보이게 — 서로 다른 무늬라 겉모습 짝짓기가 섞이지 않는다 */
    /* 3x2 조각 몸이 +8 걷는 중 포즈 교대: 조각 둘(타일 3·6)은 그림이 바뀜 → 그래도 몸 벡터(-8 → 중점 -4)로 함께 */
    ss2fg_reset();
    base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
    for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 40 + (i / 3) * 8, 3, 0, 2); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 40 + (i / 3) * 8, 3, 0, 2); }
-   for (i = 0; i < 8; i++) { ((uint16_t*)GB.CharacterRAM)[3*8 + i] = 0x5555; ((uint16_t*)GB.CharacterRAM)[6*8 + i] = 0xAAAA; }   /* B 의 타일 3·6 그림 교체 */
+   for (i = 0; i < 8; i++) { ((uint16_t*)GB.CharacterRAM)[3*8 + i] = 0xFAAF; ((uint16_t*)GB.CharacterRAM)[6*8 + i] = 0x5FA5; }   /* B 의 타일 3·6 그림 교체(다른 어떤 타일과도 다른 무늬) */
    frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
    RENDER(128);
    CHECK(lit(fm, 24, 40) && !lit(fm, 23, 40) && lit(fm, 47, 40) && !lit(fm, 48, 40) && lit(fm, 24, 48) && lit(fm, 47, 48) && !lit(fm, 48, 48),
@@ -371,7 +372,8 @@ static void t_cluster(void)
    ss2fg_reset();
    base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
    for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 80 + (i / 3) * 8, 3, 0, 2); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 80 + (i / 3) * 8, 3, 0, 2); }
-   for (i = 0; i < 8; i++) { int t; for (t = 2; t <= 6; t++) ((uint16_t*)GB.CharacterRAM)[t*8 + i] ^= 0x5555; }   /* 타일 1 만 그대로 (XOR 0x5555: 단색 타일이 다른 단색이 됨, 투명 없음) */
+   { static const uint16_t np[5] = { 0x5AA5, 0xA55A, 0x5FF5, 0xF55F, 0xAFFA };   /* 타일 1 만 그대로 — 2..6 은 다른 어떤 타일과도 다른 무늬로(투명 없음) */
+     for (i = 0; i < 8; i++) { int t; for (t = 2; t <= 6; t++) ((uint16_t*)GB.CharacterRAM)[t*8 + i] = np[t - 2]; } }
    frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
    RENDER(128);
    CHECK(lit(fm, 28, 80) && !lit(fm, 27, 80) && lit(fm, 51, 88) && !lit(fm, 52, 88), "cluster single voter: static at base x=28..51");
@@ -422,6 +424,43 @@ static void t_cluster(void)
    RENDER(128);
    CHECK(lit(fm, 16, 148) && !lit(fm, 15, 148) && lit(fm, 47, 148) && !lit(fm, 48, 148), "real -8 body move with repeated tiles: mid 16..47");
    if (getenv("FGTEST_V")) { dump_row(fb, 148); dump_row(fm, 148); }
+   /* 겉모습 짝짓기(PocketCore 방 패치 3판에서 가져옴): 슬롯 밀림 + 몸 이동. to(A) 에서 조각 X 가 슬롯 0 에 끼어들어 번호가
+      밀리고 몸은 8 왼쪽. 슬롯별로는 모든 슬롯의 그림이 바뀌어 표가 하나도 없지만(옛 규칙: 정지), 겉모습으로 짝지으면
+      전부 -8 → 중점 -4 로 몸이 움직인다.  base(B): s0 H@20 s1 K1@28 s2 K2@36 s3 K3@44 (타일 1·2·3·4)
+      to(A): s0 X@4 s1 H@12 s2 K1@20 s3 K2@28 s4 K3@36 (타일 1·2·3·4·5 — 그림이 한 칸씩 밀려 들어 있다) */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   { int r; for (r = 0; r < 8; r++) { ((uint16_t*)GA.CharacterRAM)[1*8 + r] = 0xF5F5; ((uint16_t*)GA.CharacterRAM)[2*8 + r] = 0x5555; ((uint16_t*)GA.CharacterRAM)[3*8 + r] = 0xAAAA;
+                                       ((uint16_t*)GA.CharacterRAM)[4*8 + r] = 0xFFFF; ((uint16_t*)GA.CharacterRAM)[5*8 + r] = 0x5A5A; } }
+   put_sprite(&GB, 0, 1, 20, 20, 3, 0, 2); put_sprite(&GB, 1, 2, 28, 20, 3, 0, 2); put_sprite(&GB, 2, 3, 36, 20, 3, 0, 2); put_sprite(&GB, 3, 4, 44, 20, 3, 0, 2);
+   put_sprite(&GA, 0, 1, 4, 20, 3, 0, 2); put_sprite(&GA, 1, 2, 12, 20, 3, 0, 2); put_sprite(&GA, 2, 3, 20, 20, 3, 0, 2); put_sprite(&GA, 3, 4, 28, 20, 3, 0, 2); put_sprite(&GA, 4, 5, 36, 20, 3, 0, 2);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   CHECK(lit(fa, 4, 20) && lit(fa, 43, 20) && !lit(fa, 44, 20) && lit(fb, 20, 20) && lit(fb, 51, 20), "sanity: mdfn(A) 4..43, mdfn(B) 20..51");
+   RENDER(128);
+   CHECK(lit(fm, 16, 20) && !lit(fm, 15, 20) && lit(fm, 47, 20) && !lit(fm, 48, 20), "look match: slot-shifted moving body at mid 16..47 (no slot agrees, looks do)");
+   CHECK(fm[20*160+16] == fb[20*160+20] && fm[20*160+40] == fb[20*160+44], "look match: base(B) pictures drawn in base order");
+   if (getenv("FGTEST_V")) { dump_row(fb, 20); dump_row(fm, 20); }
+   /* 반복 무늬 줄(롬 실측: 가로 6조각 효과, 가운데 4조각이 같은 그림)이 -8 움직인다: 같은 그림 조각은 짝이 넷이라 표가
+      ±8·±16 으로 흩어지지만 진짜 이동량에도 같이 주므로 1등은 뚜렷하다(과반 규칙이면 36/72 로 멈췄다) → 중점 -4 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   { int r; for (r = 0; r < 8; r++) { int t; for (t = 3; t <= 6; t++) { ((uint16_t*)GA.CharacterRAM)[t*8 + r] = 0xFFFF; ((uint16_t*)GB.CharacterRAM)[t*8 + r] = 0xFFFF; } } }
+   put_sprite(&GB, 0, 1, 20, 30, 3, 0, 2); put_sprite(&GA, 0, 1, 12, 30, 3, 0, 2);
+   for (i = 1; i <= 4; i++) { put_sprite(&GB, i, 2 + i, 20 + i * 8, 30, 3, 0, 2); put_sprite(&GA, i, 2 + i, 12 + i * 8, 30, 3, 0, 2); }
+   put_sprite(&GB, 5, 2, 60, 30, 3, 0, 2); put_sprite(&GA, 5, 2, 52, 30, 3, 0, 2);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 16, 30) && !lit(fm, 15, 30) && lit(fm, 63, 30) && !lit(fm, 64, 30), "repeated-pattern row moving -8: all six at mid 16..63");
+   if (getenv("FGTEST_V")) { dump_row(fb, 30); dump_row(fm, 30); }
+   /* 같은 그림 두 조각뿐인 물체(투사체)가 -8: 짝이 둘이라 반 표씩이지만 두 조각이 같은 1등에 표를 주니 움직인다 → 16..31 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   put_sprite(&GB, 0, 3, 20, 10, 3, 0, 2); put_sprite(&GB, 1, 3, 28, 10, 3, 0, 2);
+   put_sprite(&GA, 0, 3, 12, 10, 3, 0, 2); put_sprite(&GA, 1, 3, 20, 10, 3, 0, 2);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 16, 10) && !lit(fm, 15, 10) && lit(fm, 31, 10) && !lit(fm, 32, 10), "two identical pieces moving -8: mid 16..31");
+   if (getenv("FGTEST_V")) { dump_row(fb, 10); dump_row(fm, 10); }
    printf("4b 무리(체인 없음): %s\n", fails == f0 ? "통과" : "실패");
 #undef SOLID48
 }

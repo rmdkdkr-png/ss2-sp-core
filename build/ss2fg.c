@@ -214,6 +214,24 @@ static void draw_scroll(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *sca
    이동만 보간하고 포즈는 base 그대로. 체인 밖 단독 스프라이트는 믿을 수 있는 후보일 때만 움직인다. */
 typedef struct { int16_t dx, dy; uint8_t has; } fg_move;
 
+/* «같은 조각» — 둘 다 보이고, 플립·우선순위(0xD800)·팔레트가 같고, 타일 그림 16바이트가 같다. 슬롯 번호·타일 번호는
+   안 본다(사무쇼2는 번호가 자리표일 뿐이다). */
+static int same_piece(const ss2fg_frame *base, int k, const ss2fg_frame *to, int j)
+{
+   uint16_t dk = ld16(base->spr + k * 4), dj = ld16(to->spr + j * 4);
+   if (!(dk & 0x1800) || !(dj & 0x1800) || ((dj ^ dk) & 0xD800) || to->sprcol[j] != base->sprcol[k]) return 0;
+   return memcmp(base->chr + (dk & 0x1FF) * 16, to->chr + (dj & 0x1FF) * 16, 16) == 0;
+}
+
+static int blank_tile(const uint8_t *t)
+{
+   int i;
+   for (i = 0; i < 16; i++) if (t[i]) return 0;
+   return 1;
+}
+
+#define FG_VOTE 12                                             /* 조각 한 개의 표 — 1·2·3·4 로 나누어떨어진다 */
+
 /* 무리 [gs,ge) 의 보이는 조각 가운데, 「자리 + v」(±1px) 에 같은 그림·플립·팔레트·우선순위의 조각이 to 에 있는 수.
    슬롯·타일 번호는 보지 않는다 — 머리 조각 하나가 슬롯 0 에 끼어들어 번호가 한 칸씩 밀리면 슬롯별 짝은 타일 간격(-8px)
    만큼의 가짜 이동량을 내지만, 자리로 보면 몸은 그대로다(PocketCore 방 c0e2f79 의 검증 규칙). */
@@ -229,12 +247,10 @@ static int overlap_count(const ss2fg_frame *base, const ss2fg_frame *to, int gs,
       bx = wrapx(base->ax[k] + rb->spx) + vx; by = wrapc(base->ay[k] + rb->spy) + vy;
       for (j = 0; j < 64; j++)
       {
-         uint16_t dj = ld16(to->spr + j * 4);
          int tx, ty;
-         if (!(dj & 0x1800) || ((dj ^ dk) & 0xD800) || to->sprcol[j] != base->sprcol[k]) continue;   /* 플립·우선순위·팔레트 */
+         if (!same_piece(base, k, to, j)) continue;
          tx = wrapx(to->ax[j] + rt->spx); ty = wrapc(to->ay[j] + rt->spy);
          if (tx - bx > 1 || bx - tx > 1 || ty - by > 1 || by - ty > 1) continue;
-         if (memcmp(base->chr + (dk & 0x1FF) * 16, to->chr + (dj & 0x1FF) * 16, 16) != 0) continue;
          n++; break;
       }
    }
@@ -308,15 +324,19 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
 
    /* 무리(체인 비트 없는 메타스프라이트 — 사무쇼2 방식): 우선순위·팔레트가 같고 지금까지의 무리 테두리에서
       16px 안에 붙는 연속 슬롯을 한 캐릭터로 본다(PocketCore 방의 ss2fg_consensus.patch 에서 가져온 묶음 규칙).
-      무리는 강체다: 그림이 같은(믿을 수 있는) 조각들의 최빈 이동량 하나로 **포즈가 바뀐 조각까지** 함께 옮긴다 —
-      걷는 중 포즈 교대 프레임에도 몸은 계속 움직이고 조각은 흩어지지 않는다. 표가 둘 미만이거나 과반이 안 되거나
-      보이는 조각의 1/4 에 못 미치면 무리 전체 정지. 체인 비트가 섞인 구간은 아래 체인 규칙에 맡긴다. */
+      무리는 강체다: 조각마다 to 전체에서 «같은 조각»(플립·우선순위·팔레트·타일 그림이 같은 것 — 슬롯·타일 번호는
+      안 본다. 사무쇼2는 조각이 끼어들면 뒤 번호가 밀리고, 포즈가 바뀌면 같은 번호에 새 그림을 올려 쓴다)을 찾아
+      그 거리에 표를 던지고, 최빈 이동량 하나로 **포즈가 바뀐 조각까지** 함께 옮긴다 — 걷는 중 포즈 교대 프레임에도
+      몸은 계속 움직이고 조각은 흩어지지 않는다. 짝이 여럿이면 표를 나누고(FG_VOTE/m) 넷을 넘으면(흔한 무늬) 기권,
+      빈 조각도 기권. 1등에 표를 준 조각이 둘 미만이거나, 2등의 두 배가 안 되거나, 그림 있는 조각의 1/4 에 못 미치면
+      무리 전체 정지.
+      (겉모습 짝짓기는 PocketCore 방의 패치 3판에서 가져왔다.) 체인 비트가 섞인 구간은 아래 체인 규칙에 맡긴다. */
    for (gstart = 0; gstart < 64; gstart = g)
    {
       uint16_t w0 = ld16(base->spr + gstart * 4);
-      int voters[64], nv = 0, nvis = 0, k, a, best = -1, bestn = 0, sumx = 0, sumy = 0, any_chain = (w0 & 0x0600) != 0;
+      int vdx[256], vdy[256], vw[256], pm[64], pdx[64][4], pdy[64][4], nvote = 0, nvis = 0, nlook = 0, npc = 0, k, a, best = -1, bestw = 0, second = 0, sumx = 0, sumy = 0;
       int bx0 = base->ax[gstart], bx1 = base->ax[gstart] + 8, by0 = base->ay[gstart], by1 = base->ay[gstart] + 8;
-      if (any_chain) { g = gstart + 1; continue; }             /* 체인 비트가 달린 슬롯은 체인 규칙 몫 */
+      if (w0 & 0x0600) { g = gstart + 1; continue; }             /* 체인 비트가 달린 슬롯은 체인 규칙 몫 */
       if (gstart + 1 < 64 && (ld16(base->spr + (gstart + 1) * 4) & 0x0600))
       {  /* 다음 슬롯이 체인 → 이 슬롯은 체인 그룹의 앵커다. 앵커와 그 체인은 아래 체인 규칙이 다룬다 */
          for (g = gstart + 1; g < 64 && (ld16(base->spr + g * 4) & 0x0600); g++) ;
@@ -337,35 +357,82 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       if (g < 64 && (ld16(base->spr + g * 4) & 0x0600) && g - 1 > gstart)
          g--;                                                    /* 체인 앵커(g-1)는 무리에서 뺀다 — 다음 반복이 앵커로 시작해 위에서 건너뛴다 */
       for (k = gstart; k < g; k++)
-      {
-         if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
-         nvis++;
-         if (cand[k].has) voters[nv++] = k;
-      }
+         if (ld16(base->spr + k * 4) & 0x1800) nvis++;
       if (nvis < 2)
       {
-         for (k = gstart; k < g; k++) if (cand[k].has) mv[k] = cand[k];   /* 단독 스프라이트 */
+         for (k = gstart; k < g; k++) if (cand[k].has) mv[k] = cand[k];   /* 단독 스프라이트 — 슬롯 규칙 */
          continue;
       }
-      if (nv == 0) continue;                                    /* 믿을 조각이 없다(포즈 전체 교체) → 무리 정지 */
-      for (a = 0; a < nv; a++)
+      for (k = gstart; k < g; k++)
       {
-         int n = 0, b;
-         for (b = 0; b < nv; b++)
+         uint16_t dk = ld16(base->spr + k * 4);
+         int *mdx = pdx[k], *mdy = pdy[k], m = 0, bx, by, j;
+         pm[k] = 0;
+         if (!(dk & 0x1800) || blank_tile(base->chr + (dk & 0x1FF) * 16)) continue;
+         nlook++;
+         bx = wrapx(base->ax[k] + rb->spx); by = wrapc(base->ay[k] + rb->spy);
+         for (j = 0; j < 64 && m <= 4; j++)
          {
-            int ddx = cand[voters[b]].dx - cand[voters[a]].dx, ddy = cand[voters[b]].dy - cand[voters[a]].dy;
-            if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) n++;
+            int dx, dy;
+            if (!same_piece(base, k, to, j)) continue;
+            dx = wrapx(to->ax[j] + rt->spx) - bx; dy = wrapc(to->ay[j] + rt->spy) - by;
+            if (dx > SS2FG_SPR_MAX_STEP || dx < -SS2FG_SPR_MAX_STEP ||
+                dy > SS2FG_SPR_MAX_STEP || dy < -SS2FG_SPR_MAX_STEP) continue;
+            if (m < 4) { mdx[m] = dx; mdy[m] = dy; }
+            m++;
          }
-         if (n > bestn) { bestn = n; best = a; }
+         if (m == 0 || m > 4) continue;                          /* 바뀐 조각 / 너무 흔한 조각 */
+         pm[k] = m;
+         for (j = 0; j < m; j++)
+         {
+            for (a = 0; a < nvote; a++) if (vdx[a] == mdx[j] && vdy[a] == mdy[j]) break;
+            if (a == nvote) { if (nvote == 256) continue; vdx[nvote] = mdx[j]; vdy[nvote] = mdy[j]; vw[nvote] = 0; nvote++; }
+            vw[a] += FG_VOTE / m;
+         }
       }
-      if (bestn < 2 || bestn * 2 <= nv || bestn * 4 < nvis) continue;   /* 표 부족 → 무리 정지 */
-      for (a = 0; a < nv; a++)
+      if (nvote == 0) continue;                                 /* 믿을 조각이 없다(포즈 전체 교체) → 무리 정지 */
+      for (a = 0; a < nvote; a++)
       {
-         int ddx = cand[voters[a]].dx - cand[voters[best]].dx, ddy = cand[voters[a]].dy - cand[voters[best]].dy;
-         if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) { sumx += cand[voters[a]].dx; sumy += cand[voters[a]].dy; }
+         int w = 0, b;
+         for (b = 0; b < nvote; b++)
+         {
+            int ddx = vdx[b] - vdx[a], ddy = vdy[b] - vdy[a];
+            if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) w += vw[b];
+         }
+         if (w > bestw) { bestw = w; best = a; }
+      }
+      /* 2등(1등의 ±1px 창 밖에서 가장 많이 모인 이동량)의 두 배는 되어야 뚜렷한 1등이다 — 반복 무늬(같은 그림이
+         줄지어 선 효과)는 짝이 여럿이라 표가 ±8·±16 으로 대칭으로 흩어지는데, 그 조각들도 진짜 이동량에는 같이
+         표를 주므로 1등은 뚜렷하다. 과반 규칙은 그런 무리를 괜히 세웠다(롬 실측: 가로 6조각 효과 줄, 4조각이 같은 그림). */
+      for (a = 0; a < nvote; a++)
+      {
+         int w = 0, b, ddx = vdx[a] - vdx[best], ddy = vdy[a] - vdy[best];
+         if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) continue;
+         for (b = 0; b < nvote; b++)
+         {
+            int ex = vdx[b] - vdx[a], ey = vdy[b] - vdy[a], fx = vdx[b] - vdx[best], fy = vdy[b] - vdy[best];
+            if (fx >= -1 && fx <= 1 && fy >= -1 && fy <= 1) continue;             /* 1등 창의 표는 안 센다 */
+            if (ex >= -1 && ex <= 1 && ey >= -1 && ey <= 1) w += vw[b];
+         }
+         if (w > second) second = w;
+      }
+      for (k = gstart; k < g; k++)                              /* 1등 창에 표를 준 조각 수 — 한 조각(관절)이 몸을 끌지 않게 둘 이상 */
+      {
+         int j;
+         for (j = 0; j < pm[k]; j++)
+         {
+            int ddx = pdx[k][j] - vdx[best], ddy = pdy[k][j] - vdy[best];
+            if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) { npc++; break; }
+         }
+      }
+      if (npc < 2 || bestw < 2 * second || bestw * 4 < nlook * FG_VOTE) continue;   /* 표 부족 → 무리 정지 */
+      for (a = 0; a < nvote; a++)
+      {
+         int ddx = vdx[a] - vdx[best], ddy = vdy[a] - vdy[best];
+         if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) { sumx += vdx[a] * vw[a]; sumy += vdy[a] * vw[a]; }
       }
       {  /* 자리 겹침 검증: 벡터만큼 옮긴 자리에 같은 조각이 있는 수가 제자리보다 많아야 몸이 움직인 것 */
-         int vx = round_div(sumx, bestn), vy = round_div(sumy, bestn);
+         int vx = round_div(sumx, bestw), vy = round_div(sumy, bestw);
          if ((vx || vy) && overlap_count(base, to, gstart, g, 0, 0) >= overlap_count(base, to, gstart, g, vx, vy)) continue;
          for (k = gstart; k < g; k++)
             if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)vx; mv[k].dy = (int16_t)vy; mv[k].has = 1; }
