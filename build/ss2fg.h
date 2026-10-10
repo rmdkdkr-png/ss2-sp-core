@@ -50,10 +50,13 @@ typedef struct ss2fg_frame {
    uint8_t pad;
    int     layers;                 /* layer_enable 마스크 */
    int16_t ax[64], ay[64];         /* 체인을 푼 절대 좌표(오프셋 더하기 전) */
-   /* 두 캐릭터의 «몸 위치»(사무쇼2 RAM: 화면 X = 월드 X - 카메라, Y = 발 높이) — ss2fg_set_ram 이 있을 때만.
-      게임은 RAM 을 먼저 바꾸고 다음 프레임에 그리므로, 이 프레임 화면의 몸 위치 = 직전 캡처 순간의 RAM 값 */
-   uint8_t now_x[2], now_y[2];     /* 이 캡처 순간의 RAM 값(다음 프레임에 나올 위치) */
-   uint8_t body_x[2], body_y[2];   /* 이 프레임 화면에 보이는 몸 위치 */
+   /* 사무쇼2 RAM 의 물체 표(0x0E00 + 0x40·k) — ss2fg_set_ram 이 있을 때만. 0 = P1, 1 = P2(몸), 2·3 = 그림자,
+      4~7 = 기술 이펙트·장풍. 화면 X = 물체 X - 카메라, Y = 발 높이. 게임은 RAM 을 먼저 바꾸고 다음 프레임에
+      그리므로, 이 프레임 화면의 위치 = 직전 캡처 순간의 RAM 값 */
+#define SS2FG_OBJS 8
+   uint8_t ob_now_x[SS2FG_OBJS], ob_now_y[SS2FG_OBJS], ob_now_t[SS2FG_OBJS];  /* 이 캡처 순간(다음 프레임에 나옴) */
+   uint8_t ob_x[SS2FG_OBJS], ob_y[SS2FG_OBJS], ob_t[SS2FG_OBJS];              /* 이 프레임 화면의 위치·종류(하위 바이트) */
+   uint8_t ob_now_act, ob_act;     /* 쓰는 칸 비트(종류 0xFFFF = 빈 칸) */
    uint8_t now_ok, body_ok;        /* 대전 중이라 값이 유효함 */
 } ss2fg_frame;
 
@@ -64,9 +67,9 @@ void ss2fg_capture_end(const uint8_t *scroll, const uint8_t *chr, const uint8_t 
 void ss2fg_capture_write(int dirty_bit);   /* 표시 중(1..151줄) VRAM 쓰기 */
 void ss2fg_capture_pop(void);              /* 마지막 capture_end 를 무른다(예측 프레임 되돌리기) */
 void ss2fg_reset(void);
-/* 사무쇼2 RAM(CPU 0x4000~, 16KB) — 주면 캡처마다 두 캐릭터 몸 위치를 같이 적는다(NULL 이면 안 쓴다).
-   포즈가 매번 통째로 바뀌는 동작(맞고 빙글빙글 날아가기 등)은 조각 겉모습으로 짝을 못 지으니 몸 위치로 옮긴다
-   (PocketCore 방 30_ss2fg_body.patch 의 규칙) */
+/* 사무쇼2 RAM(CPU 0x4000~, 16KB) — 주면 캡처마다 물체 표(두 캐릭터·그림자·이펙트)의 위치를 같이 적는다(NULL 이면 안 쓴다).
+   포즈가 매번 통째로 바뀌는 동작(맞고 빙글빙글 날아가기 등)은 조각 겉모습으로 짝을 못 지으니 몸 위치로 옮기고,
+   그림자·이펙트의 빈칸은 가장 가까운 물체로 채운다(PocketCore 방 30_ss2fg_body / 40_ss2fg_objects 패치의 규칙) */
 void ss2fg_set_ram(const uint8_t *ram);
 
 const ss2fg_frame *ss2fg_prev(void);       /* 직전 실제 프레임 (없으면 NULL) */

@@ -664,18 +664,20 @@ static void t_body(void)
    int f0 = fails, i, r;
    static uint8_t ram[16384];
    static const uint16_t pat[6] = { 0x5AA5, 0xA55A, 0x5FF5, 0xF55F, 0xAFFA, 0xFAAF };
-#define BODY_RAM(x, y, cam) do { ram[0x00A7] = 241; ram[0x0E38] = (uint8_t)((x) + (cam)); ram[0x0E3A] = (uint8_t)(y); ram[0x176D] = (uint8_t)(cam); } while (0)
+#define BODY_RAM(x, y, cam) do { ram[0x00A7] = 241; ram[0x0E38] = (uint8_t)((x) + (cam)); ram[0x0E3A] = (uint8_t)(y); ram[0x176D] = (uint8_t)(cam); ram[0x0E36] = 1; ram[0x0E37] = 0; } while (0)
+#define OBJ_RAM(k, t, x, y) do { ram[0x0E00 + 0x40*(k) + 0x36] = (uint8_t)(t); ram[0x0E00 + 0x40*(k) + 0x37] = 0; ram[0x0E00 + 0x40*(k) + 0x38] = (uint8_t)((x) + ram[0x176D]); ram[0x0E00 + 0x40*(k) + 0x3A] = (uint8_t)(y); } while (0)
    ss2fg_set_ram(ram);
    /* 3x2 조각 몸(팔레트 0 = P1)이 +8 걷는데 여섯 조각 그림이 전부 바뀐다(회전 포즈) → 겉모습 표 없음.
       몸 위치 RAM: 더미 캡처 때 (40,100) = A 화면의 몸, A 캡처 때 (48,100) = B 화면의 몸 → 무리 벡터 -8(B→A), 중점 -4 */
    ss2fg_reset(); memset(ram, 0, sizeof ram);
+   for (i = 0; i < 8; i++) { ram[0x0E00 + 0x40*i + 0x36] = 0xFF; ram[0x0E00 + 0x40*i + 0x37] = 0xFF; }   /* 물체 표 빈 칸 */
    base_state(&GA); base_state(&GB); base_state(&GM);
    for (i = 0; i < 6; i++) for (r = 0; r < 8; r++) { ((uint16_t*)GA.CharacterRAM)[(1+i)*8 + r] = 0xFFFF; ((uint16_t*)GB.CharacterRAM)[(1+i)*8 + r] = pat[i]; }
    for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0); }
    BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);          /* 더미: 이 RAM 값이 다음 프레임(A) 화면의 몸 위치 */
    BODY_RAM(48, 100, 0); frame(&GA, fa, 0, 0, 0);
    BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
-   CHECK(ss2fg_prev()->body_ok && ss2fg_prev()->body_x[0] == 40 && ss2fg_cur()->body_ok && ss2fg_cur()->body_x[0] == 48, "capture_body: A body 40, B body 48 (from previous capture's RAM)");
+   CHECK(ss2fg_prev()->body_ok && ss2fg_prev()->ob_x[0] == 40 && ss2fg_cur()->body_ok && ss2fg_cur()->ob_x[0] == 48, "capture_body: A body 40, B body 48 (from previous capture's RAM)");
    RENDER(128);
    CHECK(lit(fm, 24, 76) && !lit(fm, 23, 76) && lit(fm, 47, 84) && !lit(fm, 48, 84), "body: all-changed body follows RAM trajectory to mid x=24..47");
    /* 같은 상황에 몸이 그대로면(RAM 변화 0) 제자리 — 포즈만 바뀐 것 */
@@ -704,7 +706,7 @@ static void t_body(void)
    /* P2(팔레트 5)는 +0x40 주소. 카메라가 움직여도 화면 몸 위치 = 월드 X - 카메라 */
    ss2fg_reset();
    for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 5); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 5); }
-   ram[0x00A7] = 241; ram[0x0E78] = 140; ram[0x0E7A] = 100; ram[0x176D] = 100; frame(&GM, fm, 0, 0, 0);   /* 화면 40 */
+   ram[0x00A7] = 241; ram[0x0E76] = 2; ram[0x0E77] = 0; ram[0x0E78] = 140; ram[0x0E7A] = 100; ram[0x176D] = 100; frame(&GM, fm, 0, 0, 0);   /* 화면 40 */
    ram[0x0E78] = 158; ram[0x176D] = 110; frame(&GA, fa, 0, 0, 0);                                           /* 화면 48 */
    frame(&GB, fb, 0, 0, 0);
    RENDER(128);
@@ -739,9 +741,44 @@ static void t_body(void)
    RENDER(128);
    CHECK(lit(fm, 26, 60) && !lit(fm, 25, 60) && lit(fm, 33, 60) && !lit(fm, 34, 60), "single near body with unique look match: x=26..33");
    CHECK(lit(fm, 24, 100) && !lit(fm, 23, 100) && lit(fm, 31, 100) && !lit(fm, 32, 100), "single near body, picture changed: body vector, x=24..31");
+   /* 그림자(팔레트 12, 그림이 매번 바뀜) — 가장 가까운 그림자 물체(k=2)가 -8 움직이고 다음 프레임 같은 팔레트 조각
+      테두리도 같이 움직였으면 그 벡터로(중점 -4). 캐릭터 칸은 안 쓴다 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB);
+   for (i = 0; i < 3; i++) for (r = 0; r < 8; r++) { ((uint16_t*)GA.CharacterRAM)[(1+i)*8 + r] = 0xFFFF; ((uint16_t*)GB.CharacterRAM)[(1+i)*8 + r] = pat[i]; }
+   for (i = 0; i < 3; i++) { put_sprite(&GA, i, 1 + i, 20 + i * 8, 120, 3, 0, 12); put_sprite(&GB, i, 1 + i, 28 + i * 8, 120, 3, 0, 12); }
+   BODY_RAM(100, 100, 0); OBJ_RAM(2, 7, 32, 128); frame(&GM, fm, 0, 0, 0);     /* A 화면: 그림자 물체 32 */
+   BODY_RAM(100, 100, 0); OBJ_RAM(2, 7, 40, 128); frame(&GA, fa, 0, 0, 0);     /* B 화면: 40 */
+   frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 24, 120) && !lit(fm, 23, 120) && lit(fm, 47, 120) && !lit(fm, 48, 120), "shadow cluster follows nearest shadow object: mid x=24..47");
+   /* 같은데 물체 종류가 앞뒤 프레임에서 다르면(칸 재사용) 안 쓴다 → 정지 */
+   ss2fg_reset();
+   BODY_RAM(100, 100, 0); OBJ_RAM(2, 7, 32, 128); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(100, 100, 0); OBJ_RAM(2, 9, 40, 128); frame(&GA, fa, 0, 0, 0);
+   frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 28, 120) && !lit(fm, 27, 120), "object type changed between frames: not used, stays at base");
+   /* 물체는 움직였는데 다음 프레임의 같은 팔레트 조각 테두리는 제자리(불똥 물체) → 맞춰 보기에서 걸러 정지 */
+   ss2fg_reset();
+   for (i = 0; i < 3; i++) { put_sprite(&GA, i, 1 + i, 28 + i * 8, 120, 3, 0, 12); }       /* A 도 28.. (제자리) */
+   BODY_RAM(100, 100, 0); OBJ_RAM(2, 7, 32, 128); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(100, 100, 0); OBJ_RAM(2, 7, 50, 128); frame(&GA, fa, 0, 0, 0);
+   frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 28, 120) && !lit(fm, 27, 120) && !lit(fm, 19, 120), "object moved but pieces did not: validation rejects, stays at base");
+   /* 물체가 16px 보다 멀면 안 쓴다 */
+   ss2fg_reset();
+   for (i = 0; i < 3; i++) { put_sprite(&GA, i, 1 + i, 20 + i * 8, 120, 3, 0, 12); }
+   BODY_RAM(100, 100, 0); OBJ_RAM(2, 7, 100, 128); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(100, 100, 0); OBJ_RAM(2, 7, 108, 128); frame(&GA, fa, 0, 0, 0);
+   frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 28, 120) && !lit(fm, 27, 120), "object farther than 16px: not used");
    ss2fg_set_ram(0);
+#undef OBJ_RAM
 #undef BODY_RAM
-   printf("11 몸 위치(RAM): %s\n", fails == f0 ? "통과" : "실패");
+   printf("11 몸·물체 위치(RAM): %s\n", fails == f0 ? "통과" : "실패");
 }
 
 int main(void)

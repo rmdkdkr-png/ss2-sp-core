@@ -66,31 +66,39 @@ static void resolve_chain(ss2fg_frame *f)
    }
 }
 
-/* 사무쇼2 RAM 의 몸 위치 (PocketCore 방 리버싱 실측; 이쪽 롬 덤프 600프레임에서도 몸 근처 조각의 겉모습 벡터와 1867:19 일치)
-   P1 X 0x0E38 · Y 0x0E3A(땅 = 128), P2 는 +0x40, 카메라 X 0x176D, 대전 중 = 0x00A7 이 241 */
+/* 사무쇼2 RAM 의 물체 표 (PocketCore 방 리버싱 실측; 이쪽 롬 덤프 600프레임에서도 몸 근처 조각의 겉모습 벡터와 1867:19 일치)
+   물체 k = 0x0E00 + 0x40·k : +0x36 종류(16비트, 0xFFFF = 빈 칸), +0x38 X, +0x3A Y(땅 = 128)
+   k 0·1 = P1·P2, 2·3 = 그림자, 4~7 = 기술 이펙트·장풍. 카메라 X 0x176D, 대전 중 = 0x00A7 이 241 */
 #define FG_RAM_MODE   0x00A7
 #define FG_RAM_FIGHT  241
 #define FG_RAM_CAMX   0x176D
-static const uint16_t fg_ram_x[2] = { 0x0E38, 0x0E78 }, fg_ram_y[2] = { 0x0E3A, 0x0E7A };
+#define FG_RAM_OBJ    0x0E00
 static const uint8_t *fg_ram = 0;
 void ss2fg_set_ram(const uint8_t *ram) { fg_ram = ram; }
 
 static void capture_body(ss2fg_frame *f)
 {
    const ss2fg_frame *pv = fg_hist[0] >= 0 ? &fg_slot[fg_hist[0]] : 0;   /* 직전 캡처 */
-   int p;
+   int k;
    f->now_ok = (uint8_t)(fg_ram && fg_ram[FG_RAM_MODE] == FG_RAM_FIGHT);
-   for (p = 0; p < 2; p++)
+   f->ob_now_act = 0;
+   for (k = 0; k < SS2FG_OBJS; k++)
    {
-      f->now_x[p] = f->now_ok ? (uint8_t)(fg_ram[fg_ram_x[p]] - fg_ram[FG_RAM_CAMX]) : 0;
-      f->now_y[p] = f->now_ok ? fg_ram[fg_ram_y[p]] : 0;
+      const uint8_t *o = f->now_ok ? fg_ram + FG_RAM_OBJ + 0x40 * k : 0;
+      int act = o && !(o[0x36] == 0xFF && o[0x37] == 0xFF);
+      f->ob_now_x[k] = act ? (uint8_t)(o[0x38] - fg_ram[FG_RAM_CAMX]) : 0;
+      f->ob_now_y[k] = act ? o[0x3A] : 0;
+      f->ob_now_t[k] = act ? o[0x36] : 0;
+      if (act) f->ob_now_act |= (uint8_t)(1u << k);
    }
    f->body_ok = (uint8_t)(f->now_ok && pv && pv->valid && pv->now_ok);
-   for (p = 0; p < 2; p++)
+   for (k = 0; k < SS2FG_OBJS; k++)
    {
-      f->body_x[p] = f->body_ok ? pv->now_x[p] : 0;
-      f->body_y[p] = f->body_ok ? pv->now_y[p] : 0;
+      f->ob_x[k] = f->body_ok ? pv->ob_now_x[k] : 0;
+      f->ob_y[k] = f->body_ok ? pv->ob_now_y[k] : 0;
+      f->ob_t[k] = f->body_ok ? pv->ob_now_t[k] : 0;
    }
+   f->ob_act = f->body_ok ? pv->ob_now_act : 0;
 }
 
 void ss2fg_capture_end(const uint8_t *scroll, const uint8_t *chr, const uint8_t *spr,
@@ -316,15 +324,16 @@ static int body_vec(const ss2fg_frame *base, const ss2fg_frame *to, int gstart, 
    if (!base->body_ok || !to->body_ok) return 0;
    p = pal == 0 ? 0 : pal == 5 ? 1 : -1;
    if (p < 0) return 0;
-   dx = (int8_t)(uint8_t)(to->body_x[p] - base->body_x[p]);
-   dy = (int8_t)(uint8_t)(to->body_y[p] - base->body_y[p]);
+   if (!(base->ob_act & to->ob_act & (1u << p))) return 0;
+   dx = (int8_t)(uint8_t)(to->ob_x[p] - base->ob_x[p]);
+   dy = (int8_t)(uint8_t)(to->ob_y[p] - base->ob_y[p]);
    if (dx > SS2FG_SPR_MAX_STEP || dx < -SS2FG_SPR_MAX_STEP || dy > SS2FG_SPR_MAX_STEP || dy < -SS2FG_SPR_MAX_STEP) return 0;
    for (k = gstart; k < g; k++)                                /* 몸 위치 기준 상대 좌표(8비트 랩) 테두리 */
    {
       int sx, sy;
       if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
-      sx = (int8_t)(uint8_t)(base->ax[k] + rb->spx - base->body_x[p]);
-      sy = (int8_t)(uint8_t)(base->ay[k] + rb->spy - base->body_y[p]);
+      sx = (int8_t)(uint8_t)(base->ax[k] + rb->spx - base->ob_x[p]);
+      sy = (int8_t)(uint8_t)(base->ay[k] + rb->spy - base->ob_y[p]);
       if (sx < l) l = sx;
       if (sx + 8 > r) r = sx + 8;
       if (sy < t) t = sy;
@@ -333,6 +342,79 @@ static int body_vec(const ss2fg_frame *base, const ss2fg_frame *to, int gstart, 
    if (l > r) return 0;
    /* 몸 위치(발 가운데)가 무리 테두리 옆 40px 안, 세로는 무리 위 16px ~ 아래 56px 안(머리만 떨어진 무리 포함) */
    if (l > 40 || r < -40 || t > 16 || b < -56) return 0;
+   *vx = dx; *vy = dy;
+   return 1;
+}
+
+/* 이펙트·그림자 무리 — 몸 팔레트가 아닌 무리가 겉모습으로 안 정해지면(기술 이펙트는 매 프레임 모양이 바뀐다),
+   RAM 물체 표의 그림자(2·3)·이펙트(4~7) 칸 중 그 무리 테두리에 가장 가까운(16px 안) 물체의 이동량을 쓴다.
+   앞뒤 프레임 모두 같은 종류로 쓰여 있는 칸만(칸이 다른 이펙트로 재사용되면 거리가 엉터리). 캐릭터 칸(0·1)은
+   안 쓴다 — 캐릭터 근처 이펙트가 캐릭터를 따라가지 않는 일이 많다. (PocketCore 방 40_ss2fg_objects.patch) */
+#define FG_OBJ_NEAR 16
+static int obj_vec(const ss2fg_frame *base, const ss2fg_frame *to, int gstart, int g, int *vx, int *vy)
+{
+   const ss2fg_regs *rb = &base->line[0];
+   int pal = base->sprcol[gstart] & 0x0F, o, k, best = -1, bd = 999, dx, dy;
+   if (!base->body_ok || !to->body_ok) return 0;
+   if (pal == 0 || pal == 5) return 0;                        /* 몸은 body_vec */
+   for (o = 2; o < SS2FG_OBJS; o++)
+   {
+      int l = 999, r = -999, t = 999, b = -999, ex, ey, d;
+      if (!(base->ob_act & to->ob_act & (1u << o)) || base->ob_t[o] != to->ob_t[o]) continue;
+      for (k = gstart; k < g; k++)
+      {
+         int sx, sy;
+         if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
+         sx = (int8_t)(uint8_t)(base->ax[k] + rb->spx - base->ob_x[o]);
+         sy = (int8_t)(uint8_t)(base->ay[k] + rb->spy - base->ob_y[o]);
+         if (sx < l) l = sx;
+         if (sx + 8 > r) r = sx + 8;
+         if (sy < t) t = sy;
+         if (sy + 8 > b) b = sy + 8;
+      }
+      if (l > r) return 0;
+      ex = l > 0 ? l : r < 0 ? -r : 0;                        /* 물체 자리에서 무리 테두리까지 */
+      ey = t > 0 ? t : b < 0 ? -b : 0;
+      d = ex > ey ? ex : ey;
+      if (d < bd) { bd = d; best = o; }
+   }
+   if (best < 0 || bd > FG_OBJ_NEAR) return 0;
+   dx = (int8_t)(uint8_t)(to->ob_x[best] - base->ob_x[best]);
+   dy = (int8_t)(uint8_t)(to->ob_y[best] - base->ob_y[best]);
+   if (dx > SS2FG_SPR_MAX_STEP || dx < -SS2FG_SPR_MAX_STEP || dy > SS2FG_SPR_MAX_STEP || dy < -SS2FG_SPR_MAX_STEP) return 0;
+   /* 맞춰 보기 — 물체 자리가 그림의 기준점이 아닌 이펙트가 많다(폭발 그림 옆 불똥 물체가 +18 로 움직였는데 다음 그림은
+      제자리 → 앞으로 갔다 되돌아오는 흔들림). to 의 같은 팔레트 조각 테두리 가운데가 물체와 같이(±2px) 움직였을 때만
+      믿는다. 그림자는 거의 늘 맞고, 모양이 바뀌는 이펙트는 대부분 여기서 걸러진다(→ 제자리). */
+   {
+      const ss2fg_regs *rt = &to->line[0];
+      uint16_t key = ld16(base->spr + gstart * 4) & 0x1800;
+      int l = 999, r = -999, t = 999, b = -999, l2 = 999, r2 = -999, t2 = 999, b2 = -999, j, cx, cy;
+      for (k = gstart; k < g; k++)
+      {
+         int sx, sy;
+         if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
+         sx = wrapx(base->ax[k] + rb->spx); sy = wrapc(base->ay[k] + rb->spy);
+         if (sx < l) l = sx;
+         if (sx + 8 > r) r = sx + 8;
+         if (sy < t) t = sy;
+         if (sy + 8 > b) b = sy + 8;
+      }
+      for (j = 0; j < 64; j++)
+      {
+         uint16_t w = ld16(to->spr + j * 4);
+         int sx, sy;
+         if ((w & 0x1800) != key || to->sprcol[j] != base->sprcol[gstart]) continue;
+         sx = wrapx(to->ax[j] + rt->spx); sy = wrapc(to->ay[j] + rt->spy);
+         if (sx + 8 < l - 40 || sx > r + 40 || sy + 8 < t - 40 || sy > b + 40) continue;
+         if (sx < l2) l2 = sx;
+         if (sx + 8 > r2) r2 = sx + 8;
+         if (sy < t2) t2 = sy;
+         if (sy + 8 > b2) b2 = sy + 8;
+      }
+      if (l2 > r2) return 0;                                  /* 다음 프레임에 그 그림이 없다 — 맞춰 볼 수 없음 */
+      cx = (l2 + r2) - (l + r); cy = (t2 + b2) - (t + b);     /* 가운데 이동 ×2 */
+      if (cx - 2 * dx > 4 || 2 * dx - cx > 4 || cy - 2 * dy > 4 || 2 * dy - cy > 4) return 0;
+   }
    *vx = dx; *vy = dy;
    return 1;
 }
@@ -455,6 +537,7 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       for (k = gstart; k < g; k++)
          if (ld16(base->spr + k * 4) & 0x1800) nvis++;
       body = body_vec(base, to, gstart, g, &bvx, &bvy);
+      if (!body && obj_vec(base, to, gstart, g, &bvx, &bvy)) body = 2;   /* 그림자·이펙트: 가장 가까운 물체(맞춰 본 것만) */
       if (nvis < 2)
       {
          if (body && nvis == 1)
@@ -543,15 +626,15 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       {  /* 자리 겹침 검증: 벡터만큼 옮긴 자리에 같은 조각이 있는 수가 제자리보다 많아야 몸이 움직인 것 */
          int vx = round_div(sumx, bestw), vy = round_div(sumy, bestw);
          if ((vx || vy) && overlap_count(base, to, gstart, g, 0, 0) >= overlap_count(base, to, gstart, g, vx, vy)) goto body_or_stop;
-         /* 몸이 움직였는데 겉모습 표가 딴 데(4px 넘게)를 가리키면 우연한 짝 — 몸 위치를 따른다 */
-         if (body && (bvx || bvy) && (vx - bvx > 4 || bvx - vx > 4 || vy - bvy > 4 || bvy - vy > 4)) goto body_or_stop;
+         /* 몸이 움직였는데 겉모습 표가 딴 데(4px 넘게)를 가리키면 우연한 짝 — 몸 위치를 따른다(물체 칸은 겉모습이 우선) */
+         if (body == 1 && (bvx || bvy) && (vx - bvx > 4 || bvx - vx > 4 || vy - bvy > 4 || bvy - vy > 4)) goto body_or_stop;
          for (k = gstart; k < g; k++)
             if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)vx; mv[k].dy = (int16_t)vy; mv[k].has = 1; }
          continue;
       }
 body_or_stop:
-      if (!body) continue;                                      /* 몸 위치를 모른다 → 무리 정지 */
-      for (k = gstart; k < g; k++)                              /* 2순위: 몸 위치 — 포즈가 통째로 바뀌어도 궤적대로 */
+      if (!body) continue;                                      /* 몸·물체 위치를 모른다 → 무리 정지 */
+      for (k = gstart; k < g; k++)                              /* 2순위: 몸·물체 위치 — 포즈가 통째로 바뀌어도 궤적대로 */
          if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)bvx; mv[k].dy = (int16_t)bvy; mv[k].has = 1; }
    }
 
