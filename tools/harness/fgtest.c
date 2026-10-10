@@ -231,7 +231,8 @@ static void t_chain(void)
    base_state(&GB); put_sprite(&GB, 0, 1, 10, 10, 3, 0, 1); put_sprite(&GB, 1, 2, 12, 0, 3, 0x0400 | 0x0200, 1);
    frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
    RENDER(128);
-   CHECK(lit(fm, 20, 10) && lit(fm, 27, 10) && !lit(fm, 28, 10), "child relative motion mid not x=20..27");
+   /* 강체 그룹: 부모(0)·자식(-4)이 갈려 과반이 없다 → 그룹 정지, 자식은 base(B) 자리 22..29 */
+   CHECK(lit(fm, 22, 10) && lit(fm, 29, 10) && !lit(fm, 30, 10) && !lit(fm, 21, 10), "rigid group: split votes must leave child at base x=22..29");
    /* 그룹 벡터: 체인 그룹 3조각 중 2조각 일치(-10), 셋째는 타일이 바뀜 → 그룹 벡터로 같이 움직인다 */
    ss2fg_reset();
    base_state(&GA); put_sprite(&GA, 0, 1, 10, 10, 3, 0, 1); put_sprite(&GA, 1, 2, 8, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GA, 2, 4, 8, 0, 3, 0x0400 | 0x0200, 1);
@@ -247,6 +248,47 @@ static void t_chain(void)
    frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
    RENDER(128);
    CHECK(lit(fm, 32, 10) && lit(fm, 39, 10) && !lit(fm, 40, 10), "spread group: third piece must stay at base x=32..39");
+   CHECK(lit(fm, 20, 10) && !lit(fm, 15, 10), "spread group: parent must stay at base x=20 (rigid, no majority)");
+   /* 공용 타일 포즈 교대(뉴트럴 숨쉬기 재현): 앵커 고정, 타일 2 조각 둘이 자리를 바꾼다 → 옛 코드는
+      두 조각을 중간 자리(18,18)·(26,18)에 찍어 깨졌다. 공용 타일은 투표 못 하고 앵커(타일 1)만 0 이동 → 전부 base 자리 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 1, 10, 10, 3, 0, 1); put_sprite(&GA, 1, 2, 16, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GA, 2, 2, 0, 16, 3, 0x0400 | 0x0200, 1);
+   base_state(&GB); put_sprite(&GB, 0, 1, 10, 10, 3, 0, 1); put_sprite(&GB, 1, 2, 0, 16, 3, 0x0400 | 0x0200, 1); put_sprite(&GB, 2, 2, 16, -16, 3, 0x0400 | 0x0200, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   CHECK(lit(fb, 10, 26) && lit(fb, 26, 10) && !lit(fb, 18, 18), "sanity: mdfn(B) pieces at (10,26) and (26,10)");
+   RENDER(128);
+   CHECK(lit(fm, 10, 26) && lit(fm, 17, 26) && lit(fm, 26, 10) && lit(fm, 33, 10) && !lit(fm, 18, 18) && !lit(fm, 26, 18) && !lit(fm, 21, 21),
+         "shared-tile pose swap: pieces must stay at base, not at midpoints");
+   /* 체인 밖 단독 스프라이트: 공용 타일 둘이 자리를 바꾸면 정지, 고유 타일은 보간 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 2, 10, 40, 3, 0, 1); put_sprite(&GA, 1, 2, 50, 40, 3, 0, 1); put_sprite(&GA, 2, 3, 100, 40, 3, 0, 1);
+   base_state(&GB); put_sprite(&GB, 0, 2, 50, 40, 3, 0, 1); put_sprite(&GB, 1, 2, 10, 40, 3, 0, 1); put_sprite(&GB, 2, 3, 110, 40, 3, 0, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 10, 40) && lit(fm, 17, 40) && lit(fm, 50, 40) && lit(fm, 57, 40) && !lit(fm, 30, 40) && !lit(fm, 37, 40),
+         "standalone shared tile swap: must stay at base, not midpoint x=30");
+   CHECK(lit(fm, 105, 40) && lit(fm, 112, 40) && !lit(fm, 104, 40) && !lit(fm, 113, 40), "standalone unique tile: mid x=105..112");
+   /* 강체 덮어쓰기: 3조각 중 둘은 -10, 셋째(고유 타일)는 포즈가 바뀌어 -14 → 과반 -10 으로 셋 다 -5 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 1, 10, 60, 3, 0, 1); put_sprite(&GA, 1, 2, 8, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GA, 2, 3, 8, 0, 3, 0x0400 | 0x0200, 1);
+   base_state(&GB); put_sprite(&GB, 0, 1, 20, 60, 3, 0, 1); put_sprite(&GB, 1, 2, 8, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GB, 2, 3, 12, 0, 3, 0x0400 | 0x0200, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   CHECK(lit(fb, 40, 60) && !lit(fb, 39, 60), "sanity: mdfn(B) third piece at x=40");
+   RENDER(128);
+   CHECK(lit(fm, 35, 60) && lit(fm, 42, 60) && !lit(fm, 43, 60) && !lit(fm, 34, 60), "rigid override: third piece must follow group vector (x=35..42), not its own -14");
+   CHECK(lit(fm, 15, 60) && lit(fm, 23, 60) && !lit(fm, 14, 60), "rigid override: parent 15.., child 23..");
+   /* 타일 그림 교체(사무쇼2 포즈 교대 재현): 같은 슬롯·같은 타일 번호·자리 이동, 그러나 문자 RAM 의 그림이 바뀜 →
+      다른 조각이니 움직이지 않고 base(B) 자리에 base 그림. 같은 번호에 그림이 그대로인 다른 조각은 보간 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 1, 10, 80, 3, 0, 1); put_sprite(&GA, 1, 2, 60, 80, 3, 0, 1);
+   base_state(&GB); put_sprite(&GB, 0, 1, 20, 80, 3, 0, 1); put_sprite(&GB, 1, 2, 70, 80, 3, 0, 1);
+   { int i; for (i = 0; i < 8; i++) ((uint16_t*)GB.CharacterRAM)[1*8 + i] = 0xAAAA; }   /* B 의 타일 1 그림만 바꾼다 (A 는 0x5555) */
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   CHECK(lit(fb, 20, 80) && !lit(fb, 19, 80) && lit(fb, 70, 80), "sanity: mdfn(B) tile1 at 20, tile2 at 70");
+   RENDER(128);
+   CHECK(lit(fm, 20, 80) && lit(fm, 27, 80) && !lit(fm, 28, 80) && !lit(fm, 19, 80), "tile content changed: piece must stay at base x=20..27 (not mid 15)");
+   CHECK(fm[80*160+20] == fb[80*160+20], "tile content changed: base(B) picture is drawn");
+   CHECK(lit(fm, 65, 80) && lit(fm, 72, 80) && !lit(fm, 64, 80) && !lit(fm, 73, 80), "tile content same: piece interpolated to x=65..72");
    printf("4 체인: %s\n", fails == f0 ? "통과" : "실패");
 }
 

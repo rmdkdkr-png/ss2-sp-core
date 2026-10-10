@@ -201,16 +201,40 @@ static void draw_scroll(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *sca
 }
 
 /* ── 스프라이트 이동량 표 (프레임 쌍마다 한 번) ──
-   base 의 슬롯 i 가 to 에서 같은 물체(타일·플립·우선순위·팔레트 동일, 이동 ≤ 임계)면 그 이동량.
-   체인으로 묶인 그룹(메타스프라이트)은 일치한 조각들의 이동량이 서로 1px 안에 모이고 절반 이상
-   일치하면 그 값을 그룹 벡터로 삼아, 타일이 바뀐(애니메이션) 조각도 같이 움직인다. */
+   슬롯 i 가 base·to 에서 같은 속성어(타일·플립·우선순위·팔레트)이고 이동 ≤ 임계면 후보 이동량.
+   단, 같은 프레임 안에서 둘 이상 쓰이는 타일(빈 타일·반복 무늬·대칭 조각)은 다른 조각이 같은 슬롯에
+   들어온 것일 수 있어 믿지 않는다 — 두 프레임 모두에서 한 번만 쓰인 타일만 「같은 조각」으로 친다.
+   또 타일 번호가 같아도 **그림(문자 RAM 16바이트)이 바뀌었으면** 다른 조각이다 — 사무쇼2는 포즈가 바뀔 때
+   슬롯·타일 번호는 그대로 두고 그 번호에 새 그림을 올려 쓰므로(체인은 안 씀), 번호만 보면 포즈 교대 프레임마다
+   옛 그림이 새 배치의 중간 자리에 찍혀 깨진다(실기 보고: 뉴트럴 숨쉬기에서 두드러짐).
+   체인으로 묶인 그룹(메타스프라이트)은 **강체**다: 믿을 수 있는 조각들의 이동량 중 가장 많이 모인
+   값(±1px) 하나를 그룹 벡터로 삼아 그룹의 모든 조각을 그 벡터로만 옮긴다(과반이 안 모이면 그룹 전체
+   정지). 포즈가 바뀌어 조각이 재배치되는 프레임(숨쉬기·공격)에서 조각이 흩어지지 않는다 — 몸 전체의
+   이동만 보간하고 포즈는 base 그대로. 체인 밖 단독 스프라이트는 믿을 수 있는 후보일 때만 움직인다. */
 typedef struct { int16_t dx, dy; uint8_t has; } fg_move;
+
+static int16_t round_div(int sum, int n)
+{
+   return (int16_t)(sum >= 0 ? (2 * sum + n) / (2 * n) : -((-2 * sum + n) / (2 * n)));
+}
 
 static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move mv[64])
 {
    const ss2fg_regs *rb = &base->line[0], *rt = &to->line[0];
+   uint8_t cnt_b[512], cnt_t[512];
+   fg_move cand[64];
    int i, g, gstart;
    memset(mv, 0, 64 * sizeof *mv);
+   memset(cand, 0, sizeof cand);
+   memset(cnt_b, 0, sizeof cnt_b);
+   memset(cnt_t, 0, sizeof cnt_t);
+
+   for (i = 0; i < 64; i++)
+   {
+      uint16_t db = ld16(base->spr + i * 4), dt = ld16(to->spr + i * 4);
+      if ((db & 0x1800) && cnt_b[db & 0x1FF] < 255) cnt_b[db & 0x1FF]++;
+      if ((dt & 0x1800) && cnt_t[dt & 0x1FF] < 255) cnt_t[dt & 0x1FF]++;
+   }
 
    for (i = 0; i < 64; i++)
    {
@@ -218,40 +242,52 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       int bx, by, tx, ty, dx, dy;
       if (!(db & 0x1800) || !(dt & 0x1800)) continue;          /* 둘 다 보여야 */
       if (db != dt || base->sprcol[i] != to->sprcol[i]) continue;
+      if (cnt_b[db & 0x1FF] != 1 || cnt_t[db & 0x1FF] != 1) continue;   /* 공용 타일 — 같은 조각이란 보장이 없다 */
+      if (memcmp(base->chr + (db & 0x1FF) * 16, to->chr + (db & 0x1FF) * 16, 16) != 0)
+         continue;                                                 /* 타일 그림이 바뀌었다(포즈 교대: 같은 번호에 새 그림을 올려 씀) — 다른 조각이다 */
       bx = wrapx(base->ax[i] + rb->spx); by = wrapc(base->ay[i] + rb->spy);
       tx = wrapx(to->ax[i]   + rt->spx); ty = wrapc(to->ay[i]   + rt->spy);
       dx = tx - bx; dy = ty - by;
       if (dx > SS2FG_SPR_MAX_STEP || dx < -SS2FG_SPR_MAX_STEP ||
           dy > SS2FG_SPR_MAX_STEP || dy < -SS2FG_SPR_MAX_STEP) continue;
-      mv[i].dx = (int16_t)dx; mv[i].dy = (int16_t)dy; mv[i].has = 1;
+      cand[i].dx = (int16_t)dx; cand[i].dy = (int16_t)dy; cand[i].has = 1;
    }
 
    /* 체인 그룹: 슬롯 k 에 체인 비트(0x0600)가 있으면 k-1 과 같은 그룹 */
    for (gstart = 0; gstart < 64; gstart = g)
    {
-      int n = 0, m = 0, k;
-      int minx = 999, maxx = -999, miny = 999, maxy = -999;
+      int voters[64], nv = 0, k, a, best = -1, bestn = 0, sumx = 0, sumy = 0;
       for (g = gstart + 1; g < 64; g++)
          if (!(ld16(base->spr + g * 4) & 0x0600)) break;
-      if (g - gstart < 2) continue;
-      for (k = gstart; k < g; k++)
+      if (g - gstart < 2)
       {
-         if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
-         n++;
-         if (!mv[k].has) continue;
-         m++;
-         if (mv[k].dx < minx) minx = mv[k].dx;
-         if (mv[k].dx > maxx) maxx = mv[k].dx;
-         if (mv[k].dy < miny) miny = mv[k].dy;
-         if (mv[k].dy > maxy) maxy = mv[k].dy;
+         if (cand[gstart].has) mv[gstart] = cand[gstart];       /* 단독 스프라이트 */
+         continue;
       }
-      if (m == 0 || m * 2 < n) continue;                        /* 절반 미만 일치 → 믿지 않는다 */
-      if (maxx - minx > 1 || maxy - miny > 1) continue;         /* 조각이 제각각 → 그룹 벡터 없음 */
       for (k = gstart; k < g; k++)
-         if (!mv[k].has && (ld16(base->spr + k * 4) & 0x1800))
+         if (cand[k].has) voters[nv++] = k;
+      if (nv == 0) continue;                                    /* 믿을 조각이 없다 → 그룹 정지 */
+      for (a = 0; a < nv; a++)
+      {
+         int n = 0, b;
+         for (b = 0; b < nv; b++)
          {
-            mv[k].dx = (int16_t)((minx + maxx) >= 0 ? (minx + maxx + 1) / 2 : -((-(minx + maxx) + 1) / 2));
-            mv[k].dy = (int16_t)((miny + maxy) >= 0 ? (miny + maxy + 1) / 2 : -((-(miny + maxy) + 1) / 2));
+            int ddx = cand[voters[b]].dx - cand[voters[a]].dx, ddy = cand[voters[b]].dy - cand[voters[a]].dy;
+            if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) n++;
+         }
+         if (n > bestn) { bestn = n; best = a; }
+      }
+      if (nv >= 2 && bestn * 2 <= nv) continue;                 /* 과반이 안 모인다 → 그룹 정지 */
+      for (a = 0; a < nv; a++)
+      {
+         int ddx = cand[voters[a]].dx - cand[voters[best]].dx, ddy = cand[voters[a]].dy - cand[voters[best]].dy;
+         if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) { sumx += cand[voters[a]].dx; sumy += cand[voters[a]].dy; }
+      }
+      for (k = gstart; k < g; k++)
+         if (ld16(base->spr + k * 4) & 0x1800)
+         {
+            mv[k].dx = round_div(sumx, bestn);
+            mv[k].dy = round_div(sumy, bestn);
             mv[k].has = 1;
          }
    }
