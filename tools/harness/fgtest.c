@@ -259,15 +259,39 @@ static void t_chain(void)
    RENDER(128);
    CHECK(lit(fm, 10, 26) && lit(fm, 17, 26) && lit(fm, 26, 10) && lit(fm, 33, 10) && !lit(fm, 18, 18) && !lit(fm, 26, 18) && !lit(fm, 21, 21),
          "shared-tile pose swap: pieces must stay at base, not at midpoints");
-   /* 체인 밖 단독 스프라이트: 공용 타일 둘이 자리를 바꾸면 정지, 고유 타일은 보간 */
+   /* 같은 자리 바꿈 + 앵커가 10px 옮겨감: 공용 타일은 표를 못 내고 앵커(-10)만 → 그룹 전체 -5 로 base 포즈째 이동
+      (공용 타일 제외가 없으면 표가 셋으로 갈려 그룹이 멈춘다) */
    ss2fg_reset();
-   base_state(&GA); put_sprite(&GA, 0, 2, 10, 40, 3, 0, 1); put_sprite(&GA, 1, 2, 50, 40, 3, 0, 1); put_sprite(&GA, 2, 3, 100, 40, 3, 0, 1);
-   base_state(&GB); put_sprite(&GB, 0, 2, 50, 40, 3, 0, 1); put_sprite(&GB, 1, 2, 10, 40, 3, 0, 1); put_sprite(&GB, 2, 3, 110, 40, 3, 0, 1);
+   base_state(&GA); put_sprite(&GA, 0, 1, 10, 10, 3, 0, 1); put_sprite(&GA, 1, 2, 16, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GA, 2, 2, 0, 16, 3, 0x0400 | 0x0200, 1);
+   base_state(&GB); put_sprite(&GB, 0, 1, 20, 10, 3, 0, 1); put_sprite(&GB, 1, 2, 0, 16, 3, 0x0400 | 0x0200, 1); put_sprite(&GB, 2, 2, 16, -16, 3, 0x0400 | 0x0200, 1);
    frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
    RENDER(128);
-   CHECK(lit(fm, 10, 40) && lit(fm, 17, 40) && lit(fm, 50, 40) && lit(fm, 57, 40) && !lit(fm, 30, 40) && !lit(fm, 37, 40),
-         "standalone shared tile swap: must stay at base, not midpoint x=30");
+   CHECK(lit(fm, 15, 10) && !lit(fm, 14, 10) && lit(fm, 15, 26) && lit(fm, 22, 26) && !lit(fm, 23, 26) && lit(fm, 31, 10) && lit(fm, 38, 10) && !lit(fm, 39, 10),
+         "shared-tile swap with moving anchor: whole group at base pose shifted -5 (anchor votes alone)");
+   /* 체인 밖 단독 스프라이트: 공용 타일 둘이 자리를 바꾸면(이동 ≤ 임계 안에서) 정지, 고유 타일은 보간 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 2, 10, 40, 3, 0, 1); put_sprite(&GA, 1, 2, 30, 40, 3, 0, 1); put_sprite(&GA, 2, 3, 100, 40, 3, 0, 1);
+   base_state(&GB); put_sprite(&GB, 0, 2, 30, 40, 3, 0, 1); put_sprite(&GB, 1, 2, 10, 40, 3, 0, 1); put_sprite(&GB, 2, 3, 110, 40, 3, 0, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 10, 40) && lit(fm, 17, 40) && lit(fm, 30, 40) && lit(fm, 37, 40) && !lit(fm, 18, 40) && !lit(fm, 20, 40) && !lit(fm, 27, 40) && !lit(fm, 29, 40),
+         "standalone shared tile swap (|d|=20 < step): must stay at base, not midpoint x=20..27");
    CHECK(lit(fm, 105, 40) && lit(fm, 112, 40) && !lit(fm, 104, 40) && !lit(fm, 113, 40), "standalone unique tile: mid x=105..112");
+   /* 공용 타일이라도 그 번호를 쓰는 조각들이 모두 같은 벡터로 움직이면(몸이 통째로) 믿는다 — 걷기에서 몸이 갈라지지 않게 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 1, 10, 50, 3, 0, 1); put_sprite(&GA, 1, 2, 18, 50, 3, 0, 1); put_sprite(&GA, 2, 2, 26, 50, 3, 0x8000, 1); put_sprite(&GA, 3, 3, 34, 50, 3, 0, 1);
+   base_state(&GB); put_sprite(&GB, 0, 1, 18, 50, 3, 0, 1); put_sprite(&GB, 1, 2, 26, 50, 3, 0, 1); put_sprite(&GB, 2, 2, 34, 50, 3, 0x8000, 1); put_sprite(&GB, 3, 3, 42, 50, 3, 0, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 14, 50) && lit(fm, 45, 50) && !lit(fm, 13, 50) && !lit(fm, 46, 50) && lit(fm, 22, 50) && lit(fm, 30, 50) && lit(fm, 38, 50),
+         "shared tile moving as one body: all four pieces at mid (14..45 contiguous)");
+   /* 공용 타일 중 하나가 빠지면(to 에서 사용 수가 다름) 그 번호의 조각은 전부 정지 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 2, 10, 56, 3, 0, 1); put_sprite(&GA, 1, 2, 60, 56, 3, 0, 1);
+   base_state(&GB); put_sprite(&GB, 0, 2, 20, 56, 3, 0, 1); put_sprite(&GB, 1, 2, 70, 56, 3, 0, 1); put_sprite(&GB, 2, 2, 120, 56, 3, 0, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 20, 56) && !lit(fm, 15, 56) && lit(fm, 70, 56) && !lit(fm, 65, 56), "shared tile count differs between frames: pieces stay at base");
    /* 강체 덮어쓰기: 3조각 중 둘은 -10, 셋째(고유 타일)는 포즈가 바뀌어 -14 → 과반 -10 으로 셋 다 -5 */
    ss2fg_reset();
    base_state(&GA); put_sprite(&GA, 0, 1, 10, 60, 3, 0, 1); put_sprite(&GA, 1, 2, 8, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GA, 2, 3, 8, 0, 3, 0x0400 | 0x0200, 1);

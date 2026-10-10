@@ -203,7 +203,8 @@ static void draw_scroll(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *sca
 /* ── 스프라이트 이동량 표 (프레임 쌍마다 한 번) ──
    슬롯 i 가 base·to 에서 같은 속성어(타일·플립·우선순위·팔레트)이고 이동 ≤ 임계면 후보 이동량.
    단, 같은 프레임 안에서 둘 이상 쓰이는 타일(빈 타일·반복 무늬·대칭 조각)은 다른 조각이 같은 슬롯에
-   들어온 것일 수 있어 믿지 않는다 — 두 프레임 모두에서 한 번만 쓰인 타일만 「같은 조각」으로 친다.
+   들어온 것일 수 있다 — 그 번호를 쓰는 조각들이 모두 같은 이동량일 때만(몸이 통째로 옮겨감) 믿고,
+   아니면(자리 바꿈·일부만 바뀜) 그 번호의 조각은 전부 버린다.
    또 타일 번호가 같아도 **그림(문자 RAM 16바이트)이 바뀌었으면** 다른 조각이다 — 사무쇼2는 포즈가 바뀔 때
    슬롯·타일 번호는 그대로 두고 그 번호에 새 그림을 올려 쓰므로(체인은 안 씀), 번호만 보면 포즈 교대 프레임마다
    옛 그림이 새 배치의 중간 자리에 찍혀 깨진다(실기 보고: 뉴트럴 숨쉬기에서 두드러짐).
@@ -242,7 +243,6 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       int bx, by, tx, ty, dx, dy;
       if (!(db & 0x1800) || !(dt & 0x1800)) continue;          /* 둘 다 보여야 */
       if (db != dt || base->sprcol[i] != to->sprcol[i]) continue;
-      if (cnt_b[db & 0x1FF] != 1 || cnt_t[db & 0x1FF] != 1) continue;   /* 공용 타일 — 같은 조각이란 보장이 없다 */
       if (memcmp(base->chr + (db & 0x1FF) * 16, to->chr + (db & 0x1FF) * 16, 16) != 0)
          continue;                                                 /* 타일 그림이 바뀌었다(포즈 교대: 같은 번호에 새 그림을 올려 씀) — 다른 조각이다 */
       bx = wrapx(base->ax[i] + rb->spx); by = wrapc(base->ay[i] + rb->spy);
@@ -251,6 +251,32 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       if (dx > SS2FG_SPR_MAX_STEP || dx < -SS2FG_SPR_MAX_STEP ||
           dy > SS2FG_SPR_MAX_STEP || dy < -SS2FG_SPR_MAX_STEP) continue;
       cand[i].dx = (int16_t)dx; cand[i].dy = (int16_t)dy; cand[i].has = 1;
+   }
+
+   /* 공용 타일(같은 프레임에서 둘 이상 쓰이는 번호)은 다른 조각이 같은 슬롯에 들어온 것일 수 있다. 그 번호를 쓰는
+      보이는 조각들이 **모두** 후보이고 **같은 이동량**이면(몸이 통째로 옮겨감) 믿고, 하나라도 다르거나 빠지면
+      (자리 바꿈·일부만 바뀜) 그 번호의 조각은 전부 버린다. to 쪽 사용 수가 다르면 조각이 생기거나 사라진 것 — 버린다 */
+   for (i = 0; i < 64; i++)
+   {
+      uint16_t db; int t, j, ok;
+      if (!cand[i].has) continue;
+      db = ld16(base->spr + i * 4); t = db & 0x1FF;
+      if (cnt_b[t] == 1 && cnt_t[t] == 1) continue;
+      ok = (cnt_b[t] == cnt_t[t]);
+      for (j = 0; ok && j < 64; j++)
+      {
+         uint16_t dj = ld16(base->spr + j * 4);
+         if (j == i || !(dj & 0x1800) || (dj & 0x1FF) != t) continue;
+         if (!cand[j].has || cand[j].dx != cand[i].dx || cand[j].dy != cand[i].dy) ok = 0;
+      }
+      if (!ok)
+      {  /* 이 번호의 조각 전부를 버린다(i 뒤의 조각도 같은 판정이 나오지만 앞의 조각은 이미 지나갔으니 여기서 지운다) */
+         for (j = 0; j < 64; j++)
+         {
+            uint16_t dj = ld16(base->spr + j * 4);
+            if ((dj & 0x1800) && (dj & 0x1FF) == t) cand[j].has = 0;
+         }
+      }
    }
 
    /* 체인 그룹: 슬롯 k 에 체인 비트(0x0600)가 있으면 k-1 과 같은 그룹 */
