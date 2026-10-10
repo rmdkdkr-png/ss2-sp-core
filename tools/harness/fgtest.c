@@ -104,6 +104,10 @@ static int same(const uint16_t *a, const uint16_t *b) { return memcmp(a, b, SCRE
 static int first_diff(const uint16_t *a, const uint16_t *b)
 { int i; for (i = 0; i < SCREEN_WIDTH*SCREEN_HEIGHT; i++) if (a[i] != b[i]) return i; return -1; }
 static int lit(const uint16_t *f, int x, int y) { return f[y*SCREEN_WIDTH + x] != 0; }
+static void dump_row(const uint16_t *f, int y)
+{  int x, in = 0; printf("    row %d lit runs:", y);
+   for (x = 0; x <= SCREEN_WIDTH; x++) { int l = x < SCREEN_WIDTH && lit(f, x, y); if (l && !in) { printf(" %d", x); in = 1; } else if (!l && in) { printf("..%d", x - 1); in = 0; } }
+   printf("\n"); }
 
 static uint16_t fa[SCREEN_WIDTH*SCREEN_HEIGHT], fb[SCREEN_WIDTH*SCREEN_HEIGHT], fm[SCREEN_WIDTH*SCREEN_HEIGHT];
 static ngpgfx_t GA, GB, GM;
@@ -340,6 +344,61 @@ static void t_chain(void)
    printf("4 체인: %s\n", fails == f0 ? "통과" : "실패");
 }
 
+/* 체인 없는 무리(사무쇼2 방식): 같은 우선순위·팔레트의 인접 연속 슬롯 = 한 캐릭터, 강체 */
+static void t_cluster(void)
+{
+   int f0 = fails, i;
+#define SOLID48(g) do { int t_, r_; for (t_ = 4; t_ <= 8; t_++) for (r_ = 0; r_ < 8; r_++) ((uint16_t*)(g)->CharacterRAM)[t_*8 + r_] = 0xFFFF; } while (0)   /* 타일 4..8 도 단색으로 */
+   /* 3x2 조각 몸이 +8 걷는 중 포즈 교대: 조각 둘(타일 3·6)은 그림이 바뀜 → 그래도 몸 벡터(-8 → 중점 -4)로 함께 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 40 + (i / 3) * 8, 3, 0, 2); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 40 + (i / 3) * 8, 3, 0, 2); }
+   for (i = 0; i < 8; i++) { ((uint16_t*)GB.CharacterRAM)[3*8 + i] = 0x5555; ((uint16_t*)GB.CharacterRAM)[6*8 + i] = 0xAAAA; }   /* B 의 타일 3·6 그림 교체 */
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 24, 40) && !lit(fm, 23, 40) && lit(fm, 47, 40) && !lit(fm, 48, 40) && lit(fm, 24, 48) && lit(fm, 47, 48) && !lit(fm, 48, 48),
+         "cluster rigid: all six pieces (incl. 2 with changed tiles) at mid x=24..47 rows 40 and 48");
+   CHECK(fm[40*160+40] == fb[40*160+44] && fm[48*160+40] == fb[48*160+44], "cluster rigid: changed pieces keep base(B) picture");
+   /* 표가 둘로 갈리면(-8 둘, +8 둘) 무리 정지: base(B) 28,36,44,52 ← to(A) 20,28,52,60 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   for (i = 0; i < 4; i++) { put_sprite(&GA, i, 1 + i, (i < 2 ? 20 : 52) + (i % 2) * 8, 60, 3, 0, 2); put_sprite(&GB, i, 1 + i, 28 + i * 8, 60, 3, 0, 2); }
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 28, 60) && !lit(fm, 27, 60) && lit(fm, 59, 60) && !lit(fm, 60, 60), "cluster split votes 2:2: whole cluster static at base (B) 28..59");
+   if (getenv("FGTEST_V")) { dump_row(fb, 60); dump_row(fm, 60); }
+   /* 표가 하나뿐이면(여섯 중 하나만 그림 같음) 무리 정지 — 한 조각(관절)이 몸을 끌지 않는다 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 80 + (i / 3) * 8, 3, 0, 2); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 80 + (i / 3) * 8, 3, 0, 2); }
+   for (i = 0; i < 8; i++) { int t; for (t = 2; t <= 6; t++) ((uint16_t*)GB.CharacterRAM)[t*8 + i] ^= 0x5555; }   /* 타일 1 만 그대로 (XOR 0x5555: 단색 타일이 다른 단색이 됨, 투명 없음) */
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 28, 80) && !lit(fm, 27, 80) && lit(fm, 51, 88) && !lit(fm, 52, 88), "cluster single voter: static at base x=28..51");
+   /* 팔레트가 다른 인접 몸은 다른 무리 — 각자 움직인다 (pal 2 는 +8, pal 3 은 -8) */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   for (i = 0; i < 2; i++) { put_sprite(&GA, i, 1 + i, 20 + i * 8, 100, 3, 0, 2); put_sprite(&GB, i, 1 + i, 28 + i * 8, 100, 3, 0, 2); }
+   for (i = 2; i < 4; i++) { put_sprite(&GA, i, 1 + i, 60 + (i - 2) * 8, 100, 3, 0, 3); put_sprite(&GB, i, 1 + i, 52 + (i - 2) * 8, 100, 3, 0, 3); }
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 24, 100) && !lit(fm, 23, 100) && lit(fm, 39, 100) && !lit(fm, 40, 100) && lit(fm, 56, 100) && !lit(fm, 55, 100) && lit(fm, 71, 100) && !lit(fm, 72, 100),
+         "two clusters by palette move independently: 24..39 and 56..71");
+   if (getenv("FGTEST_V")) { dump_row(fb, 100); dump_row(fm, 100); }
+   /* 16px 넘게 떨어진 같은 팔레트 조각은 다른 무리 (투사체): 혼자 보간 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB); SOLID48(&GA); SOLID48(&GB);
+   for (i = 0; i < 3; i++) { put_sprite(&GA, i, 1 + i, 20 + i * 8, 120, 3, 0, 2); put_sprite(&GB, i, 1 + i, 20 + i * 8, 120, 3, 0, 2); }
+   put_sprite(&GA, 3, 4, 100, 120, 3, 0, 2); put_sprite(&GB, 3, 4, 116, 120, 3, 0, 2);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 108, 120) && lit(fm, 115, 120) && !lit(fm, 107, 120) && !lit(fm, 116, 120) && lit(fm, 20, 120) && !lit(fm, 19, 120),
+         "far piece is its own cluster: projectile at mid 108..115, body static at 20");
+   if (getenv("FGTEST_V")) { dump_row(fb, 120); dump_row(fm, 120); }
+   printf("4b 무리(체인 없음): %s\n", fails == f0 ? "통과" : "실패");
+#undef SOLID48
+}
+
 static void t_scrollwrap(void)
 {
    int f0 = fails, i;
@@ -483,7 +542,7 @@ static void t_raster(void)
 
 int main(void)
 {
-   t_equiv(); t_mid(); t_snap(); t_chain(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster();
+   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster();
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

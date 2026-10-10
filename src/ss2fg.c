@@ -279,17 +279,80 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       }
    }
 
+   /* 무리(체인 비트 없는 메타스프라이트 — 사무쇼2 방식): 우선순위·팔레트가 같고 지금까지의 무리 테두리에서
+      16px 안에 붙는 연속 슬롯을 한 캐릭터로 본다(PocketCore 방의 ss2fg_consensus.patch 에서 가져온 묶음 규칙).
+      무리는 강체다: 그림이 같은(믿을 수 있는) 조각들의 최빈 이동량 하나로 **포즈가 바뀐 조각까지** 함께 옮긴다 —
+      걷는 중 포즈 교대 프레임에도 몸은 계속 움직이고 조각은 흩어지지 않는다. 표가 둘 미만이거나 과반이 안 되거나
+      보이는 조각의 1/4 에 못 미치면 무리 전체 정지. 체인 비트가 섞인 구간은 아래 체인 규칙에 맡긴다. */
+   for (gstart = 0; gstart < 64; gstart = g)
+   {
+      uint16_t w0 = ld16(base->spr + gstart * 4);
+      int voters[64], nv = 0, nvis = 0, k, a, best = -1, bestn = 0, sumx = 0, sumy = 0, any_chain = (w0 & 0x0600) != 0;
+      int bx0 = base->ax[gstart], bx1 = base->ax[gstart] + 8, by0 = base->ay[gstart], by1 = base->ay[gstart] + 8;
+      if (any_chain) { g = gstart + 1; continue; }             /* 체인 비트가 달린 슬롯은 체인 규칙 몫 */
+      if (gstart + 1 < 64 && (ld16(base->spr + (gstart + 1) * 4) & 0x0600))
+      {  /* 다음 슬롯이 체인 → 이 슬롯은 체인 그룹의 앵커다. 앵커와 그 체인은 아래 체인 규칙이 다룬다 */
+         for (g = gstart + 1; g < 64 && (ld16(base->spr + g * 4) & 0x0600); g++) ;
+         continue;
+      }
+      for (g = gstart + 1; g < 64; g++)
+      {
+         uint16_t w = ld16(base->spr + g * 4);
+         int sx = base->ax[g], sy = base->ay[g];
+         if (w & 0x0600) break;                                  /* 체인 시작(앞 슬롯 g-1 이 앵커) — 아래에서 떼어 낸다 */
+         if ((w & 0x1800) != (w0 & 0x1800) || base->sprcol[g] != base->sprcol[gstart]) break;
+         if (sx + 8 < bx0 - 16 || sx > bx1 + 16 || sy + 8 < by0 - 16 || sy > by1 + 16) break;
+         if (sx < bx0) bx0 = sx;
+         if (sx + 8 > bx1) bx1 = sx + 8;
+         if (sy < by0) by0 = sy;
+         if (sy + 8 > by1) by1 = sy + 8;
+      }
+      if (g < 64 && (ld16(base->spr + g * 4) & 0x0600) && g - 1 > gstart)
+         g--;                                                    /* 체인 앵커(g-1)는 무리에서 뺀다 — 다음 반복이 앵커로 시작해 위에서 건너뛴다 */
+      for (k = gstart; k < g; k++)
+      {
+         if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
+         nvis++;
+         if (cand[k].has) voters[nv++] = k;
+      }
+      if (nvis < 2)
+      {
+         for (k = gstart; k < g; k++) if (cand[k].has) mv[k] = cand[k];   /* 단독 스프라이트 */
+         continue;
+      }
+      if (nv == 0) continue;                                    /* 믿을 조각이 없다(포즈 전체 교체) → 무리 정지 */
+      for (a = 0; a < nv; a++)
+      {
+         int n = 0, b;
+         for (b = 0; b < nv; b++)
+         {
+            int ddx = cand[voters[b]].dx - cand[voters[a]].dx, ddy = cand[voters[b]].dy - cand[voters[a]].dy;
+            if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) n++;
+         }
+         if (n > bestn) { bestn = n; best = a; }
+      }
+      if (bestn < 2 || bestn * 2 <= nv || bestn * 4 < nvis) continue;   /* 표 부족 → 무리 정지 */
+      for (a = 0; a < nv; a++)
+      {
+         int ddx = cand[voters[a]].dx - cand[voters[best]].dx, ddy = cand[voters[a]].dy - cand[voters[best]].dy;
+         if (ddx >= -1 && ddx <= 1 && ddy >= -1 && ddy <= 1) { sumx += cand[voters[a]].dx; sumy += cand[voters[a]].dy; }
+      }
+      for (k = gstart; k < g; k++)
+         if (ld16(base->spr + k * 4) & 0x1800)
+         {
+            mv[k].dx = round_div(sumx, bestn);
+            mv[k].dy = round_div(sumy, bestn);
+            mv[k].has = 1;
+         }
+   }
+
    /* 체인 그룹: 슬롯 k 에 체인 비트(0x0600)가 있으면 k-1 과 같은 그룹 */
    for (gstart = 0; gstart < 64; gstart = g)
    {
       int voters[64], nv = 0, k, a, best = -1, bestn = 0, sumx = 0, sumy = 0;
       for (g = gstart + 1; g < 64; g++)
          if (!(ld16(base->spr + g * 4) & 0x0600)) break;
-      if (g - gstart < 2)
-      {
-         if (cand[gstart].has) mv[gstart] = cand[gstart];       /* 단독 스프라이트 */
-         continue;
-      }
+      if (g - gstart < 2) continue;                              /* 단독 슬롯은 위 무리 규칙이 처리했다 */
       for (k = gstart; k < g; k++)
          if (cand[k].has) voters[nv++] = k;
       if (nv == 0) continue;                                    /* 믿을 조각이 없다 → 그룹 정지 */
