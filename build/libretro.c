@@ -649,6 +649,88 @@ static int fg_predict4(void)
    return 1;
 }
 
+/* 4배 «반반» — 보간 모드용. 한 프레임만 미리 돌리고(N+1) 화면은 반 프레임 늦게(지금의 보간과 같은 +8ms) 보여 준다.
+   사무쇼2 는 캐릭터·배경이 2 프레임마다 바뀌므로, 반 프레임 늦게 보여 주면 «다음 바뀌는 프레임»이 항상 N 이나 N+1 —
+   한 프레임 예측으로 늘 알 수 있다(순수 보간은 최대 2 프레임 기다려야 해서 +33ms). N+1 위치 예측은 실측 100% 적중
+   (게임이 입력을 한 프레임 늦게 반영). 실제 호출에 τ=N-½ 를 surf 에, 합성 호출용 τ=N 을 fg_next 에 만든다. */
+static unsigned fg_prev_spr = 0, fg_prev_scr = 0;   /* 그 앞번 바뀐 때 (반반 모드가 τ=N-½ 에 쓴다) */
+static int fg_tlk(int tau2, int L, int K)            /* 반 프레임 단위 τ2, 프레임 단위 L·K → 0..256 */
+{
+   if (K <= L) return 0;
+   return (256 * (tau2 - 2 * L)) / (2 * (K - L));
+}
+static int fg_hybrid4(void)
+{
+   StateMem st;
+   EmulateSpecStruct ps;
+   uint8_t extras[8];
+   int iline_save, ok, mp, mn;
+   int lcS, pcS, lcB, pcB, K, L, ts, tb;
+   const ss2fg_frame *fm1, *f0, *f1, *tos, *tob;
+
+   fg_realn++;
+   f0 = ss2fg_hist(0); fm1 = ss2fg_hist(1);
+   if (!f0 || !fm1) return 0;
+   mp = ss2fg_motion(fm1, f0);                          /* N-1→N */
+   if (mp & 1) { fg_prev_spr = fg_last_spr; fg_last_spr = fg_realn; }
+   if (mp & 2) { fg_prev_scr = fg_last_scr; fg_last_scr = fg_realn; }
+
+   memset(&st, 0, sizeof st);
+   st.data     = fg_state;
+   st.malloced = fg_state_cap;
+   fg_state_skip = FG_SKIP_SND | FG_SKIP_FLASH;
+   ok = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
+   fg_state     = st.data;
+   fg_state_cap = st.malloced;
+   if (!ok) { fg_state_skip = 0; return 0; }
+   ngp_mem_fg_extras(extras, 0);
+   iline_save = iline;
+   memset(&ps, 0, sizeof ps);
+   ps.surface         = surf;
+   ps.DisplayRect.w   = FB_WIDTH;
+   ps.DisplayRect.h   = FB_HEIGHT;
+   ps.SoundBufMaxSize = sizeof(fg_scratch_snd) / 2;
+   ngp_fg_mute = 1; ngp_fg_predict = 1;
+   Emulate(&ps, fg_scratch_snd);                        /* N+1 (입력은 마지막 실제 값 그대로) */
+   ngp_fg_mute = 0; ngp_fg_predict = 0;
+
+   f1 = ss2fg_hist(0); f0 = ss2fg_hist(1); fm1 = ss2fg_hist(2);
+   mn = ss2fg_motion(f0, f1);                           /* N→N+1 (예측) */
+
+   /* 바뀐 때 — N 기준 상대값(≤0). 아주 옛날이면 -9 로 눌러 둔다(어차피 K-2 로 잘린다) */
+   lcS = (int)fg_last_spr - (int)fg_realn; if (lcS < -9) lcS = -9;
+   pcS = (int)fg_prev_spr - (int)fg_realn; if (pcS < -9) pcS = -9;
+   lcB = (int)fg_last_scr - (int)fg_realn; if (lcB < -9) lcB = -9;
+   pcB = (int)fg_prev_scr - (int)fg_realn; if (pcB < -9) pcB = -9;
+
+   /* τ = N-½ (바탕 = 실제 N-1, 그 위치 = L 의 위치). L = N-1 이하의 마지막 바뀐 때, K = N(이번에 바뀜) 또는 N+1 */
+   tos = tob = 0; ts = tb = 0;
+   K = (mp & 1) ? 0 : (mn & 1) ? 1 : 99;
+   if (K != 99) { L = (mp & 1) ? pcS : lcS; if (L < K - 2) L = K - 2; ts = fg_tlk(-1, L, K); tos = K == 0 ? f0 : f1; }
+   K = (mp & 2) ? 0 : (mn & 2) ? 1 : 99;
+   if (K != 99) { L = (mp & 2) ? pcB : lcB; if (L < K - 2) L = K - 2; tb = fg_tlk(-1, L, K); tob = K == 0 ? f0 : f1; }
+   if (!(ts || tb) || !ss2fg_render2(fm1, tos, ts, tob, tb, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
+   {  /* 옮길 게 없거나 못 그리면 — 지금까지의 보간처럼 N 을 N-1 쪽으로 반 */
+      if (!ss2fg_render(f0, fm1, 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap))
+         memcpy(surf->pixels, fg_real, sizeof fg_real);
+   }
+
+   /* τ = N (바탕 = 실제 N). K = N+1(예측에서 바뀜)이면 L(마지막 바뀐 때, K-2 이상)~K 사이, 아니면 N 그대로 */
+   tos = tob = 0; ts = tb = 0;
+   if (mn & 1) { L = lcS < -1 ? -1 : lcS; ts = fg_tlk(0, L, 1); tos = f1; }
+   if (mn & 2) { L = lcB < -1 ? -1 : lcB; tb = fg_tlk(0, L, 1); tob = f1; }
+   if (!(ts || tb) || !ss2fg_render2(f0, tos, ts, tob, tb, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap))
+      memcpy(fg_next, fg_real, sizeof fg_real);
+
+   st.loc = 0;
+   MDFNSS_LoadSM(&st, 0, 0);
+   fg_state_skip = 0;
+   ngp_mem_fg_extras(extras, 1);
+   iline = iline_save;
+   ss2fg_capture_pop();
+   return 1;
+}
+
 static void check_system_specs(void)
 {
    unsigned level = 0;
@@ -1317,7 +1399,9 @@ void retro_run(void)
       {
          memcpy(fg_real, surf->pixels, sizeof fg_real);           /* 후처리 전 원본 — 합성 실패·보간 모드용 */
          fg_next_ok = 0;
-         if (fg_mode == 1)                                         /* 보간: N 의 그림을 N-1 쪽으로 반 되돌린 자리에 지금, N 은 다음 호출에 */
+         if (fg_mode == 1 && fg_mult == 4 && !hidden && !ngplink_active())
+            fg_next_ok = fg_hybrid4();                             /* 4배 반반: 한 프레임 예측 + 반 프레임 늦게 */
+         else if (fg_mode == 1)                                    /* 보간: N 의 그림을 N-1 쪽으로 반 되돌린 자리에 지금, N 은 다음 호출에 */
             ss2fg_render(ss2fg_cur(), ss2fg_prev(), 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap);
          else if (fg_mult == 4 && !hidden && !ngplink_active())   /* 4배: 지금 그림도 박자에 맞춰 옮겨 그린다 */
             fg_next_ok = fg_predict4();
@@ -1361,6 +1445,8 @@ void retro_run(void)
             memcpy(surf->pixels, fg_real, sizeof fg_real);
          fg_next_ok = 0;
       }
+      else if (fg_next_ok)
+      {  memcpy(surf->pixels, fg_next, sizeof fg_next); fg_next_ok = 0; }   /* 4배 반반: τ=N 그림 */
       else
          memcpy(surf->pixels, fg_real, sizeof fg_real);            /* 보간 모드: 이제 실제 N */
       if (band && ss2comm_band_top())
