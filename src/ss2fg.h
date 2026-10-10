@@ -62,6 +62,9 @@ void ss2fg_reset(void);
 
 const ss2fg_frame *ss2fg_prev(void);       /* 직전 실제 프레임 (없으면 NULL) */
 const ss2fg_frame *ss2fg_cur(void);        /* 마지막 실제 프레임 (없으면 NULL) */
+const ss2fg_frame *ss2fg_hist(int k);      /* k 장 전 캡처 (0 = 마지막, 최대 5) */
+/* a→b 사이 움직임: 비트0 스프라이트, 비트1 스크롤 */
+int ss2fg_motion(const ss2fg_frame *a, const ss2fg_frame *b);
 
 /* ── 합성 ──
  * base 의 그림(타일·팔레트·타일맵·창·배경색)을 그대로 쓰되, 스프라이트·스크롤 위치만 to 쪽으로
@@ -76,6 +79,11 @@ int ss2fg_render(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
 /* 픽셀 폭을 고르는 판 — bpp 2(16비트) 또는 4(32비트, 앱의 RGBA8888 표면). colormap 은 그 포맷의 것 */
 int ss2fg_render_ex(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
                     void *dst, int pitch_px, int bpp, const uint32_t *colormap);
+
+/* 4배(게임 박자 맞춤) — 스프라이트·스크롤의 목표 프레임과 진행도(0..256)를 따로 */
+int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
+                  const ss2fg_frame *to_scr, int t_scr,
+                  void *dst, int pitch_px, int bpp, const uint32_t *colormap);
 
 /* 보간 임계 — 이보다 멀리 뛴 스프라이트/스크롤은 보간하지 않고 b 자리에 둔다(순간이동·장면 전환) */
 #define SS2FG_SPR_MAX_STEP    24

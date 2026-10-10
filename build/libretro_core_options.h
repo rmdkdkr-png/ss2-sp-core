@@ -123,6 +123,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       },
       "predict"
    },
+   {
+      "ngp_framegen_mult",
+      "프레임 생성 배수",
+      NULL,
+      "4배: 사무쇼2 는 캐릭터·배경을 2 프레임에 한 번(초당 30번) 움직이므로, 다음에 바뀌는 프레임까지 미리 돌려 120Hz 네 장에 고르게 나눕니다(예측 방식에서만, 에뮬 계산 약 1.5배). 2배: 실제 프레임마다 반 프레임 지점 하나만 끼웁니다.",
+      NULL,
+      "video",
+      {
+         { "4", "4배 (게임 박자 맞춤)" },
+         { "2", "2배" },
+         { NULL, NULL },
+      },
+      "4"
+   },
    { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
 };
 
@@ -176,6 +190,17 @@ struct retro_core_option_definition option_defs_us[] = {
          { NULL, NULL},
       },
       "predict",
+   },
+   {
+      "ngp_framegen_mult",
+      "프레임 생성 배수",
+      "4배(게임 박자 맞춤, 예측 방식) 또는 2배.",
+      {
+         { "4", NULL },
+         { "2", NULL },
+         { NULL, NULL},
+      },
+      "4",
    },
    { NULL, NULL, NULL, { NULL, NULL }, NULL },
 };

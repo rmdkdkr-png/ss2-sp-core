@@ -606,9 +606,59 @@ static void t_raster(void)
    printf("9 래스터: %s\n", fails == f0 ? "통과" : "실패");
 }
 
+
+/* 4배(게임 박자 맞춤)용 — 스프라이트·스크롤 목표를 따로 주는 render2, 움직임 판정 ss2fg_motion, 캡처 링 ss2fg_hist */
+static void t_four(void)
+{
+   int f0 = fails, i;
+   static uint16_t fr[SCREEN_WIDTH*SCREEN_HEIGHT];
+   /* A: 스프라이트 x=10, 플레인1 스크롤 0 · B: x=20, 스크롤 8. 플레인1 타일맵 열 0·5 에 타일 3·5 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB);
+   for (i = 0; i < 32; i++) { GA.ScrollVRAM[(i*32)*2] = 3; GB.ScrollVRAM[(i*32)*2] = 3; GA.ScrollVRAM[(i*32+5)*2] = 5; GB.ScrollVRAM[(i*32+5)*2] = 5; }
+   put_sprite(&GA, 0, 1, 10, 60, 3, 0, 1); put_sprite(&GB, 0, 1, 20, 60, 3, 0, 1);
+   GA.scroll1x = 0; GB.scroll1x = 8;
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   /* 둘 다 128 = 기존 render 와 같은 그림 */
+   RENDER(128);
+   CHECK(ss2fg_render2(ss2fg_cur(), ss2fg_prev(), 128, ss2fg_prev(), 128, fr, SCREEN_WIDTH, 2, CM) && memcmp(fr, fm, sizeof fr) == 0,
+         "render2(spr 128, scr 128) == render(128)");
+   /* 스프라이트만 반: 스프라이트 x=15, 스크롤은 base(B)=8 그대로 → 스프라이트 줄 밖은 B 와 같다 */
+   CHECK(ss2fg_render2(ss2fg_cur(), ss2fg_prev(), 128, 0, 0, fr, SCREEN_WIDTH, 2, CM), "render2 spr-only ok");
+   CHECK(lit(fr, 15, 60) && lit(fr, 22, 60) && !lit(fr, 14, 60) && !lit(fr, 23, 60), "render2 spr-only: sprite at mid x=15..22");
+   CHECK(memcmp(fr + 100*SCREEN_WIDTH, fb + 100*SCREEN_WIDTH, 20 * SCREEN_WIDTH * 2) == 0, "render2 spr-only: rows 100..119 (no sprite) identical to base(B) scroll");
+   /* 스크롤만 반: 스프라이트는 base(B) x=20, 스크롤은 A·B 중간(4) — 참고 렌더(B 상태에 scroll1x=4)와 스프라이트 없는 줄이 같다 */
+   CHECK(ss2fg_render2(ss2fg_cur(), 0, 0, ss2fg_prev(), 128, fr, SCREEN_WIDTH, 2, CM), "render2 scr-only ok");
+   CHECK(lit(fr, 20, 60) && lit(fr, 27, 60) && !lit(fr, 19, 60) && !lit(fr, 28, 60), "render2 scr-only: sprite stays at base x=20..27");
+   GM = GB; GM.scroll1x = 4; frame_ref(&GM, fa, 0, 0);
+   CHECK(memcmp(fr + 100*SCREEN_WIDTH, fa + 100*SCREEN_WIDTH, 20 * SCREEN_WIDTH * 2) == 0, "render2 scr-only: rows 100..119 equal reference with scroll1x=4");
+   /* ss2fg_motion: 스프라이트 이동 → 비트0, 스크롤 변화 → 비트1 */
+   CHECK(ss2fg_motion(ss2fg_prev(), ss2fg_cur()) == 3, "motion(A,B) == 3 (sprite + scroll)");
+   CHECK(ss2fg_motion(ss2fg_cur(), ss2fg_cur()) == 0, "motion(B,B) == 0");
+   base_state(&GM); for (i = 0; i < 32; i++) { GM.ScrollVRAM[(i*32)*2] = 3; GM.ScrollVRAM[(i*32+5)*2] = 5; }
+   put_sprite(&GM, 0, 1, 20, 60, 3, 0, 1); GM.scroll1x = 12;             /* C: 스프라이트 그대로, 스크롤만 */
+   frame(&GM, fm, 0, 0, 0);
+   CHECK(ss2fg_motion(ss2fg_prev(), ss2fg_cur()) == 2, "motion(B,C) == 2 (scroll only)");
+   GM.scroll1x = 12; put_sprite(&GM, 0, 1, 28, 60, 3, 0, 1);              /* D: 스프라이트만 */
+   frame(&GM, fm, 0, 0, 0);
+   CHECK(ss2fg_motion(ss2fg_prev(), ss2fg_cur()) == 1, "motion(C,D) == 1 (sprite only)");
+   /* 캡처 링: A B C D 가 쌓였다 → hist(0)=D … hist(3)=A, hist(4)=없음. 두 번 무르면 hist(0)=B */
+   CHECK(ss2fg_hist(0) && ss2fg_hist(0)->spr[2] == 28 && ss2fg_hist(1) && ss2fg_hist(1)->spr[2] == 20 && ss2fg_hist(1)->line[0].s1x == 12 &&
+         ss2fg_hist(2) && ss2fg_hist(2)->spr[2] == 20 && ss2fg_hist(2)->line[0].s1x == 8 && ss2fg_hist(3) && ss2fg_hist(3)->spr[2] == 10,
+         "hist(0..3) = D C B A");
+   CHECK(ss2fg_hist(4) == 0 && ss2fg_hist(-1) == 0 && ss2fg_hist(9) == 0, "hist(4) empty, bad index NULL");
+   ss2fg_capture_pop(); ss2fg_capture_pop();
+   CHECK(ss2fg_cur() && ss2fg_cur()->spr[2] == 20 && ss2fg_cur()->line[0].s1x == 8 && ss2fg_prev() && ss2fg_prev()->spr[2] == 10,
+         "after two pops cur=B prev=A");
+   /* 그 뒤 새 캡처가 무른 슬롯을 재사용해도 B·A 가 멀쩡하고, 여섯 장 넘게 쌓으면 가장 오래된 것부터 밀려난다 */
+   for (i = 0; i < 7; i++) { put_sprite(&GM, 0, 1, (uint8_t)(40 + i * 8), 60, 3, 0, 1); frame(&GM, fm, 0, 0, 0); }
+   CHECK(ss2fg_hist(0)->spr[2] == 88 && ss2fg_hist(5) && ss2fg_hist(5)->spr[2] == 48 && ss2fg_hist(6) == 0, "ring keeps 6 most recent (hist(5) = 48, hist(6) empty)");
+   printf("10 4배 — render2·motion·hist: %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(void)
 {
-   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster();
+   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster(); t_four();
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

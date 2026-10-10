@@ -18,7 +18,7 @@
 #include <stdbool.h>
 #include "libretro.h"
 
-static const char *opt_framegen = "auto", *opt_mode = "predict";
+static const char *opt_framegen = "auto", *opt_mode = "predict", *opt_mult = "4";
 static float target_hz = 60.0f;
 static int   av_enable = 3, ss_ctx = 0, var_updated = 0, verbose = 0;
 static double last_fps = 0; static int avinfo_calls = 0;
@@ -35,6 +35,7 @@ static bool env_cb(unsigned cmd, void *data)
          struct retro_variable *v = (struct retro_variable*)data;
          if (!strcmp(v->key, "ngp_framegen"))      { v->value = opt_framegen; return true; }
          if (!strcmp(v->key, "ngp_framegen_mode")) { v->value = opt_mode;     return true; }
+         if (!strcmp(v->key, "ngp_framegen_mult")) { v->value = opt_mult;     return true; }
          v->value = NULL; return false; }
       case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool*)data = var_updated != 0; var_updated = 0; return true;
       case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE: *(float*)data = target_hz; return true;
@@ -175,9 +176,10 @@ static void test_120(const char *rom, const char *mode)
    printf("2 120Hz 목표 → 켜짐·오디오 분배·복귀 (%s): %s\n", mode, fails == f0 ? "통과" : "실패");
 }
 
-static void test_determinism(const char *rom, const char *mode)
+static void test_determinism(const char *rom, const char *mode, const char *mult)
 {
    int f0 = fails; size_t n0, n1; uint8_t *s0, *s1;
+   opt_mult = mult;
    /* A: 2배 출력 없이 400 실제 프레임 */
    target_hz = 60; opt_framegen = "disabled"; opt_mode = mode;
    load_game(rom);
@@ -200,7 +202,8 @@ static void test_determinism(const char *rom, const char *mode)
       CHECK(d == (size_t)-1, "상태가 다르다 — 첫 차이 오프셋 %zu (0x%zx): %02x vs %02x", d, d, s0[d], s1[d]);
    }
    free(s0); free(s1);
-   printf("3 결정성 (%s: 400 실제 프레임 뒤 상태 동일): %s\n", mode, fails == f0 ? "통과" : "실패");
+   printf("3 결정성 (%s ×%s: 400 실제 프레임 뒤 상태 동일): %s\n", mode, mult, fails == f0 ? "통과" : "실패");
+   opt_mult = "4";
 }
 
 static void test_runahead_guard(const char *rom)
@@ -381,8 +384,9 @@ int main(int argc, char **argv)
    test_60(rom);
    test_120(rom, "predict");
    test_120(rom, "interp");
-   test_determinism(rom, "predict");
-   test_determinism(rom, "interp");
+   test_determinism(rom, "predict", "4");   /* 4배: 실제 프레임마다 N+1·N+2 를 미리 돌리고 되돌린다 */
+   test_determinism(rom, "predict", "2");
+   test_determinism(rom, "interp", "4");
    test_runahead_guard(rom);
    test_hidden(rom);
    test_hidden_auto(rom);

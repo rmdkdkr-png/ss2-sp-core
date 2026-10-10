@@ -1,5 +1,7 @@
 /* fgrom — 실제 롬으로 프레임 생성 품질을 잰다 (롬은 저장소 밖에 둔다 — 절대 커밋하지 않는다).
  * 사용: fgrom <core.so> <rom> <workdir> <mode:off|interp|predict> <frames> <script> [dump_every] [metric_from]
+ * 환경: FGROM_MULT=2|4 (프레임 생성 배수, 기본 4) · FGROM_REF=<off 실행 dump_every=1 디렉터리> (출력 프레임을 기준 N·N+1·N+2 와 대조)
+ *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로)
  *   script: "s-e:BTN,..."  BTN 글자: U D L R A B S(option)  예) "200-205:S,400-405:A"
  *   매 합성 프레임: 앞 실제 N, 뒤 실제 N+1 과 비교해 3x3 이웃 어디에도 없는 색의 픽셀 수(=깨진 픽셀) 기록
  */
@@ -12,7 +14,7 @@
 #include "libretro.h"
 #define W 160
 #define H 152
-static const char *opt_framegen = "disabled", *opt_mode = "predict";
+static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4";   /* FGROM_MULT=2|4 */
 static float target_hz = 120.0f;
 static char workdir[1024];
 static uint16_t cur[W*H]; static int have_frame = 0;
@@ -25,6 +27,7 @@ static bool env_cb(unsigned cmd, void *data)
          struct retro_variable *v = (struct retro_variable*)data;
          if (!strcmp(v->key, "ngp_framegen"))      { v->value = opt_framegen; return true; }
          if (!strcmp(v->key, "ngp_framegen_mode")) { v->value = opt_mode;     return true; }
+         if (!strcmp(v->key, "ngp_framegen_mult")) { v->value = opt_mult;     return true; }
          v->value = NULL; return false; }
       case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool*)data = false; return true;
       case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE: *(float*)data = target_hz; return true;
@@ -92,17 +95,27 @@ static int near_has(const uint16_t *fr, int x, int y, uint16_t c)
 static int artifacts(const uint16_t *S, const uint16_t *A, const uint16_t *B)
 {  int x, y, n = 0; for (y = 0; y < H; y++) for (x = 0; x < W; x++) { uint16_t c = S[y*W+x]; if (c == A[y*W+x] || c == B[y*W+x]) continue; if (!near_has(A, x, y, c) && !near_has(B, x, y, c)) n++; } return n; }
 static int differ(const uint16_t *A, const uint16_t *B) { int i, n = 0; for (i = 0; i < W*H; i++) if (A[i] != B[i]) n++; return n; }
+/* 기준 프레임(FGROM_REF=<off 모드 dump_every=1 로 떨어뜨린 디렉터리>): 4배 모드는 실제 호출의 그림도 박자에 맞춰 옮기므로
+   같은 실행 안에 «날것» 실제 프레임이 없다 — off 실행의 f%06d.565 를 기준으로 삼아, 출력 프레임(두 위상 모두)을
+   기준 N·N+1·N+2 의 3x3 이웃과 견준다(목표 K ≤ N+2). 어느 쪽에도 없는 색의 픽셀 수 = 깨짐 후보 */
+static const char *refdir = NULL;
+static int ref_load(int idx, uint16_t *buf)
+{  char p[1200]; FILE *f; size_t n; snprintf(p, sizeof p, "%s/f%06d.565", refdir, idx); f = fopen(p, "rb"); if (!f) return 0; n = fread(buf, 2, W*H, f); fclose(f); return n == (size_t)(W*H); }
+static int artifacts3(const uint16_t *S, const uint16_t *A, const uint16_t *B, const uint16_t *C)
+{  int x, y, n = 0; for (y = 0; y < H; y++) for (x = 0; x < W; x++) { uint16_t c = S[y*W+x]; if (c == A[y*W+x] || c == B[y*W+x] || c == C[y*W+x]) continue; if (!near_has(A, x, y, c) && !near_has(B, x, y, c) && !near_has(C, x, y, c)) n++; } return n; }
 
 int main(int argc, char **argv)
 {
    const char *mode; int frames, dump_every = 0, metric_from = 0, real = 0, calls = 0;
-   static uint16_t R0[W*H], R1[W*H], Sy[W*H]; int haveS = 0, haveR0 = 0, nS = 0; long sumA = 0; int maxA = 0, maxAt = -1, bad = 0; long sumD = 0;
+   static uint16_t R0[W*H], R1[W*H], Sy[W*H], Q0[W*H], Q1[W*H], Q2[W*H]; int haveS = 0, haveR0 = 0, nS = 0; long sumA = 0; int maxA = 0, maxAt = -1, bad = 0; long sumD = 0;
+   long sumR = 0; int nR = 0, maxR = 0, maxRat = -1, maxRph = 0, badR = 0;
    struct retro_game_info gi;
    if (argc < 7) { fprintf(stderr, "사용: fgrom <core.so> <rom> <workdir> <off|interp|predict> <frames> <script> [dump_every] [metric_from]\n"); return 2; }
    snprintf(workdir, sizeof workdir, "%s", argv[3]);
    mode = argv[4]; frames = atoi(argv[5]); parse_script(argv[6]);
    if (argc > 7) dump_every = atoi(argv[7]); if (argc > 8) metric_from = atoi(argv[8]);
    if (!strcmp(mode, "off")) opt_framegen = "disabled"; else { opt_framegen = "enabled"; opt_mode = mode; }
+   { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; refdir = getenv("FGROM_REF"); }
    Hd = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL); if (!Hd) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
    SYM(p_set_environment, "retro_set_environment"); SYM(p_set_video, "retro_set_video_refresh");
    SYM(p_set_audio, "retro_set_audio_sample"); SYM(p_set_audio_batch, "retro_set_audio_sample_batch");
@@ -124,6 +137,16 @@ int main(int argc, char **argv)
       p_fg_state(&act, &ph, 0); is_synth = act && ph == (!strcmp(mode, "interp") ? 0 : 1);
       have_frame = 0; p_run(); calls++;
       if (!have_frame) continue;
+      {  /* 기준 대조·전부 떨어뜨리기 — 출력 프레임마다(두 위상 모두). 합성 호출의 실제 번호는 직전 실제 프레임(real-1) */
+         int idx = is_synth ? real - 1 : real;
+         if (getenv("FGROM_DUMPALL")) { char nm[64]; snprintf(nm, sizeof nm, "o%06d_%d", idx, is_synth ? 1 : 0); dump(nm, cur); }
+         if (refdir && idx >= metric_from && ref_load(idx, Q0) && ref_load(idx + 1, Q1) && ref_load(idx + 2, Q2))
+         {
+            int a = artifacts3(cur, Q0, Q1, Q2); nR++; sumR += a; if (a > 40) badR++;
+            if (a > maxR) { maxR = a; maxRat = idx; maxRph = is_synth; dump("worstR_S", cur); dump("worstR_0", Q0); dump("worstR_1", Q1); dump("worstR_2", Q2); }
+            if (csvf) fprintf(csvf, "R,%d,%d,%d\n", idx, is_synth ? 1 : 0, a);
+         }
+      }
       if (is_synth) { memcpy(Sy, cur, sizeof Sy); haveS = 1; continue; }
       /* 실제 프레임 */
       if (haveR0) { memcpy(R1, cur, sizeof R1);
@@ -139,6 +162,7 @@ int main(int argc, char **argv)
    { const char *st = getenv("FGROM_SAVE"); if (st) { FILE *f = fopen(st, "wb"); size_t n = p_ser_size(); void *b = malloc(n); if (f && p_ser(b, n)) { fwrite(b, 1, n, f); fprintf(stderr, "상태 저장 %s (%zu)\n", st, n); } if (f) fclose(f); free(b); } }
    printf("mode=%s real=%d calls=%d synth_measured=%d artifacts: mean=%.2f max=%d (at real %d) frames>40px=%d  mean|A-B|=%.1f\n",
           mode, real, calls, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0);
+   if (refdir) printf("ref-score(mult=%s): frames=%d mean=%.2f max=%d (at real %d phase %d) frames>40px=%d\n", opt_mult, nR, nR ? (double)sumR / nR : 0.0, maxR, maxRat, maxRph, badR);
    if (oamf) fclose(oamf); if (chrf) fclose(chrf); if (csvf) fclose(csvf);
    p_unload(); p_deinit();
    return 0;

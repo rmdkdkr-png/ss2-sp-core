@@ -8,23 +8,32 @@
 #include <string.h>
 #include "ss2fg.h"
 
-/* ───────────── 캡처 ───────────── */
-static ss2fg_frame fg_slot[3];
-static int fg_cur = -1, fg_prev = -1, fg_old = -1, fg_build = 0;
+/* ───────────── 캡처 ─────────────
+   지난 프레임 몇 장을 쌓아 둔다(최근이 0번). 4배(게임 박자 맞춤) 예측은 N+1·N+2 를 미리 돌려 두 장을
+   쌓았다가 두 번 무른다. */
+#define FG_RING 6
+static ss2fg_frame fg_slot[FG_RING];
+static int fg_hist[FG_RING] = { -1, -1, -1, -1, -1, -1 };   /* fg_hist[0] = 마지막(현재), [1] = 그 앞 … (-1 = 없음) */
+static int fg_build = 0;
 static uint8_t fg_build_dirty;
 
 static int next_free(void)
 {
-   int i;
-   for (i = 0; i < 3; i++)
-      if (i != fg_cur && i != fg_prev) return i;
-   return 0;
+   int i, k, used;
+   for (i = 0; i < FG_RING; i++)
+   {
+      used = 0;
+      for (k = 0; k < FG_RING - 1; k++) if (fg_hist[k] == i) used = 1;
+      if (!used) return i;
+   }
+   return fg_hist[FG_RING - 1] >= 0 ? fg_hist[FG_RING - 1] : 0;
 }
 
 void ss2fg_reset(void)
 {
+   int k;
    memset(fg_slot, 0, sizeof fg_slot);
-   fg_cur = fg_prev = fg_old = -1;
+   for (k = 0; k < FG_RING; k++) fg_hist[k] = -1;
    fg_build = 0;
    fg_build_dirty = 0;
 }
@@ -61,6 +70,7 @@ void ss2fg_capture_end(const uint8_t *scroll, const uint8_t *chr, const uint8_t 
                        const uint8_t *sprcol, const uint8_t *pal, int mono, int layers)
 {
    ss2fg_frame *f = &fg_slot[fg_build];
+   int k;
    memcpy(f->scroll, scroll, sizeof f->scroll);
    memcpy(f->chr,    chr,    sizeof f->chr);
    memcpy(f->spr,    spr,    sizeof f->spr);
@@ -72,9 +82,8 @@ void ss2fg_capture_end(const uint8_t *scroll, const uint8_t *chr, const uint8_t 
    f->valid  = 1;
    resolve_chain(f);
 
-   fg_old  = fg_prev;
-   fg_prev = fg_cur;
-   fg_cur  = fg_build;
+   for (k = FG_RING - 1; k > 0; k--) fg_hist[k] = fg_hist[k - 1];
+   fg_hist[0] = fg_build;
    fg_build = next_free();
    fg_build_dirty = 0;
    /* 다음 프레임의 줄 레지스터는 처음부터 다시 채운다 — 못 채운 줄이 남지 않게 지난 값으로 초기화 */
@@ -83,16 +92,21 @@ void ss2fg_capture_end(const uint8_t *scroll, const uint8_t *chr, const uint8_t 
 
 void ss2fg_capture_pop(void)
 {
-   if (fg_cur < 0) return;
-   fg_build = fg_cur;
-   fg_cur   = fg_prev;
-   fg_prev  = fg_old;
-   fg_old   = -1;
+   int k;
+   if (fg_hist[0] < 0) return;
+   fg_build = fg_hist[0];
+   for (k = 0; k < FG_RING - 1; k++) fg_hist[k] = fg_hist[k + 1];
+   fg_hist[FG_RING - 1] = -1;
    fg_build_dirty = 0;
 }
 
-const ss2fg_frame *ss2fg_prev(void) { return fg_prev >= 0 && fg_slot[fg_prev].valid ? &fg_slot[fg_prev] : 0; }
-const ss2fg_frame *ss2fg_cur(void)  { return fg_cur  >= 0 && fg_slot[fg_cur].valid  ? &fg_slot[fg_cur]  : 0; }
+const ss2fg_frame *ss2fg_hist(int k)
+{
+   if (k < 0 || k >= FG_RING || fg_hist[k] < 0 || !fg_slot[fg_hist[k]].valid) return 0;
+   return &fg_slot[fg_hist[k]];
+}
+const ss2fg_frame *ss2fg_prev(void) { return ss2fg_hist(1); }
+const ss2fg_frame *ss2fg_cur(void)  { return ss2fg_hist(0); }
 
 /* ───────────── 렌더러 ───────────── */
 #define ZD_BACK_SPRITE   2
@@ -475,7 +489,7 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
 }
 
 static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const fg_move mv[64],
-                        int t, int y, uint16_t *scan)
+                        int t, int ts, int y, uint16_t *scan)
 {
    const ss2fg_regs *rb = &base->line[y];
    uint8_t zbuf[256];
@@ -535,8 +549,8 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const fg
       sy = wrapc(base->ay[spr] + rb->spy);
       if (mv && mv[spr].has)
       {
-         sx = lerp_i(sx, mv[spr].dx, t);
-         sy = lerp_i(sy, mv[spr].dy, t);
+         sx = lerp_i(sx, mv[spr].dx, ts);
+         sy = lerp_i(sy, mv[spr].dy, ts);
       }
       if (y >= sy && y <= sy + 7)
       {
@@ -547,8 +561,12 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const fg
    }
 }
 
-int ss2fg_render_ex(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
-                    void *dst, int pitch_px, int bpp, const uint32_t *colormap)
+/* 4배(게임 박자 맞춤)용 — 스프라이트와 스크롤의 목표 프레임·진행도를 따로 준다.
+   사무쇼2 는 캐릭터를 짝수 프레임에만, 배경 스크롤을 홀수 프레임에만 움직인다(실측) — 둘의 «다음 바뀌는 때»가
+   서로 다르다. to_spr/to_scr 가 0 이거나 t 가 0 이면 그쪽은 base 그대로. */
+int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
+                  const ss2fg_frame *to_scr, int t_scr,
+                  void *dst, int pitch_px, int bpp, const uint32_t *colormap)
 {
    int y, x;
    uint16_t scan[256];
@@ -557,15 +575,19 @@ int ss2fg_render_ex(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
    if (bpp != 2 && bpp != 4) return 0;
    /* 표시 도중 스프라이트표/타일맵이 바뀐 프레임은 끝 시점 사본이 위쪽 줄과 안 맞는다 — 합성 포기 */
    if (base->dirty & (SS2FG_DIRTY_SPR | SS2FG_DIRTY_SCROLL)) return 0;
-   if (to && (!to->valid || to->mono || (to->dirty & (SS2FG_DIRTY_SPR | SS2FG_DIRTY_SCROLL)))) to = 0;
-   if (t256 < 0) t256 = 0;
-   if (t256 > 256) t256 = 256;
-   if (to && t256 == 0) to = 0;
-   if (to) sprite_moves(base, to, mv);
+   if (to_spr && (!to_spr->valid || to_spr->mono || (to_spr->dirty & (SS2FG_DIRTY_SPR | SS2FG_DIRTY_SCROLL)))) to_spr = 0;
+   if (to_scr && (!to_scr->valid || to_scr->mono || (to_scr->dirty & (SS2FG_DIRTY_SPR | SS2FG_DIRTY_SCROLL)))) to_scr = 0;
+   if (t_spr < 0) t_spr = 0;
+   if (t_spr > 256) t_spr = 256;
+   if (t_scr < 0) t_scr = 0;
+   if (t_scr > 256) t_scr = 256;
+   if (to_spr && t_spr == 0) to_spr = 0;
+   if (to_scr && t_scr == 0) to_scr = 0;
+   if (to_spr) sprite_moves(base, to_spr, mv);
 
    for (y = 0; y < SS2FG_H; y++)
    {
-      render_line(base, to, to ? mv : 0, t256, y, scan);
+      render_line(base, to_scr, to_spr ? mv : 0, t_scr, t_spr, y, scan);
       if (bpp == 4)
       {
          uint32_t *row = (uint32_t *)dst + (size_t)y * pitch_px;
@@ -582,8 +604,32 @@ int ss2fg_render_ex(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
    return 1;
 }
 
+int ss2fg_render_ex(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
+                    void *dst, int pitch_px, int bpp, const uint32_t *colormap)
+{
+   return ss2fg_render2(base, to, t256, to, t256, dst, pitch_px, bpp, colormap);
+}
+
 int ss2fg_render(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
                  uint16_t *dst, int pitch_px, const uint32_t *colormap)
 {
    return ss2fg_render_ex(base, to, t256, dst, pitch_px, 2, colormap);
+}
+
+/* a→b 사이에 무엇이 움직였나 — 비트0 스프라이트(무리 합의·겉모습 짝짓기를 거친 최종 이동량이 0 이 아닌 조각),
+   비트1 스크롤(어느 줄이든 플레인 스크롤값이 다름). 4배 모드가 «다음에 바뀌는 프레임»을 찾을 때 쓴다. */
+int ss2fg_motion(const ss2fg_frame *a, const ss2fg_frame *b)
+{
+   int f = 0, i, y;
+   fg_move mv[64];
+   if (!a || !b || !a->valid || !b->valid) return 0;
+   sprite_moves(a, b, mv);
+   for (i = 0; i < 64; i++)
+      if (mv[i].has && (mv[i].dx || mv[i].dy)) { f |= 1; break; }
+   for (y = 0; y < SS2FG_H; y++)
+   {
+      const ss2fg_regs *ra = &a->line[y], *rb = &b->line[y];
+      if (ra->s1x != rb->s1x || ra->s1y != rb->s1y || ra->s2x != rb->s2x || ra->s2y != rb->s2y) { f |= 2; break; }
+   }
+   return f;
 }

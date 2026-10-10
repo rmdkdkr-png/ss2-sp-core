@@ -376,6 +376,14 @@ static int      fg_opt    = 1;         /* 0 끔 · 1 자동 · 2 켬 */
 static int      fg_mode   = 0;         /* 0 예측(지연 0) · 1 보간(+8ms) */
 static int      fg_active = 0;         /* 지금 2배 fps 로 내보내는 중 */
 static int      fg_phase  = 0;         /* 0 실제 프레임 · 1 합성 프레임 */
+/* 4배(게임 박자 맞춤) — 사무쇼2 는 캐릭터를 짝수 프레임에만, 배경 스크롤을 홀수 프레임에만 움직인다(초당 30번씩,
+   대전 3판 실측: 스프라이트 이동 3615번 전부 짝수). 2배는 «실제 프레임마다 반» 이라 새 그림 사이 빈칸 셋 중 하나만
+   채운다. 4배는 N+1·N+2 를 미리 돌려 «다음에 바뀌는 프레임» 까지를 고르게 나눠 120Hz 네 장에 펼친다. */
+static int      fg_mult   = 4;         /* 4 · 2 */
+static unsigned fg_realn  = 0;         /* 실제 프레임 번호(4배 박자 추적) */
+static unsigned fg_last_spr = 0, fg_last_scr = 0;   /* 스프라이트·스크롤이 마지막으로 바뀐 실제 프레임 */
+static uint16_t fg_next[FB_WIDTH * FB_HEIGHT];      /* 4배: 다음 합성 호출에 낼 그림(반 프레임 뒤) */
+static int      fg_next_ok = 0;
 static int      fg_streak = 0;         /* 전환 히스테리시스 카운터 */
 static unsigned fg_frames = 0;         /* retro_run 호출 수 */
 static unsigned fg_runahead_seen = 0;  /* 런어헤드용 저장이 마지막으로 보인 호출 번호 */
@@ -507,6 +515,7 @@ static void fg_apply(int on)
    fg_phase  = 0;
    fg_streak = 0;
    fg_audio_tail_n = 0;
+   fg_next_ok = 0;
    retro_get_system_av_info(&av);                 /* fps 가 fg_active 에 따라 60.25 / 120.5 */
    environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &av);
    msg.msg    = on ? (fg_mode ? "프레임 생성 켬 — 120Hz 출력 (보간)" : "프레임 생성 켬 — 120Hz 출력 (예측)")
@@ -555,6 +564,89 @@ static int fg_predict(void)
    iline = iline_save;
    ss2fg_capture_pop();                           /* 예측 프레임 캡처를 무른다 */
    return ok;
+}
+
+/* 4배 — 실제 N 을 막 돌린 직후 부른다. N+1·N+2 를 미리 돌려 스프라이트·스크롤 각각 «다음에 바뀌는 프레임 K» 를
+   찾고, 지난번 바뀐 때 L(K 보다 최대 2 프레임 앞) ~ K 를 고르게 나눠 지금(τ=N) 그림은 surf 에, 반 프레임 뒤(τ=N+½)
+   그림은 fg_next 에 만든다. 위치만 옮긴다 — 그림(타일·포즈)은 실제 N 의 것. 반환 1 = fg_next 가 준비됨. */
+static int fg_tpos(int K, int L, int h)        /* 반 프레임 단위 τ=h(0|1) 에서 L→K 진행도(0..256) */
+{
+   if (!K || K <= L) return 0;
+   return (256 * (h - 2 * L)) / (2 * (K - L));
+}
+static int fg_predict4(void)
+{
+   StateMem st;
+   EmulateSpecStruct ps;
+   uint8_t extras[8];
+   int iline_save, ok, k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel;
+   int ts0, ts1, tb0, tb1;
+   const ss2fg_frame *f0, *f1, *f2, *fp, *tos, *tob;
+
+   fg_realn++;
+   f0 = ss2fg_hist(0); fp = ss2fg_hist(1);
+   if (!f0) return 0;
+   mp0 = fp ? ss2fg_motion(fp, f0) : 0;               /* N-1→N 에 바뀐 것 — 박자 기억 */
+   if (mp0 & 1) fg_last_spr = fg_realn;
+   if (mp0 & 2) fg_last_scr = fg_realn;
+
+   memset(&st, 0, sizeof st);
+   st.data     = fg_state;
+   st.malloced = fg_state_cap;
+   fg_state_skip = FG_SKIP_SND | FG_SKIP_FLASH;
+   ok = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
+   fg_state     = st.data;
+   fg_state_cap = st.malloced;
+   if (!ok) { fg_state_skip = 0; return 0; }
+   ngp_mem_fg_extras(extras, 0);
+   iline_save = iline;
+
+   memset(&ps, 0, sizeof ps);
+   ps.surface         = surf;
+   ps.DisplayRect.w   = FB_WIDTH;
+   ps.DisplayRect.h   = FB_HEIGHT;
+   ps.SoundBufMaxSize = sizeof(fg_scratch_snd) / 2;
+   ngp_fg_mute = 1; ngp_fg_predict = 1;
+   for (k = 0; k < 2; k++)
+   {
+      ps.SoundBufSize = 0;
+      Emulate(&ps, fg_scratch_snd);                    /* 입력은 마지막 실제 프레임 값 그대로 */
+   }
+   ngp_fg_mute = 0; ngp_fg_predict = 0;
+
+   f2 = ss2fg_hist(0); f1 = ss2fg_hist(1); f0 = ss2fg_hist(2);
+   m01 = ss2fg_motion(f0, f1);
+   m12 = ss2fg_motion(f1, f2);
+
+   /* 스프라이트: 다음 바뀌는 프레임 K(N 기준 +1/+2), 지난번 바뀐 때 L(≤0, K-2 이상) */
+   Ks = (m01 & 1) ? 1 : (m12 & 1) ? 2 : 0;
+   rel = (int)fg_last_spr - (int)fg_realn;
+   Ls = Ks ? (rel > Ks - 2 ? rel : Ks - 2) : 0;
+   /* 스크롤 */
+   Kb = (m01 & 2) ? 1 : (m12 & 2) ? 2 : 0;
+   rel = (int)fg_last_scr - (int)fg_realn;
+   Lb = Kb ? (rel > Kb - 2 ? rel : Kb - 2) : 0;
+
+   tos = Ks == 1 ? f1 : Ks == 2 ? f2 : 0;
+   tob = Kb == 1 ? f1 : Kb == 2 ? f2 : 0;
+   ts0 = fg_tpos(Ks, Ls, 0); ts1 = fg_tpos(Ks, Ls, 1);
+   tb0 = fg_tpos(Kb, Lb, 0); tb1 = fg_tpos(Kb, Lb, 1);
+
+   /* τ=N — 둘 다 0 이면 실제 N 그대로 */
+   if (!(ts0 || tb0) || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
+      memcpy(surf->pixels, fg_real, sizeof fg_real);
+   /* τ=N+½ */
+   if (!(ts1 || tb1) || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap))
+      memcpy(fg_next, fg_real, sizeof fg_real);
+
+   st.loc = 0;
+   MDFNSS_LoadSM(&st, 0, 0);
+   fg_state_skip = 0;
+   ngp_mem_fg_extras(extras, 1);
+   iline = iline_save;
+   ss2fg_capture_pop();                                /* 예측 두 장을 무른다 */
+   ss2fg_capture_pop();
+   return 1;
 }
 
 static void check_system_specs(void)
@@ -770,6 +862,11 @@ static void check_variables(void)
       var.value = NULL;
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
          fg_mode = !strcmp(var.value, "interp") ? 1 : 0;
+
+      var.key   = "ngp_framegen_mult";
+      var.value = NULL;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+         fg_mult = !strcmp(var.value, "2") ? 2 : 4;
       if (!cv_booted || fg_opt != opt0 || fg_mode != mode0)
       { fg_rate_block = 0; fg_block_n = 0; }   /* 프레임 생성 옵션을 바꿨다 — 다시 판정 */
    }
@@ -830,7 +927,7 @@ void retro_init(void)
 
 void retro_reset(void)
 {
-   fg_phase = 0; fg_audio_tail_n = 0; fg_streak = 0;   /* 프레임 생성 위상도 처음부터 */
+   fg_phase = 0; fg_audio_tail_n = 0; fg_streak = 0; fg_next_ok = 0;   /* 프레임 생성 위상도 처음부터 */
    ss2sp_reset();
    svcsp_reset();
    ss2comm_set_ram(&CPUExRAM[0]);
@@ -907,7 +1004,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
    /* 프레임 생성 배관 초기화 — 지난 게임의 상태가 남지 않게. 목표 주사율은 지금 바로 판정해
       retro_get_system_av_info 가 처음부터 맞는 fps 를 돌려주게 한다(재초기화 한 번 절약) */
-   fg_phase = 0; fg_streak = 0; fg_frames = 0; fg_runahead_seen = 0; fg_audio_tail_n = 0;
+   fg_phase = 0; fg_streak = 0; fg_frames = 0; fg_runahead_seen = 0; fg_audio_tail_n = 0; fg_next_ok = 0;
    fg_rate_block = 0; fg_win_sum = 0; fg_win_n = 0; fg_slow_secs = 0; fg_t_prev = 0;
    fg_ok_secs = 0; fg_block_n = 0; fg_block_t0 = 0;
    ss2fg_reset();
@@ -1219,8 +1316,11 @@ void retro_run(void)
       if (fg_active)
       {
          memcpy(fg_real, surf->pixels, sizeof fg_real);           /* 후처리 전 원본 — 합성 실패·보간 모드용 */
+         fg_next_ok = 0;
          if (fg_mode == 1)                                         /* 보간: N 의 그림을 N-1 쪽으로 반 되돌린 자리에 지금, N 은 다음 호출에 */
             ss2fg_render(ss2fg_cur(), ss2fg_prev(), 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap);
+         else if (fg_mult == 4 && !hidden && !ngplink_active())   /* 4배: 지금 그림도 박자에 맞춰 옮겨 그린다 */
+            fg_next_ok = fg_predict4();
       }
 
       {
@@ -1255,8 +1355,11 @@ void retro_run(void)
          memcpy(surf->pixels, fg_real, sizeof fg_real);            /* 숨은 호출: 아무것도 안 돌리고 지난 화면 */
       else if (fg_mode == 0 && !ngplink_active())                   /* 링크 플레이 중엔 예측이 통신을 먹는다 → 합성 없이 지난 화면 */
       {
-         if (!fg_predict())                                        /* 합성 못 하면 실제 N 을 한 번 더 */
+         if (fg_next_ok)                                           /* 4배: 실제 호출 때 미리 만들어 둔 반 프레임 뒤 그림 */
+            memcpy(surf->pixels, fg_next, sizeof fg_next);
+         else if (!fg_predict())                                   /* 합성 못 하면 실제 N 을 한 번 더 */
             memcpy(surf->pixels, fg_real, sizeof fg_real);
+         fg_next_ok = 0;
       }
       else
          memcpy(surf->pixels, fg_real, sizeof fg_real);            /* 보간 모드: 이제 실제 N */
