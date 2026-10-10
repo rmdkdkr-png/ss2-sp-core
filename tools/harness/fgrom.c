@@ -2,6 +2,7 @@
  * 사용: fgrom <core.so> <rom> <workdir> <mode:off|interp|predict> <frames> <script> [dump_every] [metric_from]
  * 환경: FGROM_MULT=2|4 (프레임 생성 배수, 기본 4) · FGROM_REF=<off 실행 dump_every=1 디렉터리> (출력 프레임을 기준 N·N+1·N+2 와 대조)
  *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로) · FGROM_RAM=<파일> (실제 프레임마다 시스템 RAM 16KB)
+ *       FGROM_RA=0|1|2 (런어헤드 프레임 수, 기본 0 — 기준 대조는 그만큼 앞 번호와 견준다)
  *   script: "s-e:BTN,..."  BTN 글자: U D L R A B S(option)  예) "200-205:S,400-405:A"
  *   매 합성 프레임: 앞 실제 N, 뒤 실제 N+1 과 비교해 3x3 이웃 어디에도 없는 색의 픽셀 수(=깨진 픽셀) 기록
  */
@@ -14,7 +15,8 @@
 #include "libretro.h"
 #define W 160
 #define H 152
-static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4";   /* FGROM_MULT=2|4 */
+static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4", *opt_ra = "0";   /* FGROM_MULT=2|4 · FGROM_RA=0|1|2 (런어헤드, 기본 끔) */
+static int ra_off = 0;   /* 런어헤드 프레임 수 — 기준 프레임 대조의 번호 오프셋 */
 static float target_hz = 120.0f;
 static char workdir[1024];
 static uint16_t cur[W*H]; static int have_frame = 0;
@@ -28,6 +30,7 @@ static bool env_cb(unsigned cmd, void *data)
          if (!strcmp(v->key, "ngp_framegen"))      { v->value = opt_framegen; return true; }
          if (!strcmp(v->key, "ngp_framegen_mode")) { v->value = opt_mode;     return true; }
          if (!strcmp(v->key, "ngp_framegen_mult")) { v->value = opt_mult;     return true; }
+         if (!strcmp(v->key, "ngp_runahead"))      { v->value = opt_ra;       return true; }
          v->value = NULL; return false; }
       case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool*)data = false; return true;
       case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE: *(float*)data = target_hz; return true;
@@ -116,7 +119,7 @@ int main(int argc, char **argv)
    mode = argv[4]; frames = atoi(argv[5]); parse_script(argv[6]);
    if (argc > 7) dump_every = atoi(argv[7]); if (argc > 8) metric_from = atoi(argv[8]);
    if (!strcmp(mode, "off")) opt_framegen = "disabled"; else { opt_framegen = "enabled"; opt_mode = mode; }
-   { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; refdir = getenv("FGROM_REF"); }
+   { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; m = getenv("FGROM_RA"); if (m) { opt_ra = m; ra_off = atoi(m); } refdir = getenv("FGROM_REF"); }
    Hd = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL); if (!Hd) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
    SYM(p_set_environment, "retro_set_environment"); SYM(p_set_video, "retro_set_video_refresh");
    SYM(p_set_audio, "retro_set_audio_sample"); SYM(p_set_audio_batch, "retro_set_audio_sample_batch");
@@ -141,7 +144,7 @@ int main(int argc, char **argv)
       {  /* 기준 대조·전부 떨어뜨리기 — 출력 프레임마다(두 위상 모두). 합성 호출의 실제 번호는 직전 실제 프레임(real-1) */
          int idx = is_synth ? real - 1 : real;
          if (getenv("FGROM_DUMPALL")) { char nm[64]; snprintf(nm, sizeof nm, "o%06d_%d", idx, is_synth ? 1 : 0); dump(nm, cur); }
-         if (refdir && idx >= metric_from && ref_load(idx, Q0) && ref_load(idx + 1, Q1) && ref_load(idx + 2, Q2))
+         if (refdir && idx >= metric_from && ref_load(idx + ra_off, Q0) && ref_load(idx + ra_off + 1, Q1) && ref_load(idx + ra_off + 2, Q2))   /* 런어헤드면 보여 주는 그림이 ra 프레임 앞 */
          {
             int a = artifacts3(cur, Q0, Q1, Q2); nR++; sumR += a; if (a > 40) badR++;
             if (a > maxR) { maxR = a; maxRat = idx; maxRph = is_synth; dump("worstR_S", cur); dump("worstR_0", Q0); dump("worstR_1", Q1); dump("worstR_2", Q2); }

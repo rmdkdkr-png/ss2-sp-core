@@ -566,6 +566,89 @@ static int fg_predict(void)
    return ok;
 }
 
+/* ── 숨은 프레임 돌리기 (예측·런어헤드 공용) ──
+   가벼운 스냅샷(소리·플래시 섹션 빼고 + StateAction 밖 정적 변수)을 떠 두고, 입력을 붙잡은 채 n 프레임을 소리·롬쓰기 없이
+   돌린다. keep(1..n) 번째 프레임의 그림을 fg_real 에 남긴다(0 이면 안 남김). 캡처는 n 장 쌓인다 — 끝나면 fg_snap_load 와
+   함께 n 번 무른다. */
+static uint8_t  fg_snap_extras[8];
+static int      fg_snap_iline;
+static uint32_t fg_snap_len;
+static int fg_snap_save(void)
+{
+   StateMem st;
+   int ok;
+   memset(&st, 0, sizeof st);
+   st.data     = fg_state;
+   st.malloced = fg_state_cap;
+   fg_state_skip = FG_SKIP_SND | FG_SKIP_FLASH;
+   ok = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
+   fg_state     = st.data;                        /* realloc 됐을 수 있다 */
+   fg_state_cap = st.malloced;
+   fg_snap_len  = st.len;
+   if (!ok) { fg_state_skip = 0; return 0; }
+   ngp_mem_fg_extras(fg_snap_extras, 0);
+   fg_snap_iline = iline;
+   return 1;
+}
+static void fg_snap_load(int pops)
+{
+   StateMem st;
+   memset(&st, 0, sizeof st);
+   st.data     = fg_state;
+   st.malloced = fg_state_cap;
+   st.len      = fg_snap_len;
+   st.loc      = 0;
+   MDFNSS_LoadSM(&st, 0, 0);
+   fg_state_skip = 0;
+   ngp_mem_fg_extras(fg_snap_extras, 1);
+   iline = fg_snap_iline;
+   while (pops-- > 0) ss2fg_capture_pop();
+}
+static void fg_hidden(int n, int keep)
+{
+   EmulateSpecStruct ps;
+   int k;
+   memset(&ps, 0, sizeof ps);
+   ps.surface         = surf;
+   ps.DisplayRect.w   = FB_WIDTH;
+   ps.DisplayRect.h   = FB_HEIGHT;
+   ps.SoundBufMaxSize = sizeof(fg_scratch_snd) / 2;
+   ngp_fg_mute = 1; ngp_fg_predict = 1;
+   for (k = 1; k <= n; k++)
+   {
+      ps.SoundBufSize = 0;
+      Emulate(&ps, fg_scratch_snd);                /* 입력은 마지막 실제 프레임 값 그대로(붙잡고 있다고 가정) */
+      if (k == keep) memcpy(fg_real, surf->pixels, sizeof fg_real);
+   }
+   ngp_fg_mute = 0; ngp_fg_predict = 0;
+}
+
+/* ── 런어헤드(입력 지연 줄이기) ──
+   사무쇼2 는 버튼을 누른 프레임에서 대개 2~3 프레임 뒤에 화면이 바뀐다(실측 — 대전: 강베기·점프·이동·가드·앉기·
+   필살 2~3, 약베기 5~6 / 메뉴: 3 이상). 그래서 실제 N 을 돌린 뒤 입력을 붙잡은 채 N+1·N+2 를 숨겨 돌리고 N+2 의
+   그림을 지금 보여 주면 2 프레임(33ms) 빨라진다. 실측(대전 3판, 무작위 입력): 1 프레임 앞은 거의 정확(판당 0~4 장
+   다름), 2 프레임 앞은 입력을 바꾸는 순간 0.5%(판당 40~60 장) 한 프레임 동안 «이전 동작이 한 장 더» 보인다 —
+   다음 프레임에 바로 맞는다(누적 없음). 소리는 실제 프레임의 것 — 그림보다 그만큼 늦다.
+   프레임 생성 4배와 같이 돌 때는 «보여 주는 시간줄» 자체가 2 프레임 앞(예측 4배: N+1~N+4, 반반: N+1~N+3 을 숨겨 돌림).
+   사무쇼2 롬에서만(다른 게임은 반응 프레임을 안 쟀다). 링크 플레이·2배 프레임 생성 중엔 끈다. */
+extern int ss2comm_rom_is_ss2(void);             /* 해설 엔진 extern 묶음은 아래에 있다 — 여기서 먼저 쓴다 */
+static int ra_opt = 2;                           /* 코어 옵션 ngp_runahead: 0 끔 · 1 · 2 */
+static int ra_frames(void)
+{
+   if (ra_opt <= 0 || !ss2comm_rom_is_ss2() || ngplink_active()) return 0;
+   if (fg_active && fg_mult == 2) return 0;
+   return ra_opt > 2 ? 2 : ra_opt;
+}
+/* 프레임 생성 없이(60Hz 화면 등) 런어헤드만 — surf 에 N+ra 그림이 남는다 */
+static int ra_plain(int ra)
+{
+   if (!fg_snap_save()) return 0;
+   fg_hidden(ra, ra);
+   fg_snap_load(ra);
+   memcpy(surf->pixels, fg_real, sizeof fg_real);
+   return 1;
+}
+
 /* 4배 — 실제 N 을 막 돌린 직후 부른다. N+1·N+2 를 미리 돌려 스프라이트·스크롤 각각 «다음에 바뀌는 프레임 K» 를
    찾고, 지난번 바뀐 때 L(K 보다 최대 2 프레임 앞) ~ K 를 고르게 나눠 지금(τ=N) 그림은 surf 에, 반 프레임 뒤(τ=N+½)
    그림은 fg_next 에 만든다. 위치만 옮긴다 — 그림(타일·포즈)은 실제 N 의 것. 반환 1 = fg_next 가 준비됨. */
@@ -574,51 +657,26 @@ static int fg_tpos(int K, int L, int h)        /* 반 프레임 단위 τ=h(0|1)
    if (!K || K <= L) return 0;
    return (256 * (h - 2 * L)) / (2 * (K - L));
 }
-static int fg_predict4(void)
+static int fg_predict4(int ra)
 {
-   StateMem st;
-   EmulateSpecStruct ps;
-   uint8_t extras[8];
-   int iline_save, ok, k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel;
+   int k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel;
    int ts0, ts1, tb0, tb1;
    const ss2fg_frame *f0, *f1, *f2, *fp, *tos, *tob;
 
+   if (!ss2fg_hist(0)) return 0;
+   if (!fg_snap_save()) return 0;
    fg_realn++;
-   f0 = ss2fg_hist(0); fp = ss2fg_hist(1);
-   if (!f0) return 0;
-   mp0 = fp ? ss2fg_motion(fp, f0) : 0;               /* N-1→N 에 바뀐 것 — 박자 기억 */
+   /* 보여 줄 프레임 D = N+ra. 숨겨 돌린 뒤 링: [0]=D+2 [1]=D+1 [2]=D [3]=D-1 (ra=0 이면 D-1 은 실제 N-1) */
+   fg_hidden(ra + 2, ra);
+   f2 = ss2fg_hist(0); f1 = ss2fg_hist(1); f0 = ss2fg_hist(2); fp = ss2fg_hist(3);
+   mp0 = (fp && f0) ? ss2fg_motion(fp, f0) : 0;        /* D-1→D 에 바뀐 것 — 박자 기억 */
    if (mp0 & 1) fg_last_spr = fg_realn;
    if (mp0 & 2) fg_last_scr = fg_realn;
-
-   memset(&st, 0, sizeof st);
-   st.data     = fg_state;
-   st.malloced = fg_state_cap;
-   fg_state_skip = FG_SKIP_SND | FG_SKIP_FLASH;
-   ok = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
-   fg_state     = st.data;
-   fg_state_cap = st.malloced;
-   if (!ok) { fg_state_skip = 0; return 0; }
-   ngp_mem_fg_extras(extras, 0);
-   iline_save = iline;
-
-   memset(&ps, 0, sizeof ps);
-   ps.surface         = surf;
-   ps.DisplayRect.w   = FB_WIDTH;
-   ps.DisplayRect.h   = FB_HEIGHT;
-   ps.SoundBufMaxSize = sizeof(fg_scratch_snd) / 2;
-   ngp_fg_mute = 1; ngp_fg_predict = 1;
-   for (k = 0; k < 2; k++)
-   {
-      ps.SoundBufSize = 0;
-      Emulate(&ps, fg_scratch_snd);                    /* 입력은 마지막 실제 프레임 값 그대로 */
-   }
-   ngp_fg_mute = 0; ngp_fg_predict = 0;
-
-   f2 = ss2fg_hist(0); f1 = ss2fg_hist(1); f0 = ss2fg_hist(2);
    m01 = ss2fg_motion(f0, f1);
    m12 = ss2fg_motion(f1, f2);
+   (void)k;
 
-   /* 스프라이트: 다음 바뀌는 프레임 K(N 기준 +1/+2), 지난번 바뀐 때 L(≤0, K-2 이상) */
+   /* 스프라이트: 다음 바뀌는 프레임 K(D 기준 +1/+2), 지난번 바뀐 때 L(≤0, K-2 이상) */
    Ks = (m01 & 1) ? 1 : (m12 & 1) ? 2 : 0;
    rel = (int)fg_last_spr - (int)fg_realn;
    Ls = Ks ? (rel > Ks - 2 ? rel : Ks - 2) : 0;
@@ -632,20 +690,14 @@ static int fg_predict4(void)
    ts0 = fg_tpos(Ks, Ls, 0); ts1 = fg_tpos(Ks, Ls, 1);
    tb0 = fg_tpos(Kb, Lb, 0); tb1 = fg_tpos(Kb, Lb, 1);
 
-   /* τ=N — 둘 다 0 이면 실제 N 그대로 */
-   if (!(ts0 || tb0) || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
+   /* τ=D — 둘 다 0 이면 실제 D 그대로 (fg_real = D 의 그림) */
+   if (!(ts0 || tb0) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(surf->pixels, fg_real, sizeof fg_real);
-   /* τ=N+½ */
-   if (!(ts1 || tb1) || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap))
+   /* τ=D+½ */
+   if (!(ts1 || tb1) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(fg_next, fg_real, sizeof fg_real);
 
-   st.loc = 0;
-   MDFNSS_LoadSM(&st, 0, 0);
-   fg_state_skip = 0;
-   ngp_mem_fg_extras(extras, 1);
-   iline = iline_save;
-   ss2fg_capture_pop();                                /* 예측 두 장을 무른다 */
-   ss2fg_capture_pop();
+   fg_snap_load(ra + 2);                               /* 숨은 프레임 캡처를 무른다 */
    return 1;
 }
 
@@ -659,75 +711,50 @@ static int fg_tlk(int tau2, int L, int K)            /* 반 프레임 단위 τ2
    if (K <= L) return 0;
    return (256 * (tau2 - 2 * L)) / (2 * (K - L));
 }
-static int fg_hybrid4(void)
+static int fg_hybrid4(int ra)
 {
-   StateMem st;
-   EmulateSpecStruct ps;
-   uint8_t extras[8];
-   int iline_save, ok, mp, mn;
+   int mp, mn;
    int lcS, pcS, lcB, pcB, K, L, ts, tb;
    const ss2fg_frame *fm1, *f0, *f1, *tos, *tob;
 
+   if (!ss2fg_hist(0) || !ss2fg_hist(1)) return 0;
+   if (!fg_snap_save()) return 0;
    fg_realn++;
-   f0 = ss2fg_hist(0); fm1 = ss2fg_hist(1);
-   if (!f0 || !fm1) return 0;
-   mp = ss2fg_motion(fm1, f0);                          /* N-1→N */
+   /* 보여 줄 프레임 D = N+ra. 숨겨 돌린 뒤 링: [0]=D+1(예측) [1]=D [2]=D-1 */
+   fg_hidden(ra + 1, ra);
+   f1 = ss2fg_hist(0); f0 = ss2fg_hist(1); fm1 = ss2fg_hist(2);
+   if (!f1 || !f0 || !fm1) { fg_snap_load(ra + 1); fg_realn--; return 0; }
+   mp = ss2fg_motion(fm1, f0);                          /* D-1→D */
    if (mp & 1) { fg_prev_spr = fg_last_spr; fg_last_spr = fg_realn; }
    if (mp & 2) { fg_prev_scr = fg_last_scr; fg_last_scr = fg_realn; }
+   mn = ss2fg_motion(f0, f1);                           /* D→D+1 (예측) */
 
-   memset(&st, 0, sizeof st);
-   st.data     = fg_state;
-   st.malloced = fg_state_cap;
-   fg_state_skip = FG_SKIP_SND | FG_SKIP_FLASH;
-   ok = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
-   fg_state     = st.data;
-   fg_state_cap = st.malloced;
-   if (!ok) { fg_state_skip = 0; return 0; }
-   ngp_mem_fg_extras(extras, 0);
-   iline_save = iline;
-   memset(&ps, 0, sizeof ps);
-   ps.surface         = surf;
-   ps.DisplayRect.w   = FB_WIDTH;
-   ps.DisplayRect.h   = FB_HEIGHT;
-   ps.SoundBufMaxSize = sizeof(fg_scratch_snd) / 2;
-   ngp_fg_mute = 1; ngp_fg_predict = 1;
-   Emulate(&ps, fg_scratch_snd);                        /* N+1 (입력은 마지막 실제 값 그대로) */
-   ngp_fg_mute = 0; ngp_fg_predict = 0;
-
-   f1 = ss2fg_hist(0); f0 = ss2fg_hist(1); fm1 = ss2fg_hist(2);
-   mn = ss2fg_motion(f0, f1);                           /* N→N+1 (예측) */
-
-   /* 바뀐 때 — N 기준 상대값(≤0). 아주 옛날이면 -9 로 눌러 둔다(어차피 K-2 로 잘린다) */
+   /* 바뀐 때 — D 기준 상대값(≤0). 아주 옛날이면 -9 로 눌러 둔다(어차피 K-2 로 잘린다) */
    lcS = (int)fg_last_spr - (int)fg_realn; if (lcS < -9) lcS = -9;
    pcS = (int)fg_prev_spr - (int)fg_realn; if (pcS < -9) pcS = -9;
    lcB = (int)fg_last_scr - (int)fg_realn; if (lcB < -9) lcB = -9;
    pcB = (int)fg_prev_scr - (int)fg_realn; if (pcB < -9) pcB = -9;
 
-   /* τ = N-½ (바탕 = 실제 N-1, 그 위치 = L 의 위치). L = N-1 이하의 마지막 바뀐 때, K = N(이번에 바뀜) 또는 N+1 */
+   /* τ = D-½ (바탕 = D-1, 그 위치 = L 의 위치). L = D-1 이하의 마지막 바뀐 때, K = D(이번에 바뀜) 또는 D+1 */
    tos = tob = 0; ts = tb = 0;
    K = (mp & 1) ? 0 : (mn & 1) ? 1 : 99;
    if (K != 99) { L = (mp & 1) ? pcS : lcS; if (L < K - 2) L = K - 2; ts = fg_tlk(-1, L, K); tos = K == 0 ? f0 : f1; }
    K = (mp & 2) ? 0 : (mn & 2) ? 1 : 99;
    if (K != 99) { L = (mp & 2) ? pcB : lcB; if (L < K - 2) L = K - 2; tb = fg_tlk(-1, L, K); tob = K == 0 ? f0 : f1; }
    if (!(ts || tb) || !ss2fg_render2(fm1, tos, ts, tob, tb, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
-   {  /* 옮길 게 없거나 못 그리면 — 지금까지의 보간처럼 N 을 N-1 쪽으로 반 */
+   {  /* 옮길 게 없거나 못 그리면 — 지금까지의 보간처럼 D 를 D-1 쪽으로 반 */
       if (!ss2fg_render(f0, fm1, 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap))
          memcpy(surf->pixels, fg_real, sizeof fg_real);
    }
 
-   /* τ = N (바탕 = 실제 N). K = N+1(예측에서 바뀜)이면 L(마지막 바뀐 때, K-2 이상)~K 사이, 아니면 N 그대로 */
+   /* τ = D (바탕 = D). K = D+1(예측에서 바뀜)이면 L(마지막 바뀐 때, K-2 이상)~K 사이, 아니면 D 그대로 */
    tos = tob = 0; ts = tb = 0;
    if (mn & 1) { L = lcS < -1 ? -1 : lcS; ts = fg_tlk(0, L, 1); tos = f1; }
    if (mn & 2) { L = lcB < -1 ? -1 : lcB; tb = fg_tlk(0, L, 1); tob = f1; }
    if (!(ts || tb) || !ss2fg_render2(f0, tos, ts, tob, tb, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(fg_next, fg_real, sizeof fg_real);
 
-   st.loc = 0;
-   MDFNSS_LoadSM(&st, 0, 0);
-   fg_state_skip = 0;
-   ngp_mem_fg_extras(extras, 1);
-   iline = iline_save;
-   ss2fg_capture_pop();
+   fg_snap_load(ra + 1);
    return 1;
 }
 
@@ -949,6 +976,11 @@ static void check_variables(void)
       var.value = NULL;
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
          fg_mult = !strcmp(var.value, "2") ? 2 : 4;
+
+      var.key   = "ngp_runahead";
+      var.value = NULL;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+         ra_opt = !strcmp(var.value, "0") ? 0 : !strcmp(var.value, "1") ? 1 : 2;
       if (!cv_booted || fg_opt != opt0 || fg_mode != mode0)
       { fg_rate_block = 0; fg_block_n = 0; }   /* 프레임 생성 옵션을 바꿨다 — 다시 판정 */
    }
@@ -1397,16 +1429,21 @@ void retro_run(void)
       width  = spec.DisplayRect.w;
       height = spec.DisplayRect.h;
 
-      if (fg_active)
       {
-         memcpy(fg_real, surf->pixels, sizeof fg_real);           /* 후처리 전 원본 — 합성 실패·보간 모드용 */
-         fg_next_ok = 0;
-         if (fg_mode == 1 && fg_mult == 4 && !hidden && !ngplink_active())
-            fg_next_ok = fg_hybrid4();                             /* 4배 반반: 한 프레임 예측 + 반 프레임 늦게 */
-         else if (fg_mode == 1)                                    /* 보간: N 의 그림을 N-1 쪽으로 반 되돌린 자리에 지금, N 은 다음 호출에 */
-            ss2fg_render(ss2fg_cur(), ss2fg_prev(), 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap);
-         else if (fg_mult == 4 && !hidden && !ngplink_active())   /* 4배: 지금 그림도 박자에 맞춰 옮겨 그린다 */
-            fg_next_ok = fg_predict4();
+         int ra = hidden ? 0 : ra_frames();                     /* 런어헤드: 보여 줄 그림을 ra 프레임 앞 것으로 */
+         if (fg_active)
+         {
+            memcpy(fg_real, surf->pixels, sizeof fg_real);        /* 후처리 전 원본 — 합성 실패·보간 모드용 */
+            fg_next_ok = 0;
+            if (fg_mode == 1 && fg_mult == 4 && !hidden && !ngplink_active())
+               fg_next_ok = fg_hybrid4(ra);                        /* 4배 반반: 한 프레임 예측 + 반 프레임 늦게 */
+            else if (fg_mode == 1)                                 /* 보간: N 의 그림을 N-1 쪽으로 반 되돌린 자리에 지금, N 은 다음 호출에 */
+               ss2fg_render(ss2fg_cur(), ss2fg_prev(), 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap);
+            else if (fg_mult == 4 && !hidden && !ngplink_active()) /* 4배: 지금 그림도 박자에 맞춰 옮겨 그린다 */
+               fg_next_ok = fg_predict4(ra);
+         }
+         else if (ra)
+            ra_plain(ra);                                          /* 프레임 생성 없이 런어헤드만 */
       }
 
       {

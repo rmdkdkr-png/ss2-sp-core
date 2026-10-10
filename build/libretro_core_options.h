@@ -137,6 +137,21 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       },
       "4"
    },
+   {
+      "ngp_runahead",
+      "런어헤드 (입력 지연 줄이기)",
+      NULL,
+      "사무쇼2 는 버튼을 누르고 대개 2~3 프레임 뒤에 화면이 바뀝니다. 그만큼 미리 돌려 둔 그림을 보여 줘서 반응을 앞당깁니다. 2 = 33ms 빨라짐(입력을 바꾸는 순간 아주 가끔 한 프레임 이전 동작이 더 보임), 1 = 17ms(거의 정확). 계산이 늘고, 소리는 그림보다 그만큼 늦게 들립니다. 사무쇼2 롬에서만, 링크 플레이·2배 프레임 생성 중엔 꺼집니다.",
+      NULL,
+      "input",
+      {
+         { "2", "2 프레임 (33ms)" },
+         { "1", "1 프레임 (17ms)" },
+         { "0", "끔" },
+         { NULL, NULL },
+      },
+      "2"
+   },
    { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
 };
 
@@ -201,6 +216,18 @@ struct retro_core_option_definition option_defs_us[] = {
          { NULL, NULL},
       },
       "4",
+   },
+   {
+      "ngp_runahead",
+      "런어헤드 (입력 지연 줄이기)",
+      "미리 돌려 둔 그림을 보여 줘서 반응을 앞당긴다(사무쇼2).",
+      {
+         { "2", NULL },
+         { "1", NULL },
+         { "0", NULL },
+         { NULL, NULL},
+      },
+      "2",
    },
    { NULL, NULL, NULL, { NULL, NULL }, NULL },
 };
