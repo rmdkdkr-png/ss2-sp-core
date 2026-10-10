@@ -2,7 +2,7 @@
  * 사용: fgrom <core.so> <rom> <workdir> <mode:off|interp|predict> <frames> <script> [dump_every] [metric_from]
  * 환경: FGROM_MULT=2|4 (프레임 생성 배수, 기본 4) · FGROM_REF=<off 실행 dump_every=1 디렉터리> (출력 프레임을 기준 N·N+1·N+2 와 대조)
  *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로) · FGROM_RAM=<파일> (실제 프레임마다 시스템 RAM 16KB)
- *       FGROM_RA=0|1|2 (런어헤드 프레임 수, 기본 0 — 기준 대조는 그만큼 앞 번호와 견준다)
+ *       FGROM_RA=0|1|2 (런어헤드 프레임 수, 기본 0 — 기준 대조는 그만큼 앞 번호와 견준다) · FGROM_FX=move|blend|off (이펙트 규칙, 기본 move)
  *   script: "s-e:BTN,..."  BTN 글자: U D L R A B S(option)  예) "200-205:S,400-405:A"
  *   매 합성 프레임: 앞 실제 N, 뒤 실제 N+1 과 비교해 3x3 이웃 어디에도 없는 색의 픽셀 수(=깨진 픽셀) 기록
  */
@@ -15,7 +15,7 @@
 #include "libretro.h"
 #define W 160
 #define H 152
-static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4", *opt_ra = "0";   /* FGROM_MULT=2|4 · FGROM_RA=0|1|2 (런어헤드, 기본 끔) */
+static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4", *opt_ra = "0", *opt_fx = "move";   /* FGROM_FX=move|blend|off (이펙트, 기본 옮기기) */   /* FGROM_MULT=2|4 · FGROM_RA=0|1|2 (런어헤드, 기본 끔) */
 static int ra_off = 0;   /* 런어헤드 프레임 수 — 기준 프레임 대조의 번호 오프셋 */
 static float target_hz = 120.0f;
 static char workdir[1024];
@@ -31,6 +31,7 @@ static bool env_cb(unsigned cmd, void *data)
          if (!strcmp(v->key, "ngp_framegen_mode")) { v->value = opt_mode;     return true; }
          if (!strcmp(v->key, "ngp_framegen_mult")) { v->value = opt_mult;     return true; }
          if (!strcmp(v->key, "ngp_runahead"))      { v->value = opt_ra;       return true; }
+         if (!strcmp(v->key, "ngp_framegen_fx"))   { v->value = opt_fx;       return true; }
          v->value = NULL; return false; }
       case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool*)data = false; return true;
       case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE: *(float*)data = target_hz; return true;
@@ -119,7 +120,7 @@ int main(int argc, char **argv)
    mode = argv[4]; frames = atoi(argv[5]); parse_script(argv[6]);
    if (argc > 7) dump_every = atoi(argv[7]); if (argc > 8) metric_from = atoi(argv[8]);
    if (!strcmp(mode, "off")) opt_framegen = "disabled"; else { opt_framegen = "enabled"; opt_mode = mode; }
-   { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; m = getenv("FGROM_RA"); if (m) { opt_ra = m; ra_off = atoi(m); } refdir = getenv("FGROM_REF"); }
+   { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; m = getenv("FGROM_RA"); if (m) { opt_ra = m; ra_off = atoi(m); } m = getenv("FGROM_FX"); if (m) opt_fx = m; refdir = getenv("FGROM_REF"); }
    Hd = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL); if (!Hd) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
    SYM(p_set_environment, "retro_set_environment"); SYM(p_set_video, "retro_set_video_refresh");
    SYM(p_set_audio, "retro_set_audio_sample"); SYM(p_set_audio_batch, "retro_set_audio_sample_batch");
@@ -169,6 +170,10 @@ int main(int argc, char **argv)
           mode, real, calls, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0);
    if (refdir) printf("ref-score(mult=%s): frames=%d mean=%.2f max=%d (at real %d phase %d) frames>40px=%d\n", opt_mult, nR, nR ? (double)sumR / nR : 0.0, maxR, maxRat, maxRph, badR);
    if (oamf) fclose(oamf); if (chrf) fclose(chrf); if (csvf) fclose(csvf); if (ramf) fclose(ramf);
+   {  /* 이펙트 계기(코어가 내보내면): 살핀 무리 / 물체 등속 / 몸에 붙음 / 테두리 등속 / 앞 캡처 없음 / 조각 없음 / 등속 아님 / 2px 미만·방향 */
+      void (*p_fx)(int *) = dlsym(Hd, "retro_ngp_fx_stats");
+      if (p_fx) { int st[8]; p_fx(st); printf("fx(%s): seen=%d obj=%d attach=%d vec=%d | noprev=%d nobox=%d notconst=%d small=%d\n", opt_fx, st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]); }
+   }
    p_unload(); p_deinit();
    return 0;
 }

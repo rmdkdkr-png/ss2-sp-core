@@ -93,6 +93,10 @@ int ss2fg_render_ex(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
                     void *dst, int pitch_px, int bpp, const uint32_t *colormap);
 
 /* 4배(게임 박자 맞춤) — 스프라이트·스크롤의 목표 프레임과 진행도(0..256)를 따로 */
+/* 이펙트·장풍 처리 — 0 끔 · 1 옮기기(기본) · 2 옮기기+섞기 (코어 옵션 ngp_framegen_fx) */
+void ss2fg_set_fx(int mode);
+int  ss2fg_get_fx(void);
+void ss2fg_fx_stats(int *out8);   /* 시험용 계기 8칸 */
 int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
                   const ss2fg_frame *to_scr, int t_scr,
                   void *dst, int pitch_px, int bpp, const uint32_t *colormap);

@@ -138,6 +138,21 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "4"
    },
    {
+      "ngp_framegen_fx",
+      "프레임 생성 — 이펙트",
+      NULL,
+      "장풍·칼 궤적 같은 이펙트를 중간 그림에서 어떻게 할지. 옮기기 = 게임 속 장풍 위치가 일정하게 갈 때·몸에 붙어 같이 움직일 때만 자리를 옮김(도트 그대로). 옮기기+섞기 = 그래도 못 옮기는 이펙트(모양이 바뀌는 큰베기 등)는 앞뒤 그림을 반투명으로 겹침(부드럽지만 원래 없던 중간색). 끔 = 예전처럼 이펙트는 제자리.",
+      NULL,
+      "video",
+      {
+         { "move",  "옮기기" },
+         { "blend", "옮기기 + 섞기" },
+         { "off",   "끔" },
+         { NULL, NULL },
+      },
+      "move"
+   },
+   {
       "ngp_runahead",
       "런어헤드 (입력 지연 줄이기)",
       NULL,
@@ -228,6 +243,18 @@ struct retro_core_option_definition option_defs_us[] = {
          { NULL, NULL},
       },
       "2",
+   },
+   {
+      "ngp_framegen_fx",
+      "프레임 생성 — 이펙트",
+      "옮기기 = 일정하게 날아가는 장풍·몸에 붙은 이펙트를 옮김. 옮기기+섞기 = 못 옮기는 이펙트는 반투명으로 섞음. 끔 = 예전처럼.",
+      {
+         { "move", NULL },
+         { "blend", NULL },
+         { "off", NULL },
+         { NULL, NULL},
+      },
+      "move",
    },
    { NULL, NULL, NULL, { NULL, NULL }, NULL },
 };

@@ -6,6 +6,7 @@
  *     우선순위일 때만 — 아니면 b 자리).
  * 타일·타일맵·팔레트는 b 의 것. 창(window)·배경색·반전·플레인 순서도 b 의 것. */
 #include <string.h>
+#include <stdlib.h>
 #include "ss2fg.h"
 
 /* ───────────── 캡처 ─────────────
@@ -232,6 +233,39 @@ static void draw_pattern(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *sc
    }
 }
 
+/* 반투명 그리기 — K2GE 12비트 색(0BGR)을 채널마다 섞는다. 앞에 더 높은 우선순위가 있으면(zbuf) 건너뛴다. zbuf 는 안 바꾼다.
+   (PocketCore 방의 60_ss2fg_effects.patch 에서 가져왔다) */
+static uint16_t mix12(uint16_t a, uint16_t b, int t)
+{
+   int r = ((a & 15) * (256 - t) + (b & 15) * t + 128) >> 8;
+   int g = (((a >> 4) & 15) * (256 - t) + ((b >> 4) & 15) * t + 128) >> 8;
+   int bl = (((a >> 8) & 15) * (256 - t) + ((b >> 8) & 15) * t + 128) >> 8;
+   return (uint16_t)(r | (g << 4) | (bl << 8));
+}
+static void draw_pattern_blend(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *scan, const uint8_t *zbuf,
+                               int x, unsigned tile, unsigned tiley, int mirror,
+                               const uint8_t *palette, unsigned pal, uint8_t depth, int alpha)
+{
+   int index, left, right, highmark, xx;
+   if (x >= SS2FG_W || alpha <= 0) return;
+   index = ld16(f->chr + (tile * 16) + (tiley * 2));
+   if (mirror)
+      index = mirrored[(index & 0xff00) >> 8] | (mirrored[index & 0xff] << 8);
+   palette += pal << 3;
+   left     = imax(imax(x, r->winx), 0);
+   right    = x + 7;
+   highmark = imin(r->winw + r->winx, SS2FG_W) - 1;
+   if (right > highmark) { index >>= (right - highmark) * 2; right = highmark; }
+   for (xx = right; xx >= left; --xx, index >>= 2)
+   {
+      uint16_t c;
+      if (depth < zbuf[xx] || (index & 3) == 0) continue;
+      c = ld16(palette + ((index & 3) << 1));
+      if (r->neg) c = (uint16_t)~c;
+      scan[xx] = alpha >= 256 ? c : mix12(scan[xx], c, alpha);
+   }
+}
+
 static void draw_scroll(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *scan, uint8_t *zbuf,
                         int y, int plane /*1·2*/, uint8_t sx, uint8_t sy, uint8_t depth)
 {
@@ -439,13 +473,246 @@ static int single_look(const ss2fg_frame *base, const ss2fg_frame *to, int k, in
    return c == 1;
 }
 
+static void set_group(const ss2fg_frame *base, fg_move mv[64], int gstart, int g, int vx, int vy)
+{
+   int k;
+   for (k = gstart; k < g; k++)
+      if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)vx; mv[k].dy = (int16_t)vy; mv[k].has = 1; }
+}
+
+/* ── 이펙트·장풍 (모양이 매 프레임 바뀌는 무리) — PocketCore 방의 60_ss2fg_effects.patch 에서 가져와 main 의 판정 구조에 맞췄다 ──
+   겉모습·몸·물체 위치 어느 것으로도 못 정한 무리(몸 팔레트 0·5 제외)를 세 가지로 다시 본다. 순서는 ③ RAM 물체 등속 →
+   ② 몸에 붙음 → ① 테두리 등속. 그래도 못 정하면 제자리(옮기기) 또는 다음 그림과 반투명으로 겹침(옮기기+섞기). */
+static int same_sprites(const ss2fg_frame *a, const ss2fg_frame *b)
+{
+   return !memcmp(a->spr, b->spr, sizeof a->spr) && !memcmp(a->sprcol, b->sprcol, sizeof a->sprcol) &&
+          !memcmp(a->ax, b->ax, sizeof a->ax) && !memcmp(a->ay, b->ay, sizeof a->ay) &&
+          a->line[0].spx == b->line[0].spx && a->line[0].spy == b->line[0].spy;
+}
+/* base 보다 앞선 캡처 중 스프라이트가 base 와 다른 가장 최근 것 (없으면 0) */
+static const ss2fg_frame *older_change(const ss2fg_frame *base)
+{
+   int i, j;
+   for (i = 0; i < FG_RING; i++)
+      if (fg_hist[i] >= 0 && &fg_slot[fg_hist[i]] == base) break;
+   if (i >= FG_RING) return 0;
+   for (j = i + 1; j < FG_RING; j++)
+   {
+      const ss2fg_frame *f;
+      if (fg_hist[j] < 0) return 0;
+      f = &fg_slot[fg_hist[j]];
+      if (!f->valid || f->mono || (f->dirty & SS2FG_DIRTY_SPR)) return 0;
+      if (!same_sprites(f, base)) return f;
+   }
+   return 0;
+}
+/* f 에서 우선순위 key·팔레트 pal 조각 무리의 테두리 — 창(w0..w1, h0..h1)에 걸치는 조각을 씨앗으로, 16px 안에
+   붙는 같은 팔레트 조각을 넓혀 모은다(한 이펙트가 슬롯 여러 구간에 흩어져 있어도 하나로). 반환 = 조각 수 */
+static int fx_box(const ss2fg_frame *f, uint16_t key, uint8_t pal, int w0, int w1, int h0, int h1,
+                  int *x0, int *x1, int *y0, int *y1)
+{
+   const ss2fg_regs *r = &f->line[0];
+   int j, c = 0, grew = 1;
+   int px[64], py[64], in[64], np = 0;
+   *x0 = 999; *x1 = -999; *y0 = 999; *y1 = -999;
+   for (j = 0; j < 64; j++)
+   {
+      uint16_t w = ld16(f->spr + j * 4);
+      if ((w & 0x1800) != key || f->sprcol[j] != pal) continue;
+      px[np] = wrapx(f->ax[j] + r->spx); py[np] = wrapc(f->ay[j] + r->spy);
+      in[np] = !(px[np] + 8 < w0 || px[np] > w1 || py[np] + 8 < h0 || py[np] > h1);
+      np++;
+   }
+   while (grew)
+   {
+      grew = 0;
+      for (j = 0; j < np; j++)
+      {
+         int i;
+         if (in[j]) continue;
+         for (i = 0; i < np; i++)
+            if (in[i] && abs(px[i] - px[j]) <= 16 && abs(py[i] - py[j]) <= 16) { in[j] = 1; grew = 1; break; }
+      }
+   }
+   for (j = 0; j < np; j++)
+   {
+      if (!in[j]) continue;
+      c++;
+      if (px[j] < *x0) *x0 = px[j];
+      if (px[j] + 8 > *x1) *x1 = px[j] + 8;
+      if (py[j] < *y0) *y0 = py[j];
+      if (py[j] + 8 > *y1) *y1 = py[j] + 8;
+   }
+   return c;
+}
+/* 시험용 계기: [0] 살핀 무리 [1] 물체 등속으로 옮김 [2] 몸에 붙여 옮김 [3] 테두리 등속으로 옮김
+                [4] 앞 캡처 없음 [5] 앞·다음에 같은 팔레트 조각 없음 [6] 등속 아님(두 걸음 차이·너무 큼) [7] 2px 미만·양 끝 방향 어긋남 */
+static int fx_stats[8];
+static int fx_in_render = 0;
+/* 이펙트 처리: 0 끔(예전 그대로) · 1 옮기기 · 2 옮기기 + 못 정한 것은 다음 그림과 반투명 섞기 (코어 옵션 ngp_framegen_fx) */
+static int fx_mode = 1;
+void ss2fg_set_fx(int mode) { fx_mode = mode < 0 ? 0 : mode > 2 ? 2 : mode; }
+int  ss2fg_get_fx(void) { return fx_mode; }
+void ss2fg_fx_stats(int *out8) { int i; for (i = 0; i < 8; i++) out8[i] = fx_stats[i]; }
+static uint8_t fx_fade_b[64];        /* render 중: base 조각이 «섞어 사라질» 이펙트인가 */
+static uint8_t fx_fade_in[64];       /* render 중: to 조각 중 «섞어 나타날» 이펙트 */
+static int fx_fade_on = 0, fx_fade_t = 0;
+static const ss2fg_frame *fx_fade_to = 0;
+/* base 무리(gstart..g)를 씨앗으로 같은 팔레트 이펙트 전체 테두리 */
+static void fx_base_box(const ss2fg_frame *base, int gstart, int g, int *x0, int *x1, int *y0, int *y1)
+{
+   const ss2fg_regs *rb = &base->line[0];
+   int k;
+   *x0 = 999; *x1 = -999; *y0 = 999; *y1 = -999;
+   for (k = gstart; k < g; k++)
+   {
+      uint16_t w = ld16(base->spr + k * 4);
+      int sx, sy;
+      if (!(w & 0x1800)) continue;
+      sx = wrapx(base->ax[k] + rb->spx); sy = wrapc(base->ay[k] + rb->spy);
+      if (sx < *x0) *x0 = sx;
+      if (sx + 8 > *x1) *x1 = sx + 8;
+      if (sy < *y0) *y0 = sy;
+      if (sy + 8 > *y1) *y1 = sy + 8;
+   }
+   if (*x0 <= *x1)
+      fx_box(base, ld16(base->spr + gstart * 4) & 0x1800, base->sprcol[gstart], *x0, *x1 - 1, *y0, *y1 - 1, x0, x1, y0, y1);
+}
+static int half_round(int v2) { return v2 >= 0 ? (v2 + 1) / 2 : -((-v2 + 1) / 2); }
+
+/* ① 장풍(따로 날아가는 것) — «직전 바뀐 프레임 → base → to» 두 걸음의 테두리 가운데 이동이 2px 안으로 같고,
+   진행 방향으로 테두리 양쪽 끝이 다 같은 쪽으로 움직였을 때(돌면서 날아가는 삼각 장풍처럼 모양·크기가 바뀌어도 됨).
+   한쪽 끝이 고정된 «늘어나는» 이펙트(칼 궤적)는 가운데가 반만 움직여 등속처럼 보이므로 양쪽 끝 검사로 거른다. */
+static int fx_vec(const ss2fg_frame *base, const ss2fg_frame *to, const ss2fg_frame *prev, int gstart, int g,
+                  int *vx, int *vy)
+{
+   uint16_t key = ld16(base->spr + gstart * 4) & 0x1800;
+   uint8_t pal = base->sprcol[gstart];
+   int bx0, bx1, by0, by1, tx0, tx1, ty0, ty1, px0, px1, py0, py1;
+   int c2bx, c2by, v2x, v2y, v1x, v1y;
+   if (!prev) { fx_stats[4]++; return 0; }
+   fx_base_box(base, gstart, g, &bx0, &bx1, &by0, &by1);
+   if (bx0 > bx1) return 0;
+   if (!fx_box(to, key, pal, bx0 - 24, bx1 + 24, by0 - 24, by1 + 24, &tx0, &tx1, &ty0, &ty1) ||
+       !fx_box(prev, key, pal, bx0 - 24, bx1 + 24, by0 - 24, by1 + 24, &px0, &px1, &py0, &py1))
+   { fx_stats[5]++; return 0; }
+   c2bx = bx0 + bx1; c2by = by0 + by1;
+   v2x = (tx0 + tx1) - c2bx; v2y = (ty0 + ty1) - c2by;
+   v1x = c2bx - (px0 + px1); v1y = c2by - (py0 + py1);
+   if (abs(v2x - v1x) > 4 || abs(v2y - v1y) > 4) { fx_stats[6]++; return 0; }
+   if (abs(v2x) + abs(v2y) < 4) { fx_stats[7]++; return 0; }        /* 2px 미만 — 옮길 것 없음 */
+   /* 진행 축(더 많이 움직인 축)에서 양쪽 끝이 두 걸음 모두 같은 방향으로 */
+   if (abs(v2x) >= abs(v2y))
+   {
+      int sgn = v2x > 0 ? 1 : -1;
+      if ((tx0 - bx0) * sgn <= 0 || (tx1 - bx1) * sgn <= 0 || (bx0 - px0) * sgn <= 0 || (bx1 - px1) * sgn <= 0)
+      { fx_stats[7]++; return 0; }
+   }
+   else
+   {
+      int sgn = v2y > 0 ? 1 : -1;
+      if ((ty0 - by0) * sgn <= 0 || (ty1 - by1) * sgn <= 0 || (by0 - py0) * sgn <= 0 || (by1 - py1) * sgn <= 0)
+      { fx_stats[7]++; return 0; }
+   }
+   *vx = half_round(v2x); *vy = half_round(v2y);
+   if (*vx > SS2FG_SPR_MAX_STEP || *vx < -SS2FG_SPR_MAX_STEP || *vy > SS2FG_SPR_MAX_STEP || *vy < -SS2FG_SPR_MAX_STEP)
+   { fx_stats[6]++; return 0; }
+   fx_stats[3]++;
+   return 1;
+}
+
+/* ③ RAM 물체로 나는 장풍 — 돌면서 날아가는 삼각 장풍처럼 그림 테두리는 회전 때문에 들쭉날쭉해도, 게임의 물체 자리(RAM)는
+   한 걸음에 -8px 씩 똑같이 간다(나찰 판 실측: 101→93→85→77…). 그래서 «앞 걸음과 이번 걸음의 물체 이동이 1px 안으로 같고»,
+   다음 그림 테두리 가운데도 대략(8px 안) 같이 갔을 때만 물체 이동량으로 옮긴다. 물체만 움직이고 그림은 제자리인
+   폭발(카즈키 판 +18)은 테두리 검사에서, 한 번 튀는 물체는 두 걸음 검사에서 걸린다. */
+static int fx_objpath(const ss2fg_frame *base, const ss2fg_frame *to, const ss2fg_frame *prev, int gstart, int g,
+                      int *vx, int *vy)
+{
+   const ss2fg_regs *rb = &base->line[0];
+   uint16_t key = ld16(base->spr + gstart * 4) & 0x1800;
+   uint8_t pal = base->sprcol[gstart];
+   int o, k, best = -1, bd = 999, bx0, bx1, by0, by1, tx0, tx1, ty0, ty1, d1x, d1y, d2x, d2y;
+   if (!prev || !base->body_ok || !to->body_ok || !prev->body_ok) return 0;
+   for (o = 2; o < SS2FG_OBJS; o++)
+   {
+      int l = 999, r = -999, t = 999, b = -999, ex, ey, d;
+      if (!(base->ob_act & to->ob_act & prev->ob_act & (1u << o))) continue;
+      if (base->ob_t[o] != to->ob_t[o] || base->ob_t[o] != prev->ob_t[o]) continue;
+      for (k = gstart; k < g; k++)
+      {
+         int sx, sy;
+         if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
+         sx = (int8_t)(uint8_t)(base->ax[k] + rb->spx - base->ob_x[o]);
+         sy = (int8_t)(uint8_t)(base->ay[k] + rb->spy - base->ob_y[o]);
+         if (sx < l) l = sx;
+         if (sx + 8 > r) r = sx + 8;
+         if (sy < t) t = sy;
+         if (sy + 8 > b) b = sy + 8;
+      }
+      if (l > r) return 0;
+      ex = l > 0 ? l : r < 0 ? -r : 0;
+      ey = t > 0 ? t : b < 0 ? -b : 0;
+      d = ex > ey ? ex : ey;
+      if (d < bd) { bd = d; best = o; }
+   }
+   if (best < 0 || bd > 48) return 0;
+   d2x = (int8_t)(uint8_t)(to->ob_x[best] - base->ob_x[best]);  d2y = (int8_t)(uint8_t)(to->ob_y[best] - base->ob_y[best]);
+   d1x = (int8_t)(uint8_t)(base->ob_x[best] - prev->ob_x[best]); d1y = (int8_t)(uint8_t)(base->ob_y[best] - prev->ob_y[best]);
+   if (abs(d2x - d1x) > 1 || abs(d2y - d1y) > 1) return 0;
+   if (abs(d2x) + abs(d2y) < 1) return 0;
+   if (d2x > SS2FG_SPR_MAX_STEP || d2x < -SS2FG_SPR_MAX_STEP || d2y > SS2FG_SPR_MAX_STEP || d2y < -SS2FG_SPR_MAX_STEP) return 0;
+   fx_base_box(base, gstart, g, &bx0, &bx1, &by0, &by1);
+   if (bx0 > bx1) return 0;
+   if (!fx_box(to, key, pal, bx0 - 24 + d2x, bx1 + 24 + d2x, by0 - 24 + d2y, by1 + 24 + d2y, &tx0, &tx1, &ty0, &ty1)) return 0;
+   if (abs((tx0 + tx1) - (bx0 + bx1) - 2 * d2x) > 16 || abs((ty0 + ty1) - (by0 + by1) - 2 * d2y) > 16) return 0;
+   *vx = d2x; *vy = d2y;
+   fx_stats[1]++;
+   return 1;
+}
+
+/* ② 몸에 붙은 이펙트(칼 궤적·기 모으기 등) — 몸이 움직이는데 이펙트만 제자리면 중간 그림에서 몸에서 떨어져 보인다.
+   이펙트가 몸 근처이고, 다음 프레임의 같은 팔레트 이펙트 테두리 가운데가 몸 이동과 6px 안으로 같이 움직였으면
+   몸 이동량(RAM — 정확)으로 옮긴다. 맞은 자리에 고정된 불똥은 몸만 밀려나고 불똥은 제자리라 걸리지 않는다. */
+static int fx_attach(const ss2fg_frame *base, const ss2fg_frame *to, int gstart, int g, int *vx, int *vy)
+{
+   uint16_t key = ld16(base->spr + gstart * 4) & 0x1800;
+   uint8_t pal = base->sprcol[gstart];
+   int bx0, bx1, by0, by1, tx0, tx1, ty0, ty1, p, best = 99, bvx = 0, bvy = 0;
+   if (!base->body_ok || !to->body_ok) return 0;
+   fx_base_box(base, gstart, g, &bx0, &bx1, &by0, &by1);
+   if (bx0 > bx1) return 0;
+   for (p = 0; p < 2; p++)
+   {
+      int dx, dy, ex, ey, rx0, rx1, ry0, ry1, err;
+      if (!(base->ob_act & to->ob_act & (1u << p))) continue;
+      dx = (int8_t)(uint8_t)(to->ob_x[p] - base->ob_x[p]);
+      dy = (int8_t)(uint8_t)(to->ob_y[p] - base->ob_y[p]);
+      if (abs(dx) + abs(dy) < 2) continue;                       /* 몸이 안 움직이면 붙일 이유 없음 */
+      if (dx > SS2FG_SPR_MAX_STEP || dx < -SS2FG_SPR_MAX_STEP || dy > SS2FG_SPR_MAX_STEP || dy < -SS2FG_SPR_MAX_STEP) continue;
+      /* 몸(발 가운데) 기준 상대 테두리 — 옆 56px, 위 80px ~ 아래 24px 안에 걸쳐야 «몸 근처» */
+      rx0 = bx0 - (int)base->ob_x[p]; rx1 = bx1 - (int)base->ob_x[p];
+      ry0 = by0 - (int)base->ob_y[p]; ry1 = by1 - (int)base->ob_y[p];
+      if (rx0 > 56 || rx1 < -56 || ry0 > 24 || ry1 < -80) continue;
+      if (!fx_box(to, key, pal, bx0 - 24 + dx, bx1 + 24 + dx, by0 - 24 + dy, by1 + 24 + dy, &tx0, &tx1, &ty0, &ty1)) continue;
+      ex = (tx0 + tx1) - (bx0 + bx1) - 2 * dx; ey = (ty0 + ty1) - (by0 + by1) - 2 * dy;
+      err = abs(ex) > abs(ey) ? abs(ex) : abs(ey);
+      if (err <= 12 && err < best) { best = err; bvx = dx; bvy = dy; }
+   }
+   if (best == 99) return 0;
+   *vx = bvx; *vy = bvy;
+   fx_stats[2]++;
+   return 1;
+}
+
 static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move mv[64])
 {
    const ss2fg_regs *rb = &base->line[0], *rt = &to->line[0];
    uint8_t cnt_b[512], cnt_t[512];
    fg_move cand[64];
+   uint8_t und[64];                 /* und[gstart] = 그 무리 끝(g) — 아무것으로도 못 정한 비체인 무리 (0 = 아님) */
    int i, g, gstart;
    memset(mv, 0, 64 * sizeof *mv);
+   memset(und, 0, sizeof und);
    memset(cand, 0, sizeof cand);
    memset(cnt_b, 0, sizeof cnt_b);
    memset(cnt_t, 0, sizeof cnt_t);
@@ -552,7 +819,11 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
                }
          }
          else
-            for (k = gstart; k < g; k++) if (cand[k].has) mv[k] = cand[k];   /* 단독 스프라이트 — 슬롯 규칙 */
+         {
+            int dec = 0;
+            for (k = gstart; k < g; k++) if (cand[k].has) { mv[k] = cand[k]; dec = 1; }   /* 단독 스프라이트 — 슬롯 규칙 */
+            if (!dec && nvis == 1) und[gstart] = (uint8_t)g;             /* 아무 짝도 없는 외톨이 — 아래 이펙트 규칙 후보 */
+         }
          continue;
       }
       for (k = gstart; k < g; k++)
@@ -633,11 +904,40 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
          continue;
       }
 body_or_stop:
-      if (!body) continue;                                      /* 몸·물체 위치를 모른다 → 무리 정지 */
+      if (!body) { und[gstart] = (uint8_t)g; continue; }        /* 몸·물체 위치를 모른다 → 무리 정지(이펙트면 아래 이펙트 규칙으로) */
       for (k = gstart; k < g; k++)                              /* 2순위: 몸·물체 위치 — 포즈가 통째로 바뀌어도 궤적대로 */
          if (ld16(base->spr + k * 4) & 0x1800) { mv[k].dx = (int16_t)bvx; mv[k].dy = (int16_t)bvy; mv[k].has = 1; }
    }
 
+   /* 못 정한 무리 중 몸 팔레트(0·5)가 아닌 것 = 이펙트·장풍 — ③ RAM 물체 등속 → ② 몸에 붙음 → ① 테두리 등속 순서로.
+      정해지면 und 를 지운다(남은 und = 옮기기+섞기에서 반투명으로 겹칠 후보) */
+   if (fx_mode)
+   {
+      const ss2fg_frame *prev = 0;
+      int prev_done = 0;
+      for (gstart = 0; gstart < 64; gstart++)
+      {
+         int vx, vy;
+         uint8_t pal;
+         if (!und[gstart]) continue;
+         pal = base->sprcol[gstart];
+         if (pal == 0 || pal == 5) continue;
+         if (!prev_done) { prev = older_change(base); prev_done = 1; }
+         fx_stats[0]++;
+         if (fx_objpath(base, to, prev, gstart, und[gstart], &vx, &vy) ||
+             fx_attach(base, to, gstart, und[gstart], &vx, &vy) ||
+             fx_vec(base, to, prev, gstart, und[gstart], &vx, &vy))
+         { set_group(base, mv, gstart, und[gstart], vx, vy); und[gstart] = 0; }
+      }
+   }
+   if (fx_in_render)
+   {
+      memset(fx_fade_b, 0, sizeof fx_fade_b);
+      if (fx_mode == 2)
+         for (gstart = 0; gstart < 64; gstart++)
+            if (und[gstart] && base->sprcol[gstart] != 0 && base->sprcol[gstart] != 5 && base->sprcol[gstart] != 12)
+               memset(fx_fade_b + gstart, 1, und[gstart] - gstart);
+   }
    /* 체인 그룹: 슬롯 k 에 체인 비트(0x0600)가 있으면 k-1 과 같은 그룹 */
    for (gstart = 0; gstart < 64; gstart = g)
    {
@@ -737,11 +1037,48 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const fg
          sx = lerp_i(sx, mv[spr].dx, ts);
          sy = lerp_i(sy, mv[spr].dy, ts);
       }
+      if (fx_fade_on && fx_fade_b[spr]) continue;              /* 섞어 그릴 이펙트 — 아래 반투명 단계에서 */
       if (y >= sy && y <= sy + 7)
       {
          unsigned row = (unsigned)(y - sy) & 7;
          draw_pattern(base, rb, scan, zbuf, sx, d & 0x01FF, (d & 0x4000) ? 7 - row : row,
                       d & 0x8000, base->pal, base->sprcol[spr] & 0xF, (uint8_t)(priority << 1));
+      }
+   }
+   if (fx_fade_on && (base->layers & 4))
+   {
+      /* 반투명 단계: 사라질 base 이펙트(1-t) 위에 다음 그림의 이펙트(t) */
+      for (spr = 0; spr < 64; spr++)
+      {
+         uint16_t d = ld16(base->spr + spr * 4);
+         unsigned priority = (d & 0x1800) >> 11;
+         int sx, sy;
+         if (!priority || !fx_fade_b[spr]) continue;
+         sx = wrapx(base->ax[spr] + rb->spx); sy = wrapc(base->ay[spr] + rb->spy);
+         if (y >= sy && y <= sy + 7)
+         {
+            unsigned row = (unsigned)(y - sy) & 7;
+            draw_pattern_blend(base, rb, scan, zbuf, sx, d & 0x01FF, (d & 0x4000) ? 7 - row : row,
+                               d & 0x8000, base->pal, base->sprcol[spr] & 0xF, (uint8_t)(priority << 1), 256 - fx_fade_t);
+         }
+      }
+      if (fx_fade_to)
+      {
+         const ss2fg_regs *rt = &fx_fade_to->line[y];
+         for (spr = 0; spr < 64; spr++)
+         {
+            uint16_t d = ld16(fx_fade_to->spr + spr * 4);
+            unsigned priority = (d & 0x1800) >> 11;
+            int sx, sy;
+            if (!priority || !fx_fade_in[spr]) continue;
+            sx = wrapx(fx_fade_to->ax[spr] + rt->spx); sy = wrapc(fx_fade_to->ay[spr] + rt->spy);
+            if (y >= sy && y <= sy + 7)
+            {
+               unsigned row = (unsigned)(y - sy) & 7;
+               draw_pattern_blend(fx_fade_to, rb, scan, zbuf, sx, d & 0x01FF, (d & 0x4000) ? 7 - row : row,
+                                  d & 0x8000, fx_fade_to->pal, fx_fade_to->sprcol[spr] & 0xF, (uint8_t)(priority << 1), fx_fade_t);
+            }
+         }
       }
    }
 }
@@ -768,7 +1105,36 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
    if (t_scr > 256) t_scr = 256;
    if (to_spr && t_spr == 0) to_spr = 0;
    if (to_scr && t_scr == 0) to_scr = 0;
-   if (to_spr) sprite_moves(base, to_spr, mv);
+   fx_fade_on = 0; fx_fade_to = 0;
+   if (to_spr) { fx_in_render = 1; sprite_moves(base, to_spr, mv); fx_in_render = 0; }
+   if (to_spr && fx_mode == 2)
+   {
+      /* 나타날 to 이펙트 = 몸·그림자 팔레트가 아니고, base 의 «정해진(옮겨 그려지는)» 이펙트 조각이 도착할 자리(8px)에
+         있지 않은 조각. 정해진 무리는 base 그림을 옮겨 그리므로 to 쪽을 또 그리면 겹친다 */
+      const ss2fg_regs *rb0 = &base->line[0], *rt0 = &to_spr->line[0];
+      int i, j, any = 0;
+      memset(fx_fade_in, 0, sizeof fx_fade_in);
+      for (j = 0; j < 64; j++)
+      {
+         uint16_t wt = ld16(to_spr->spr + j * 4);
+         int tx, ty, cov = 0;
+         uint8_t pal = to_spr->sprcol[j];
+         if (!(wt & 0x1800) || pal == 0 || pal == 5 || pal == 12) continue;
+         tx = wrapx(to_spr->ax[j] + rt0->spx); ty = wrapc(to_spr->ay[j] + rt0->spy);
+         for (i = 0; i < 64 && !cov; i++)
+         {
+            uint16_t wb = ld16(base->spr + i * 4);
+            int bx, by;
+            if (!(wb & 0x1800) || base->sprcol[i] != pal || fx_fade_b[i]) continue;
+            bx = wrapx(base->ax[i] + rb0->spx) + (mv[i].has ? mv[i].dx : 0);
+            by = wrapc(base->ay[i] + rb0->spy) + (mv[i].has ? mv[i].dy : 0);
+            if (abs(bx - tx) <= 8 && abs(by - ty) <= 8) cov = 1;
+         }
+         if (!cov) { fx_fade_in[j] = 1; any = 1; }
+      }
+      for (i = 0; i < 64; i++) if (fx_fade_b[i]) any = 1;
+      if (any) { fx_fade_on = 1; fx_fade_to = to_spr; fx_fade_t = t_spr; }
+   }
 
    for (y = 0; y < SS2FG_H; y++)
    {

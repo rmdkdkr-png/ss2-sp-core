@@ -702,7 +702,9 @@ static void t_body(void)
    BODY_RAM(48, 100, 0); frame(&GA, fa, 0, 0, 0);
    BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
    RENDER(128);
-   CHECK(lit(fm, 28, 76) && !lit(fm, 27, 76), "non-body palette: stays at base x=28");
+   CHECK(lit(fm, 24, 76) && !lit(fm, 23, 76), "non-body palette near a moving body, next-frame box moved with it: attached (fx) -> mid x=24");
+   ss2fg_set_fx(0); RENDER(128); ss2fg_set_fx(1);
+   CHECK(lit(fm, 28, 76) && !lit(fm, 27, 76), "non-body palette, fx off: stays at base x=28");
    /* P2(팔레트 5)는 +0x40 주소. 카메라가 움직여도 화면 몸 위치 = 월드 X - 카메라 */
    ss2fg_reset();
    for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 5); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 5); }
@@ -781,9 +783,87 @@ static void t_body(void)
    printf("11 몸·물체 위치(RAM): %s\n", fails == f0 ? "통과" : "실패");
 }
 
+/* 12. 이펙트·장풍 — 겉모습·몸·물체로 못 정한 무리를 ③ RAM 물체 등속 → ② 몸에 붙음 → ① 테두리 등속으로 옮긴다.
+   못 정하면 제자리(옮기기) 또는 다음 그림과 반투명(옮기기+섞기). 세 프레임 P→A→B 를 순서대로 캡처하고 base=A(hist 1),
+   to=B(cur) 로 그린다 — 코어의 예측 순서와 같다(RENDER 는 반대 방향이라 «직전 바뀐 프레임»이 to 와 겹쳐 두 걸음 규칙이 안 걸린다) */
+#define RENDER_FWD(t) ss2fg_render2(ss2fg_hist(1), ss2fg_cur(), (t), ss2fg_cur(), (t), fm, SCREEN_WIDTH, 2, CM)
+static void fx_tiles(int r0, int r1, int r2)   /* P·A·B 의 타일 1·2·3 그림 — 프레임마다 다른 무늬(짝 없음) */
+{
+   static const uint16_t pat[9] = { 0x5AA5, 0xA55A, 0x5FF5, 0xF55F, 0xAFFA, 0xFAAF, 0x6AA6, 0xA66A, 0x6FF6 };
+   int r;
+   for (r = 0; r < 8; r++)
+   {
+      ((uint16_t*)GM.CharacterRAM)[1*8+r] = pat[r0]; ((uint16_t*)GM.CharacterRAM)[2*8+r] = pat[r0+1]; ((uint16_t*)GM.CharacterRAM)[3*8+r] = pat[r0+2];
+      ((uint16_t*)GA.CharacterRAM)[1*8+r] = pat[r1]; ((uint16_t*)GA.CharacterRAM)[2*8+r] = pat[r1+1]; ((uint16_t*)GA.CharacterRAM)[3*8+r] = pat[r1+2];
+      ((uint16_t*)GB.CharacterRAM)[1*8+r] = pat[r2]; ((uint16_t*)GB.CharacterRAM)[2*8+r] = pat[r2+1]; ((uint16_t*)GB.CharacterRAM)[3*8+r] = pat[r2+2];
+   }
+}
+static void t_fx(void)
+{
+   int f0 = fails, i;
+   static uint8_t ram[16384];
+   static uint16_t fo[SCREEN_WIDTH*SCREEN_HEIGHT];
+#define FX_BODY(x, y, cam) do { ram[0x00A7] = 241; ram[0x0E38] = (uint8_t)((x) + (cam)); ram[0x0E3A] = (uint8_t)(y); ram[0x176D] = (uint8_t)(cam); ram[0x0E36] = 1; ram[0x0E37] = 0; } while (0)
+#define FX_OBJ(k, t, x, y) do { ram[0x0E00 + 0x40*(k) + 0x36] = (uint8_t)(t); ram[0x0E00 + 0x40*(k) + 0x37] = 0; ram[0x0E00 + 0x40*(k) + 0x38] = (uint8_t)((x) + ram[0x176D]); ram[0x0E00 + 0x40*(k) + 0x3A] = (uint8_t)(y); } while (0)
+   ss2fg_set_ram(0); ss2fg_set_fx(1);
+   /* ① 등속 장풍: 팔레트 7, 두 조각, 그림이 매 프레임 다르다(짝 없음), x 20 → 28 → 36 → 반에서 +4 */
+   ss2fg_reset(); base_state(&GM); base_state(&GA); base_state(&GB); fx_tiles(0, 3, 6);
+   for (i = 0; i < 2; i++) { put_sprite(&GM, i, 1 + i, 20 + i * 8, 60, 3, 0, 7); put_sprite(&GA, i, 1 + i, 28 + i * 8, 60, 3, 0, 7); put_sprite(&GB, i, 1 + i, 36 + i * 8, 60, 3, 0, 7); }
+   frame(&GM, fm, 0, 0, 0); frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   CHECK(RENDER_FWD(128), "fx: render2 forward ok");
+   CHECK(lit(fm, 32, 60) && !lit(fm, 31, 60) && lit(fm, 47, 60) && !lit(fm, 48, 60), "fx vec: constant-velocity projectile (two steps +8) -> mid x=32..47");
+   CHECK(ss2fg_motion(ss2fg_hist(1), ss2fg_cur()) & 1, "fx vec: motion(A,B) reports sprite movement");
+   ss2fg_set_fx(0); RENDER_FWD(128); ss2fg_set_fx(1);
+   CHECK(lit(fm, 28, 60) && !lit(fm, 27, 60) && lit(fm, 43, 60) && !lit(fm, 44, 60), "fx off: projectile stays at base x=28..43");
+   /* 등속 아님(P→A +4, A→B +8) → 제자리 */
+   ss2fg_reset();
+   for (i = 0; i < 2; i++) put_sprite(&GM, i, 1 + i, 24 + i * 8, 60, 3, 0, 7);
+   frame(&GM, fm, 0, 0, 0); frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER_FWD(128);
+   CHECK(lit(fm, 28, 60) && !lit(fm, 27, 60) && lit(fm, 43, 60) && !lit(fm, 44, 60), "fx vec: steps differ (+4 then +8) -> stays at base x=28");
+   memcpy(fo, fm, sizeof fo);
+   /* 같은 상황을 «옮기기+섞기»로: base 이펙트는 반투명(배경과 섞인 색), to 이펙트(x=44..51, 옮기기에선 안 보이던 자리)도 반투명으로 나타난다 */
+   ss2fg_set_fx(2); RENDER_FWD(128); ss2fg_set_fx(1);
+   CHECK(fm[60*SCREEN_WIDTH + 30] != 0 && fm[60*SCREEN_WIDTH + 30] != fo[60*SCREEN_WIDTH + 30], "fx blend: undecided base effect drawn half-transparent at x=30");
+   CHECK(lit(fm, 48, 60) && !lit(fo, 48, 60), "fx blend: next-frame effect fades in at x=48 (unlit in move mode)");
+   CHECK(memcmp(fm + 100*SCREEN_WIDTH, fo + 100*SCREEN_WIDTH, 20 * SCREEN_WIDTH * 2) == 0, "fx blend: rows without effect identical to move mode");
+   /* 늘어나는 궤적(왼쪽 끝 고정, 1 → 2 → 3 조각): 가운데는 등속이지만 양 끝 검사에서 걸린다 → 제자리 */
+   ss2fg_reset(); base_state(&GM); base_state(&GA); base_state(&GB); fx_tiles(0, 3, 6);
+   put_sprite(&GM, 0, 1, 20, 60, 3, 0, 7);
+   for (i = 0; i < 2; i++) put_sprite(&GA, i, 1 + i, 20 + i * 8, 60, 3, 0, 7);
+   for (i = 0; i < 3; i++) put_sprite(&GB, i, 1 + i, 20 + i * 8, 60, 3, 0, 7);
+   frame(&GM, fm, 0, 0, 0); frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER_FWD(128);
+   CHECK(lit(fm, 20, 60) && !lit(fm, 19, 60) && lit(fm, 35, 60) && !lit(fm, 36, 60), "fx vec: stretching trail (left end fixed) not moved, stays x=20..35");
+   /* ③ RAM 물체 등속: 물체 칸 4 가 -8 씩(100→92→84), 그림 테두리는 회전으로 들쭉날쭉(P 100, A 92, B 87 → 겉모습 등속 아님, 물체 규칙 ±2px 검증도 실패)
+      → 물체 이동량 -8 로 옮긴다 → 반에서 88..103 */
+   ss2fg_set_ram(ram); ss2fg_reset(); memset(ram, 0, sizeof ram);
+   for (i = 0; i < 8; i++) { ram[0x0E00 + 0x40*i + 0x36] = 0xFF; ram[0x0E00 + 0x40*i + 0x37] = 0xFF; }
+   base_state(&GM); base_state(&GA); base_state(&GB); fx_tiles(0, 3, 6);
+   for (i = 0; i < 2; i++) { put_sprite(&GM, i, 1 + i, 100 + i * 8, 64, 3, 0, 7); put_sprite(&GA, i, 1 + i, 92 + i * 8, 64, 3, 0, 7); put_sprite(&GB, i, 1 + i, 87 + i * 8, 64, 3, 0, 7); }
+   FX_BODY(30, 128, 0); FX_OBJ(4, 0x10, 100, 70); frame(&GM, fm, 0, 0, 0);   /* 더미: 이 RAM 이 P 의 물체 자리 */
+   FX_OBJ(4, 0x10, 92, 70); frame(&GM, fm, 0, 0, 0);                         /* P */
+   FX_OBJ(4, 0x10, 84, 70); frame(&GA, fa, 0, 0, 0);                         /* A */
+   FX_OBJ(4, 0x10, 76, 70); frame(&GB, fb, 0, 0, 0);                         /* B */
+   CHECK(ss2fg_hist(2) && ss2fg_hist(2)->body_ok && ss2fg_hist(2)->ob_x[4] == 100 && ss2fg_hist(1)->ob_x[4] == 92 && ss2fg_cur()->ob_x[4] == 84, "fx obj: object slot 4 at 100/92/84 in P/A/B");
+   RENDER_FWD(128);
+   CHECK(lit(fm, 88, 64) && !lit(fm, 87, 64) && lit(fm, 103, 64) && !lit(fm, 104, 64), "fx obj: constant object speed (-8,-8) with jittery box -> moved by object, mid x=88..103");
+   /* 물체만 +18 씩 가고 그림은 제자리(폭발) → 테두리 검사에서 걸려 제자리 */
+   ss2fg_reset();
+   for (i = 0; i < 2; i++) { put_sprite(&GM, i, 1 + i, 92 + i * 8, 64, 3, 0, 7); put_sprite(&GB, i, 1 + i, 92 + i * 8, 64, 3, 0, 7); }
+   FX_OBJ(4, 0x10, 64, 70); frame(&GM, fm, 0, 0, 0);
+   FX_OBJ(4, 0x10, 82, 70); frame(&GM, fm, 0, 0, 0);
+   FX_OBJ(4, 0x10, 100, 70); frame(&GA, fa, 0, 0, 0);
+   FX_OBJ(4, 0x10, 118, 70); frame(&GB, fb, 0, 0, 0);
+   RENDER_FWD(128);
+   CHECK(lit(fm, 92, 64) && !lit(fm, 91, 64) && lit(fm, 107, 64) && !lit(fm, 108, 64), "fx obj: object moves +18 but picture stays (explosion) -> not moved, x=92..107");
+   ss2fg_set_ram(0); ss2fg_set_fx(1);
+   printf("12 이펙트·장풍: %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(void)
 {
-   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster(); t_four(); t_body();
+   t_equiv(); t_mid(); t_snap(); t_chain(); t_cluster(); t_scrollwrap(); t_threshold(); t_dirty(); t_pop(); t_raster(); t_four(); t_body(); t_fx();
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

@@ -981,6 +981,11 @@ static void check_variables(void)
       var.value = NULL;
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
          ra_opt = !strcmp(var.value, "0") ? 0 : !strcmp(var.value, "1") ? 1 : 2;
+
+      var.key   = "ngp_framegen_fx";
+      var.value = NULL;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+         ss2fg_set_fx(!strcmp(var.value, "off") ? 0 : !strcmp(var.value, "blend") ? 2 : 1);
       if (!cv_booted || fg_opt != opt0 || fg_mode != mode0)
       { fg_rate_block = 0; fg_block_n = 0; }   /* 프레임 생성 옵션을 바꿨다 — 다시 판정 */
    }
@@ -1814,3 +1819,6 @@ void MDFN_MakeFName(uint8_t type, char *s, size_t len,
          break;
    }
 }
+
+/* 시험용 계기 — 이펙트 판정 8칸 (tools/harness/fgrom.c) */
+void retro_ngp_fx_stats(int *out8) { ss2fg_fx_stats(out8); }
