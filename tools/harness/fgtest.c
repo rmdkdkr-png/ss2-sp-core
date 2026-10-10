@@ -289,6 +289,30 @@ static void t_chain(void)
    CHECK(lit(fm, 20, 80) && lit(fm, 27, 80) && !lit(fm, 28, 80) && !lit(fm, 19, 80), "tile content changed: piece must stay at base x=20..27 (not mid 15)");
    CHECK(fm[80*160+20] == fb[80*160+20], "tile content changed: base(B) picture is drawn");
    CHECK(lit(fm, 65, 80) && lit(fm, 72, 80) && !lit(fm, 64, 80) && !lit(fm, 73, 80), "tile content same: piece interpolated to x=65..72");
+   /* 고유성은 두 프레임 모두: base 에선 타일 2 가 하나뿐이지만 to 쪽에서 둘이면 그 조각은 믿지 않는다(정지) */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 2, 10, 100, 3, 0, 1); put_sprite(&GA, 5, 2, 120, 100, 3, 0, 1);
+   base_state(&GB); put_sprite(&GB, 0, 2, 20, 100, 3, 0, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 20, 100) && !lit(fm, 15, 100) && !lit(fm, 19, 100), "uniqueness must hold in both frames: dup in A → static at base x=20");
+   /* 과반 분모는 '믿을 수 있는 표'(보이는 조각 수가 아님): 보이는 5조각 중 2조각만 믿을 수 있고 둘이 같으면 그룹이 움직인다 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 1, 10, 120, 3, 0, 1); put_sprite(&GA, 1, 2, 8, 0, 3, 0x0400 | 0x0200, 1);
+   put_sprite(&GA, 2, 3, 8, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GA, 3, 3, 8, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GA, 4, 3, 8, 0, 3, 0x0400 | 0x0200, 1);
+   base_state(&GB); put_sprite(&GB, 0, 1, 20, 120, 3, 0, 1); put_sprite(&GB, 1, 2, 8, 0, 3, 0x0400 | 0x0200, 1);
+   put_sprite(&GB, 2, 3, 8, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GB, 3, 3, 8, 0, 3, 0x0400 | 0x0200, 1); put_sprite(&GB, 4, 3, 8, 0, 3, 0x0400 | 0x0200, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 15, 120) && !lit(fm, 14, 120) && lit(fm, 54, 120) && !lit(fm, 55, 120), "quorum over trusted voters: 2 of 5 visible (tile 3 shared) still moves the group by -5 (last piece 47..54)");
+   /* 표가 ±1 안에서 갈릴 때 평균의 반올림: -10 과 -11 → -11(0 에서 먼 쪽) → 중점 -5 → x=15 */
+   ss2fg_reset();
+   base_state(&GA); put_sprite(&GA, 0, 1, 10, 140, 3, 0, 1); put_sprite(&GA, 1, 2, 7, 0, 3, 0x0400 | 0x0200, 1);
+   base_state(&GB); put_sprite(&GB, 0, 1, 20, 140, 3, 0, 1); put_sprite(&GB, 1, 2, 8, 0, 3, 0x0400 | 0x0200, 1);
+   frame(&GA, fa, 0, 0, 0); frame(&GB, fb, 0, 0, 0);
+   RENDER(128);
+   CHECK(lit(fm, 15, 140) && !lit(fm, 14, 140), "cluster mean rounding: parent at x=15");
+   CHECK(lit(fm, 30, 140) && !lit(fm, 31, 140), "cluster mean rounding: child (base 28, vector -11→mid -5) at x=23..30");
    printf("4 체인: %s\n", fails == f0 ? "통과" : "실패");
 }
 
