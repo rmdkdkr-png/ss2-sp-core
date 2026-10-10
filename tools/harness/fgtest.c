@@ -650,9 +650,9 @@ static void t_four(void)
    ss2fg_capture_pop(); ss2fg_capture_pop();
    CHECK(ss2fg_cur() && ss2fg_cur()->spr[2] == 20 && ss2fg_cur()->line[0].s1x == 8 && ss2fg_prev() && ss2fg_prev()->spr[2] == 10,
          "after two pops cur=B prev=A");
-   /* 그 뒤 새 캡처가 무른 슬롯을 재사용해도 B·A 가 멀쩡하고, 여섯 장 넘게 쌓으면 가장 오래된 것부터 밀려난다 */
-   for (i = 0; i < 7; i++) { put_sprite(&GM, 0, 1, (uint8_t)(40 + i * 8), 60, 3, 0, 1); frame(&GM, fm, 0, 0, 0); }
-   CHECK(ss2fg_hist(0)->spr[2] == 88 && ss2fg_hist(5) && ss2fg_hist(5)->spr[2] == 48 && ss2fg_hist(6) == 0, "ring keeps 6 most recent (hist(5) = 48, hist(6) empty)");
+   /* 그 뒤 새 캡처가 무른 슬롯을 재사용해도 B·A 가 멀쩡하고, 열 장 넘게 쌓으면 가장 오래된 것부터 밀려난다(고리 10 — 런어헤드 2 + 미리 4 + 실제·앞) */
+   for (i = 0; i < 11; i++) { put_sprite(&GM, 0, 1, (uint8_t)(40 + i * 8), 60, 3, 0, 1); frame(&GM, fm, 0, 0, 0); }
+   CHECK(ss2fg_hist(0)->spr[2] == 120 && ss2fg_hist(9) && ss2fg_hist(9)->spr[2] == 48 && ss2fg_hist(10) == 0, "ring keeps 10 most recent (hist(9) = 48, hist(10) empty)");
    printf("10 4배 — render2·motion·hist: %s\n", fails == f0 ? "통과" : "실패");
 }
 
@@ -703,8 +703,42 @@ static void t_body(void)
    BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
    RENDER(128);
    CHECK(lit(fm, 24, 76) && !lit(fm, 23, 76), "non-body palette near a moving body, next-frame box moved with it: attached (fx) -> mid x=24");
+   /* 여섯 조각 이상이고 그 캐릭터의 몸 팔레트 조각이 근처에 하나도 없으면 «다른 팔레트로 그린 몸»(감전·불탐) — 이펙트 규칙을 꺼도 몸으로 옮긴다 */
    ss2fg_set_fx(0); RENDER(128); ss2fg_set_fx(1);
-   CHECK(lit(fm, 28, 76) && !lit(fm, 27, 76), "non-body palette, fx off: stays at base x=28");
+   CHECK(lit(fm, 24, 76) && !lit(fm, 23, 76), "alt-palette body (6 pieces, no body-palette piece near): moves with body even with fx off -> mid x=24");
+   /* 다섯 조각이면 몸이 아니다 → 이펙트 규칙 끄면 제자리 */
+   ss2fg_reset();
+   base_state(&GA); base_state(&GB);
+   for (i = 0; i < 6; i++) for (r = 0; r < 8; r++) { ((uint16_t*)GA.CharacterRAM)[(1+i)*8 + r] = 0xFFFF; ((uint16_t*)GB.CharacterRAM)[(1+i)*8 + r] = pat[i]; }
+   for (i = 0; i < 5; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 7); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 7); }
+   BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(48, 100, 0); frame(&GA, fa, 0, 0, 0);
+   BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
+   ss2fg_set_fx(0); RENDER(128); ss2fg_set_fx(1);
+   CHECK(lit(fm, 28, 76) && !lit(fm, 27, 76), "5-piece non-body palette, fx off: not a body, stays at base x=28");
+   /* 몸 팔레트 조각이 근처에 있으면(몸은 따로 있다) 6조각이라도 이펙트 — 제자리 */
+   ss2fg_reset();
+   for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 7); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 7); }
+   put_sprite(&GA, 10, 3, 40, 92, 3, 0, 0); put_sprite(&GB, 10, 3, 48, 92, 3, 0, 0);
+   BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(48, 100, 0); frame(&GA, fa, 0, 0, 0);
+   BODY_RAM(56, 100, 0); frame(&GB, fb, 0, 0, 0);
+   ss2fg_set_fx(0); RENDER(128); ss2fg_set_fx(1);
+   CHECK(lit(fm, 28, 76) && !lit(fm, 27, 76), "6-piece non-body palette with body-palette piece near: effect, fx off -> stays x=28");
+   /* 몸 따로 박자: render2 에 to 없이 몸 0 을 +4px(1024/256) 옮기라고 하면 몸 팔레트 조각만 그만큼 — 한 번 그리기용(다음 그리기엔 꺼짐) */
+   ss2fg_reset();
+   base_state(&GA);
+   for (i = 0; i < 6; i++) for (r = 0; r < 8; r++) ((uint16_t*)GA.CharacterRAM)[(1+i)*8 + r] = 0xFFFF;
+   for (i = 0; i < 6; i++) put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 0);
+   put_sprite(&GA, 10, 3, 100, 60, 3, 0, 7);
+   BODY_RAM(40, 100, 0); frame(&GM, fm, 0, 0, 0);
+   BODY_RAM(40, 100, 0); frame(&GA, fa, 0, 0, 0);
+   ss2fg_body_override(0, 1, 1024, 0);
+   CHECK(ss2fg_render2(ss2fg_cur(), 0, 0, 0, 0, fm, SCREEN_WIDTH, 2, CM), "body override: render2 without to ok");
+   CHECK(lit(fm, 24, 76) && !lit(fm, 23, 76) && lit(fm, 47, 84) && !lit(fm, 48, 84), "body override: body pieces shifted +4 -> x=24..47");
+   CHECK(lit(fm, 100, 60) && !lit(fm, 99, 60) && lit(fm, 107, 60) && !lit(fm, 108, 60), "body override: non-body piece not shifted (x=100..107)");
+   ss2fg_render2(ss2fg_cur(), 0, 0, 0, 0, fm, SCREEN_WIDTH, 2, CM);
+   CHECK(lit(fm, 20, 76) && !lit(fm, 19, 76), "body override: one-shot, next render back at x=20");
    /* P2(팔레트 5)는 +0x40 주소. 카메라가 움직여도 화면 몸 위치 = 월드 X - 카메라 */
    ss2fg_reset();
    for (i = 0; i < 6; i++) { put_sprite(&GA, i, 1 + i, 20 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 5); put_sprite(&GB, i, 1 + i, 28 + (i % 3) * 8, 76 + (i / 3) * 8, 3, 0, 5); }

@@ -74,7 +74,7 @@ void ss2fg_set_ram(const uint8_t *ram);
 
 const ss2fg_frame *ss2fg_prev(void);       /* 직전 실제 프레임 (없으면 NULL) */
 const ss2fg_frame *ss2fg_cur(void);        /* 마지막 실제 프레임 (없으면 NULL) */
-const ss2fg_frame *ss2fg_hist(int k);      /* k 장 전 캡처 (0 = 마지막, 최대 5) */
+const ss2fg_frame *ss2fg_hist(int k);      /* k 장 전 캡처 (0 = 마지막, 최대 9) */
 /* a→b 사이 움직임: 비트0 스프라이트, 비트1 스크롤 */
 int ss2fg_motion(const ss2fg_frame *a, const ss2fg_frame *b);
 
@@ -97,6 +97,8 @@ int ss2fg_render_ex(const ss2fg_frame *base, const ss2fg_frame *to, int t256,
 void ss2fg_set_fx(int mode);
 int  ss2fg_get_fx(void);
 void ss2fg_fx_stats(int *out8);   /* 시험용 계기 8칸 */
+/* 몸 p(0·1)를 이번 합성에서 x256/256, y256/256 px 옮긴다(on=0 이면 끔). 몸 박자가 다른 조각과 어긋날 때 libretro.c·앱이 넣는다 */
+void ss2fg_body_override(int p, int on, int x256, int y256);
 int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
                   const ss2fg_frame *to_scr, int t_scr,
                   void *dst, int pitch_px, int bpp, const uint32_t *colormap);

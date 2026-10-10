@@ -657,11 +657,23 @@ static int fg_tpos(int K, int L, int h)        /* 반 프레임 단위 τ=h(0|1)
    if (!K || K <= L) return 0;
    return (256 * (h - 2 * L)) / (2 * (K - L));
 }
+/* 몸 따로 박자 — 몸 p 의 «지난 바뀜(L, ≤0)·다음 바뀜(K, 1..4)»을 찾아 τ(반 프레임 h) 의 자리(1/256 px)를 낸다.
+   보통은 모든 조각이 같은 박자(2 프레임)라 전체 K·L 로 충분하지만, 감전·불탐으로 날아갈 때 사무쇼2 는 몸을 4 프레임에
+   한 번 옮긴다 — 전체 박자로는 «4장 미끄러지고 4장 멈춤»이 된다(유저 2026-10-10 「맞고 날아갈 때 프레임이 튀는 것 같아」).
+   PocketCore 방 70_ss2fg_body_cadence.patch(fda75d8). */
+static unsigned fg_last_body[2];
+static int body_pos_differs(const ss2fg_frame *a, const ss2fg_frame *b, int p)
+{
+   if (!a || !b || !a->body_ok || !b->body_ok) return 0;
+   if (!(a->ob_act & b->ob_act & (1u << p))) return 0;
+   return a->ob_x[p] != b->ob_x[p] || a->ob_y[p] != b->ob_y[p];
+}
 static int fg_predict4(int ra)
 {
-   int k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel;
+   int k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel, extra = 0, p;
    int ts0, ts1, tb0, tb1;
-   const ss2fg_frame *f0, *f1, *f2, *fp, *tos, *tob;
+   int ov[2] = { 0, 0 }, ovx0[2], ovy0[2], ovx1[2], ovy1[2];
+   const ss2fg_frame *f0, *f1, *f2, *fp, *tos, *tob, *fk[5];
 
    if (!ss2fg_hist(0)) return 0;
    if (!fg_snap_save()) return 0;
@@ -672,6 +684,7 @@ static int fg_predict4(int ra)
    mp0 = (fp && f0) ? ss2fg_motion(fp, f0) : 0;        /* D-1→D 에 바뀐 것 — 박자 기억 */
    if (mp0 & 1) fg_last_spr = fg_realn;
    if (mp0 & 2) fg_last_scr = fg_realn;
+   for (p = 0; p < 2; p++) if (body_pos_differs(fp, f0, p)) fg_last_body[p] = fg_realn;
    m01 = ss2fg_motion(f0, f1);
    m12 = ss2fg_motion(f1, f2);
    (void)k;
@@ -690,14 +703,43 @@ static int fg_predict4(int ra)
    ts0 = fg_tpos(Ks, Ls, 0); ts1 = fg_tpos(Ks, Ls, 1);
    tb0 = fg_tpos(Kb, Lb, 0); tb1 = fg_tpos(Kb, Lb, 1);
 
+   /* 몸 따로 박자 */
+   fk[0] = f0; fk[1] = f1; fk[2] = f2; fk[3] = fk[4] = 0;
+   for (p = 0; p < 2 && f0 && f0->body_ok; p++)
+   {
+      int Kp = 0, Lp, lrel = (int)fg_last_body[p] - (int)fg_realn, dx, dy;
+      for (k = 1; k <= 2 && !Kp; k++) if (body_pos_differs(f0, fk[k], p)) Kp = k;
+      if (!Kp && lrel >= -3 && !extra)
+      {  /* 막 움직이던 몸이 앞 2 프레임 안엔 안 바뀜 — 2 프레임 더 미리 돌려 본다(그동안만 숨은 프레임 6 장) */
+         fg_hidden(2, 0);
+         extra = 2;
+         fk[4] = ss2fg_hist(0); fk[3] = ss2fg_hist(1);
+      }
+      for (k = 3; k <= 4 && !Kp; k++) if (fk[k] && body_pos_differs(f0, fk[k], p)) Kp = k;
+      if (!Kp) continue;
+      /* L: 지난 바뀜이 K-4..K-3 이면 느린 박자가 이어지는 중 — 그 간격 그대로. 아니면(쉬다가 움직임) 전체와 같은 K-2 */
+      Lp = (lrel >= Kp - 4 && lrel <= Kp - 3) ? lrel : (lrel > Kp - 2 ? lrel : Kp - 2);
+      if (Lp > 0) continue;                               /* 미끄러짐이 아직 시작 전(쉬던 몸이 D+3 이후에 움직임) — 지금은 제자리 */
+      if (Kp == Ks && Lp == Ls) continue;                 /* 전체 박자와 같으면 하던 대로 */
+      dx = (int8_t)(uint8_t)(fk[Kp]->ob_x[p] - f0->ob_x[p]);
+      dy = (int8_t)(uint8_t)(fk[Kp]->ob_y[p] - f0->ob_y[p]);
+      if (dx > 24 || dx < -24 || dy > 24 || dy < -24) continue;
+      ov[p] = 1;
+      ovx0[p] = dx * fg_tpos(Kp, Lp, 0); ovy0[p] = dy * fg_tpos(Kp, Lp, 0);
+      ovx1[p] = dx * fg_tpos(Kp, Lp, 1); ovy1[p] = dy * fg_tpos(Kp, Lp, 1);
+   }
+
    /* τ=D — 둘 다 0 이면 실제 D 그대로 (fg_real = D 의 그림) */
-   if (!(ts0 || tb0) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
+   for (p = 0; p < 2; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx0[p], ovy0[p]);
+   if (!(ts0 || tb0 || ov[0] || ov[1]) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(surf->pixels, fg_real, sizeof fg_real);
    /* τ=D+½ */
-   if (!(ts1 || tb1) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap))
+   for (p = 0; p < 2; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx1[p], ovy1[p]);
+   if (!(ts1 || tb1 || ov[0] || ov[1]) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(fg_next, fg_real, sizeof fg_real);
+   ss2fg_body_override(0, 0, 0, 0); ss2fg_body_override(1, 0, 0, 0);
 
-   fg_snap_load(ra + 2);                               /* 숨은 프레임 캡처를 무른다 */
+   fg_snap_load(ra + 2 + extra);                       /* 숨은 프레임 캡처를 무른다 */
    return 1;
 }
 

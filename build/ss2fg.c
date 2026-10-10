@@ -12,9 +12,9 @@
 /* ───────────── 캡처 ─────────────
    지난 프레임 몇 장을 쌓아 둔다(최근이 0번). 4배(게임 박자 맞춤) 예측은 N+1·N+2 를 미리 돌려 두 장을
    쌓았다가 두 번 무른다. */
-#define FG_RING 6
+#define FG_RING 10                 /* 런어헤드 2 + 미리 4(느린 몸 박자) + 실제·앞 프레임이 다 들어가게 */
 static ss2fg_frame fg_slot[FG_RING];
-static int fg_hist[FG_RING] = { -1, -1, -1, -1, -1, -1 };   /* fg_hist[0] = 마지막(현재), [1] = 그 앞 … (-1 = 없음) */
+static int fg_hist[FG_RING] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };   /* fg_hist[0] = 마지막(현재), [1] = 그 앞 … (-1 = 없음) */
 static int fg_build = 0;
 static uint8_t fg_build_dirty;
 
@@ -350,13 +350,68 @@ static int16_t round_div(int sum, int n)
    2프레임마다 회전 포즈가 새로 그려져 겉모습이 맞는 조각이 없어, 그 몸만 보간 없이 30Hz 로 끊겼다. 게임이 RAM 에 둔
    몸 위치(=실제 궤적)를 쓰면 지금 포즈를 그 궤적으로 옮길 수 있다(회전 그림을 만들어 내진 않는다). 몸이 그대로면
    0 = 제자리. 몸 팔레트(P1 = 0, P2 = 5)이고 무리가 그 몸 위치 근처일 때만 1. (PocketCore 방 30_ss2fg_body.patch) */
+/* 몸 팔레트(P1 0 · P2 5)가 아닌데 «몸 그 자체»인 무리 — 감전(해골)·불탐처럼 맞은 몸을 다른 팔레트로 그리는 동안.
+   그 캐릭터의 몸 팔레트 조각이 몸 자리 근처에 «하나도» 없고, 이 무리가 6조각 이상이며 몸 자리에 붙어 있을 때만.
+   (PocketCore 방 70_ss2fg_body_cadence.patch fda75d8 — 나찰·카즈키 판 실측: 감전돼 날아가는 몸이 팔레트 14 로 23조각,
+   예전엔 «이펙트»로 보고 제자리에 뒀다) */
+static int body_alt_owner(const ss2fg_frame *base, int gstart, int g)
+{
+   const ss2fg_regs *rb = &base->line[0];
+   int pal = base->sprcol[gstart] & 0x0F, p, k, j, n = 0, best = -1, bscore = 17;
+   if (!base->body_ok || pal == 0 || pal == 5 || pal == 12) return -1;
+   for (k = gstart; k < g; k++) if (ld16(base->spr + k * 4) & 0x1800) n++;
+   if (n < 6) return -1;
+   for (p = 0; p < 2; p++)
+   {
+      int bp = p ? 5 : 0, has = 0, l = 999, r = -999, t = 999, b = -999, dx, dy;
+      if (!(base->ob_act & (1u << p))) continue;
+      for (j = 0; j < 64 && !has; j++)
+      {
+         int sx, sy;
+         if (!(ld16(base->spr + j * 4) & 0x1800) || (base->sprcol[j] & 0x0F) != bp) continue;
+         sx = (int8_t)(uint8_t)(base->ax[j] + rb->spx - base->ob_x[p]);
+         sy = (int8_t)(uint8_t)(base->ay[j] + rb->spy - base->ob_y[p]);
+         if (sx >= -48 && sx <= 40 && sy >= -96 && sy <= 8) has = 1;
+      }
+      if (has) continue;
+      for (k = gstart; k < g; k++)
+      {
+         int sx, sy;
+         if (!(ld16(base->spr + k * 4) & 0x1800)) continue;
+         sx = (int8_t)(uint8_t)(base->ax[k] + rb->spx - base->ob_x[p]);
+         sy = (int8_t)(uint8_t)(base->ay[k] + rb->spy - base->ob_y[p]);
+         if (sx < l) l = sx;
+         if (sx + 8 > r) r = sx + 8;
+         if (sy < t) t = sy;
+         if (sy + 8 > b) b = sy + 8;
+      }
+      /* 몸 자리(발 가운데)가 무리 테두리 안(세로는 아래로 8px 여유)이면 0, 밖이면 그 거리 — 두 캐릭터 중 가까운 쪽(16px 안) */
+      dx = l > 0 ? l : r < 0 ? -r : 0;
+      dy = t > 0 ? t : b + 8 < 0 ? -(b + 8) : 0;
+      if (dx + dy < bscore) { bscore = dx + dy; best = p; }
+   }
+   return best;
+}
+
+static int fg_last_owner;                                     /* body_vec 이 마지막으로 정한 몸 번호 */
+static int8_t fg_body_of[64];                                 /* 조각 → 몸 번호(0·1), 아니면 -1 — sprite_moves 가 채운다 */
+/* 몸 따로 박자 — 느린 박자(감전돼 날아갈 때 4프레임에 한 번)나 다른 조각과 바뀌는 때가 어긋난 몸은, 그 몸의 지난 바뀜·다음 바뀜
+   사이로 따로 보간한 자리(1/256 px)를 libretro.c(앱은 Main.cc)가 넣어 준다. 켜진 몸의 조각은 무리 판정 이동량 대신 이 값으로 옮긴다.
+   한 번 그리기용 — render2 가 그리고 나면 끈다. */
+static int fg_ov_on[2], fg_ov_x[2], fg_ov_y[2];
+void ss2fg_body_override(int p, int on, int x256, int y256)
+{
+   if (p < 0 || p > 1) return;
+   fg_ov_on[p] = on; fg_ov_x[p] = x256; fg_ov_y[p] = y256;
+}
 static int body_vec(const ss2fg_frame *base, const ss2fg_frame *to, int gstart, int g, int *vx, int *vy)
 {
    const ss2fg_regs *rb = &base->line[0];
    int pal = base->sprcol[gstart] & 0x0F, p, k, dx, dy;
    int l = 999, r = -999, t = 999, b = -999;
+   fg_last_owner = -1;
    if (!base->body_ok || !to->body_ok) return 0;
-   p = pal == 0 ? 0 : pal == 5 ? 1 : -1;
+   p = pal == 0 ? 0 : pal == 5 ? 1 : body_alt_owner(base, gstart, g);
    if (p < 0) return 0;
    if (!(base->ob_act & to->ob_act & (1u << p))) return 0;
    dx = (int8_t)(uint8_t)(to->ob_x[p] - base->ob_x[p]);
@@ -377,6 +432,7 @@ static int body_vec(const ss2fg_frame *base, const ss2fg_frame *to, int gstart, 
    /* 몸 위치(발 가운데)가 무리 테두리 옆 40px 안, 세로는 무리 위 16px ~ 아래 56px 안(머리만 떨어진 무리 포함) */
    if (l > 40 || r < -40 || t > 16 || b < -56) return 0;
    *vx = dx; *vy = dy;
+   fg_last_owner = p;
    return 1;
 }
 
@@ -735,6 +791,7 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
    int i, g, gstart;
    memset(mv, 0, 64 * sizeof *mv);
    memset(und, 0, sizeof und);
+   memset(fg_body_of, 0xFF, sizeof fg_body_of);
    memset(cand, 0, sizeof cand);
    memset(cnt_b, 0, sizeof cnt_b);
    memset(cnt_t, 0, sizeof cnt_t);
@@ -826,6 +883,7 @@ static void sprite_moves(const ss2fg_frame *base, const ss2fg_frame *to, fg_move
       for (k = gstart; k < g; k++)
          if (ld16(base->spr + k * 4) & 0x1800) nvis++;
       body = body_vec(base, to, gstart, g, &bvx, &bvy);
+      if (body) for (k = gstart; k < g; k++) fg_body_of[k] = (int8_t)fg_last_owner;   /* 몸 박자 따로 보간에 쓴다 */
       if (!body && obj_vec(base, to, gstart, g, &bvx, &bvy)) body = 2;   /* 그림자·이펙트: 가장 가까운 물체(맞춰 본 것만) */
       if (nvis < 2)
       {
@@ -995,8 +1053,8 @@ body_or_stop:
    }
 }
 
-static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const fg_move mv[64],
-                        int t, int ts, int y, uint16_t *scan)
+static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const int16_t *offx, const int16_t *offy,
+                        int t, int y, uint16_t *scan)
 {
    const ss2fg_regs *rb = &base->line[y];
    uint8_t zbuf[256];
@@ -1054,11 +1112,7 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const fg
       if (priority == 0) continue;
       sx = wrapx(base->ax[spr] + rb->spx);
       sy = wrapc(base->ay[spr] + rb->spy);
-      if (mv && mv[spr].has)
-      {
-         sx = lerp_i(sx, mv[spr].dx, ts);
-         sy = lerp_i(sy, mv[spr].dy, ts);
-      }
+      if (offx) { sx += offx[spr]; sy += offy[spr]; }
       if (fx_fade_on && fx_fade_b[spr]) continue;              /* 섞어 그릴 이펙트 — 아래 반투명 단계에서 */
       if (y >= sy && y <= sy + 7)
       {
@@ -1115,7 +1169,9 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
    int y, x;
    uint16_t scan[256];
    fg_move mv[64];
-   if (!base || !base->valid || base->mono) return 0;
+   int16_t offx[64], offy[64];
+   int have_off = 0;
+   if (!base || !base->valid || base->mono) { fg_ov_on[0] = fg_ov_on[1] = 0; return 0; }
    if (bpp != 2 && bpp != 4) return 0;
    /* 표시 도중 스프라이트표/타일맵이 바뀐 프레임은 끝 시점 사본이 위쪽 줄과 안 맞는다 — 합성 포기 */
    if (base->dirty & (SS2FG_DIRTY_SPR | SS2FG_DIRTY_SCROLL)) return 0;
@@ -1129,6 +1185,29 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
    if (to_scr && t_scr == 0) to_scr = 0;
    fx_fade_on = 0; fx_fade_to = 0;
    if (to_spr) { fx_in_render = 1; sprite_moves(base, to_spr, mv); fx_in_render = 0; }
+   else if ((fg_ov_on[0] || fg_ov_on[1]) && base->body_ok) sprite_moves(base, base, mv);   /* 몸 따로 박자만 — 조각 → 몸 표가 필요 */
+   else memset(fg_body_of, 0xFF, sizeof fg_body_of);
+   {  /* 조각마다 이번 그림의 이동량(px): 몸 따로 박자가 켜진 몸의 조각은 그 값, 아니면 무리 판정 이동량의 진행도만큼 */
+      int k2;
+      for (k2 = 0; k2 < 64; k2++)
+      {
+         int p2 = fg_body_of[k2];
+         offx[k2] = offy[k2] = 0;
+         if (p2 >= 0 && fg_ov_on[p2])
+         {
+            int vx = fg_ov_x[p2], vy = fg_ov_y[p2];
+            offx[k2] = (int16_t)(vx >= 0 ? (vx + 128) >> 8 : -((-vx + 127) >> 8));
+            offy[k2] = (int16_t)(vy >= 0 ? (vy + 128) >> 8 : -((-vy + 127) >> 8));
+            have_off = 1;
+         }
+         else if (to_spr && mv[k2].has)
+         {
+            offx[k2] = (int16_t)lerp_i(0, mv[k2].dx, t_spr);
+            offy[k2] = (int16_t)lerp_i(0, mv[k2].dy, t_spr);
+            have_off = 1;
+         }
+      }
+   }
    if (to_spr && fx_mode == 2)
    {
       /* 나타날 to 이펙트 = 몸·그림자 팔레트가 아니고, base 의 «정해진(옮겨 그려지는)» 이펙트 조각이 도착할 자리(8px)에
@@ -1160,7 +1239,7 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
 
    for (y = 0; y < SS2FG_H; y++)
    {
-      render_line(base, to_scr, to_spr ? mv : 0, t_scr, t_spr, y, scan);
+      render_line(base, to_scr, have_off ? offx : 0, offy, t_scr, y, scan);
       if (bpp == 4)
       {
          uint32_t *row = (uint32_t *)dst + (size_t)y * pitch_px;
@@ -1174,6 +1253,7 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
             row[x] = (uint16_t)colormap[scan[x] & 4095];
       }
    }
+   fg_ov_on[0] = fg_ov_on[1] = 0;                              /* 몸 따로 박자는 한 번 그리기용 */
    return 1;
 }
 
