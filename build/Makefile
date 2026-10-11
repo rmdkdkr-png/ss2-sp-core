@@ -47,7 +47,7 @@ endif
 ifneq (,$(findstring msvc,$(platform)))
 LIBS :=
 else
-LIBS := -lm
+LIBS := -lm -lz
 endif
 fpic=
 

@@ -6,6 +6,9 @@
  *       FGROM_FG=auto|enabled|60|disabled (ngp_framegen 값을 mode 인자 대신 직접 — 60 = 60Hz 사이 그림, 패치 90) · FGROM_HZ=<목표 주사율> (기본 120)
  *       FGROM_IDLE=draw|off (서기 사이 그림, 기본 off — draw 면 코어가 640×608 로 내보낸다: 비교용 cur 에는 칸마다 왼쪽 위 부화소를 담고(조각 밖은 원래 화소와 같다),
  *         FGROM_DUMPALL 은 4배 그림도 o<번호>_<위상>.x4 로 떨어뜨린다. 요약의 out4/patched = 4배 출력 수 / 조각이 실제로 붙은 수)
+ *       FGROM_MOTION=cache|off (모션 캐시 — 모든 포즈 바뀜 사이 그림, 패치 97, 기본 off; 코어는 <workdir>/ss2_motion.bin 을 연다)
+ *         FGROM_MOTION_LOG=<파일> (캐시에 없던 바뀜을 «p sa sb | A ox oy w h depth first | B …» 로 적는다 → tools/harness/motion_fake.py 가 가짜 캐시를 만든다)
+ *   출력 요약의 hash = 출력 프레임 전부(4배 출력이면 4배 그림)의 FNV-1a 64 — 두 실행이 바이트까지 같은지 덤프 없이 본다
  *   출력 요약의 out/same_prev: 출력 프레임 수와 «바로 앞 출력 프레임과 픽셀까지 같은» 수 — 60Hz 사이 그림의 효과(30Hz 움직임 → 60Hz)를 센다
  *   script: "s-e:BTN,..."  BTN 글자: U D L R A B S(option)  예) "200-205:S,400-405:A"
  *   매 합성 프레임: 앞 실제 N, 뒤 실제 N+1 과 비교해 3x3 이웃 어디에도 없는 색의 픽셀 수(=깨진 픽셀) 기록
@@ -19,7 +22,7 @@
 #include "libretro.h"
 #define W 160
 #define H 152
-static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4", *opt_ra = "0", *opt_fx = "move", *opt_pose = "blend", *opt_idle = "off";   /* FGROM_FX=move|blend|off (이펙트, 기본 옮기기) · FGROM_POSE=blend|off (포즈 섞기, 기본 섞기) */   /* FGROM_MULT=2|4 · FGROM_RA=0|1|2 (런어헤드, 기본 끔) */
+static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4", *opt_ra = "0", *opt_fx = "move", *opt_pose = "blend", *opt_idle = "off", *opt_motion = "off";   /* FGROM_FX=move|blend|off (이펙트, 기본 옮기기) · FGROM_POSE=blend|off (포즈 섞기, 기본 섞기) */   /* FGROM_MULT=2|4 · FGROM_RA=0|1|2 (런어헤드, 기본 끔) */
 static int ra_off = 0;   /* 런어헤드 프레임 수 — 기준 프레임 대조의 번호 오프셋 */
 static float target_hz = 120.0f;
 static char workdir[1024];
@@ -41,6 +44,7 @@ static bool env_cb(unsigned cmd, void *data)
          if (!strcmp(v->key, "ngp_framegen_fx"))   { v->value = opt_fx;       return true; }
          if (!strcmp(v->key, "ngp_framegen_pose")) { v->value = opt_pose;     return true; }
          if (!strcmp(v->key, "ngp_framegen_idle")) { v->value = opt_idle;     return true; }
+         if (!strcmp(v->key, "ngp_framegen_motion")) { v->value = opt_motion; return true; }
          v->value = NULL; return false; }
       case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool*)data = false; return true;
       case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE: *(float*)data = target_hz; return true;
@@ -124,6 +128,10 @@ static int differ(const uint16_t *A, const uint16_t *B) { int i, n = 0; for (i =
    같은 실행 안에 «날것» 실제 프레임이 없다 — off 실행의 f%06d.565 를 기준으로 삼아, 출력 프레임(두 위상 모두)을
    기준 N·N+1·N+2 의 3x3 이웃과 견준다(목표 K ≤ N+2). 어느 쪽에도 없는 색의 픽셀 수 = 깨짐 후보 */
 static const char *refdir = NULL;
+static uint64_t ohash = 0xcbf29ce484222325ULL;
+static FILE *mlogf = 0; static int nmlog = 0; static void (*p_mstat)(int *) = 0; static int mdrawn = 0;
+static int (*p_mmiss)(uint64_t *, uint64_t *, int *) = 0; static int (*p_pinfo)(int, uint64_t, int *) = 0;
+static struct { uint64_t sa, sb; int p, age; } pend[256]; static int npend = 0;
 static int ref_load(int idx, uint16_t *buf)
 {  char p[1200]; FILE *f; size_t n; snprintf(p, sizeof p, "%s/f%06d.565", refdir, idx); f = fopen(p, "rb"); if (!f) return 0; n = fread(buf, 2, W*H, f); fclose(f); return n == (size_t)(W*H); }
 static int artifacts3(const uint16_t *S, const uint16_t *A, const uint16_t *B, const uint16_t *C)
@@ -141,7 +149,7 @@ int main(int argc, char **argv)
    mode = argv[4]; frames = atoi(argv[5]); parse_script(argv[6]);
    if (argc > 7) dump_every = atoi(argv[7]); if (argc > 8) metric_from = atoi(argv[8]);
    if (!strcmp(mode, "off")) opt_framegen = "disabled"; else { opt_framegen = "enabled"; opt_mode = mode; }
-   { const char *m = getenv("FGROM_FG"); if (m) opt_framegen = m; m = getenv("FGROM_HZ"); if (m) target_hz = (float)atof(m); m = getenv("FGROM_IDLE"); if (m) opt_idle = m; }
+   { const char *m = getenv("FGROM_FG"); if (m) opt_framegen = m; m = getenv("FGROM_HZ"); if (m) target_hz = (float)atof(m); m = getenv("FGROM_IDLE"); if (m) opt_idle = m; m = getenv("FGROM_MOTION"); if (m) opt_motion = m; }
    { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; m = getenv("FGROM_RA"); if (m) { opt_ra = m; ra_off = atoi(m); } m = getenv("FGROM_FX"); if (m) opt_fx = m; m = getenv("FGROM_POSE"); if (m) opt_pose = m; refdir = getenv("FGROM_REF"); }
    Hd = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL); if (!Hd) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
    SYM(p_set_environment, "retro_set_environment"); SYM(p_set_video, "retro_set_video_refresh");
@@ -153,6 +161,8 @@ int main(int argc, char **argv)
    p_set_input_poll(input_poll_cb); p_set_input_state(input_state_cb);
    memset(&gi, 0, sizeof gi); gi.path = argv[2];
    p_init(); if (!p_load(&gi)) { fprintf(stderr, "load 실패\n"); return 2; }
+   p_mstat = dlsym(Hd, "retro_ngp_motion_stats");
+   { const char *o = getenv("FGROM_MOTION_LOG"); if (o) { mlogf = fopen(o, "w"); p_mmiss = dlsym(Hd, "retro_ngp_motion_miss"); p_pinfo = dlsym(Hd, "retro_ngp_idle_pose_info"); if (!p_mmiss || !p_pinfo) { fprintf(stderr, "코어에 모션 계기 없음\n"); fclose(mlogf); mlogf = 0; } } }
    { const char *o = getenv("FGROM_OAM"); if (o) oamf = fopen(o, "wb"); o = getenv("FGROM_CHR"); if (o) chrf = fopen(o, "wb"); o = getenv("FGROM_CSV"); if (o) csvf = fopen(o, "w"); o = getenv("FGROM_RAM"); if (o) ramf = fopen(o, "wb"); }
    { const char *st = getenv("FGROM_LOAD"); if (st) { FILE *f = fopen(st, "rb"); if (f) { size_t n = p_ser_size(); void *b = malloc(n); size_t got = fread(b, 1, n, f); fclose(f); if (!p_unser(b, got)) fprintf(stderr, "unserialize 실패\n"); else fprintf(stderr, "상태 불러옴 %s (%zu)\n", st, got); free(b); } } }
    while (real < frames)
@@ -165,6 +175,9 @@ int main(int argc, char **argv)
       have_frame = 0; p_run(); calls++;
       if (!have_frame) continue;
       nOut++; if (haveP0 && !memcmp(cur, P0, sizeof cur)) nSame++; memcpy(P0, cur, sizeof P0); haveP0 = 1;
+      if (p_mstat && getenv("FGROM_IDLE_LOG")) { int st[4]; p_mstat(st); if (st[2] != mdrawn) { fprintf(stderr, "  [motion] 4배 출력 %d 번째(실제 %d 위상 %d)에 캐시 조각 %d\n", n4, is_synth ? real - 1 : real, is_synth ? 1 : 0, st[2] - mdrawn); mdrawn = st[2]; } }
+      {  const uint8_t *hb = cur_is4 ? (const uint8_t *)cur4 : (const uint8_t *)cur; size_t hn = cur_is4 ? (size_t)W4 * H4 * 2 : sizeof cur, hi;
+         for (hi = 0; hi < hn; hi++) { ohash ^= hb[hi]; ohash *= 0x100000001b3ULL; } }
       {  /* 기준 대조·전부 떨어뜨리기 — 출력 프레임마다(두 위상 모두). 합성 호출의 실제 번호는 직전 실제 프레임(real-1) */
          int idx = is_synth ? real - 1 : real;
          if (getenv("FGROM_DUMPALL")) { char nm[64]; snprintf(nm, sizeof nm, "o%06d_%d", idx, is_synth ? 1 : 0); dump(nm, cur);
@@ -183,6 +196,18 @@ int main(int argc, char **argv)
          memcpy(R0, R1, sizeof R0); }
       else { memcpy(R0, cur, sizeof R0); haveR0 = 1; }
       haveS = 0;
+      if (mlogf)
+      {  /* 모션 캐시 계기 — 못 찾은 바뀜(p, A→B)을 꺼내고, 두 포즈 틀이 다 기억돼 있으면 적는다(B 는 바뀐 뒤에야 기억되므로 16프레임까지 미룬다) */
+         uint64_t sa, sb; int p, i;
+         while (p_mmiss && p_mmiss(&sa, &sb, &p) && npend < 256) { pend[npend].sa = sa; pend[npend].sb = sb; pend[npend].p = p; pend[npend].age = 0; npend++; }
+         for (i = 0; i < npend; )
+         {
+            int A[6], B[6], ok = p_pinfo(pend[i].p, pend[i].sa, A) && p_pinfo(pend[i].p, pend[i].sb, B);
+            if (ok) { fprintf(mlogf, "%d %llx %llx | %d %d %d %d %d %d | %d %d %d %d %d %d\n", pend[i].p, (unsigned long long)pend[i].sa, (unsigned long long)pend[i].sb,
+                              A[0], A[1], A[2], A[3], A[4], A[5], B[0], B[1], B[2], B[3], B[4], B[5]); nmlog++; }
+            if (ok || ++pend[i].age > 16) pend[i] = pend[--npend]; else i++;
+         }
+      }
       if (oamf) { fwrite(p_spriteram(), 1, 256, oamf); fwrite(p_spritecol(), 1, 64, oamf); }
       if (chrf) fwrite(p_charram(), 1, 8192, chrf);
       if (ramf) { const void *r = p_memdata(RETRO_MEMORY_SYSTEM_RAM); if (r) fwrite(r, 1, 16384, ramf); }
@@ -190,8 +215,8 @@ int main(int argc, char **argv)
       real++;
    }
    { const char *st = getenv("FGROM_SAVE"); if (st) { FILE *f = fopen(st, "wb"); size_t n = p_ser_size(); void *b = malloc(n); if (f && p_ser(b, n)) { fwrite(b, 1, n, f); fprintf(stderr, "상태 저장 %s (%zu)\n", st, n); } if (f) fclose(f); free(b); } }
-   printf("mode=%s fg=%s hz=%g idle=%s real=%d calls=%d out=%d same_prev=%d out4=%d patched=%d synth_measured=%d artifacts: mean=%.2f max=%d (at real %d) frames>40px=%d  mean|A-B|=%.1f\n",
-          mode, opt_framegen, (double)target_hz, opt_idle, real, calls, nOut, nSame, n4, n4patched, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0);
+   printf("mode=%s fg=%s hz=%g idle=%s real=%d calls=%d out=%d same_prev=%d out4=%d patched=%d synth_measured=%d artifacts: mean=%.2f max=%d (at real %d) frames>40px=%d  mean|A-B|=%.1f hash=%016llx\n",
+          mode, opt_framegen, (double)target_hz, opt_idle, real, calls, nOut, nSame, n4, n4patched, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0, (unsigned long long)ohash);
    if (refdir) printf("ref-score(mult=%s): frames=%d mean=%.2f max=%d (at real %d phase %d) frames>40px=%d\n", opt_mult, nR, nR ? (double)sumR / nR : 0.0, maxR, maxRat, maxRph, badR);
    if (oamf) fclose(oamf); if (chrf) fclose(chrf); if (csvf) fclose(csvf); if (ramf) fclose(ramf);
    {  /* 이펙트 계기(코어가 내보내면): 살핀 무리 / 물체 등속 / 몸에 붙음 / 테두리 등속 / 앞 캡처 없음 / 조각 없음 / 등속 아님 / 2px 미만·방향 */
@@ -201,6 +226,9 @@ int main(int argc, char **argv)
       if (p_fx) { int st[4]; p_fx(st); printf("pose(%s): changed=%d notalt=%d blended=%d still=%d\n", opt_pose, st[0], st[1], st[2], st[3]); }
       p_fx = dlsym(Hd, "retro_ngp_idle_stats");   /* 서기 사이 그림 계기: 배운 바뀜 / 계획 / 조각 / 미리 본 다른 포즈 / 이동표 / 그림 */
       if (p_fx) { int st[6]; p_fx(st); printf("idle(%s): learned=%d planned=%d patches=%d prelook_other=%d pairs=%d pics=%d\n", opt_idle, st[0], st[1], st[2], st[3], st[4], st[5]); }
+      p_fx = dlsym(Hd, "retro_ngp_motion_stats");   /* 모션 캐시 계기: 찾음 / 있음 / 그림 / 틀 안 맞음 */
+      if (p_fx) { int st[4]; p_fx(st); printf("motion(%s): lookups=%d found=%d drawn=%d mismatch=%d", opt_motion, st[0], st[1], st[2], st[3]); if (mlogf) printf(" logged=%d", nmlog); printf("\n"); }
+      if (mlogf) fclose(mlogf);
    }
    p_unload(); p_deinit();
    return 0;

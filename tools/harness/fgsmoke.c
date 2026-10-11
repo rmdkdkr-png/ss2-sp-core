@@ -19,7 +19,7 @@
 #include <stdbool.h>
 #include "libretro.h"
 
-static const char *opt_framegen = "auto", *opt_mode = "predict", *opt_mult = "4", *opt_idle = "off";
+static const char *opt_framegen = "auto", *opt_mode = "predict", *opt_mult = "4", *opt_idle = "off", *opt_motion = "off";
 static float target_hz = 60.0f;
 static int   av_enable = 3, ss_ctx = 0, var_updated = 0, verbose = 0;
 static double last_fps = 0; static int avinfo_calls = 0;
@@ -38,6 +38,7 @@ static bool env_cb(unsigned cmd, void *data)
          if (!strcmp(v->key, "ngp_framegen_mode")) { v->value = opt_mode;     return true; }
          if (!strcmp(v->key, "ngp_framegen_mult")) { v->value = opt_mult;     return true; }
          if (!strcmp(v->key, "ngp_framegen_idle")) { v->value = opt_idle;     return true; }
+         if (!strcmp(v->key, "ngp_framegen_motion")) { v->value = opt_motion; return true; }
          v->value = NULL; return false; }
       case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool*)data = var_updated != 0; var_updated = 0; return true;
       case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE: *(float*)data = target_hz; return true;
@@ -448,6 +449,32 @@ static void test_idle_mode(const char *rom)
    printf("11 서기 사이 그림 옵션 — 기하 640x608·비사무쇼2 원래 크기·끄면 복귀: %s\n", fails == f0 ? "통과" : "실패");
 }
 
+/* 코어 패치 97 — 모션 캐시(ngp_framegen_motion=cache): 시스템 폴더에 ss2_motion.bin 이 없으면(열기 -1) 켜도 아무것도 안 하고(계기 0),
+   깨진 파일(머리글 틀림)도 조용히 무시한다. 켜고 끄고 400 프레임 뒤 직렬화 상태는 끔과 같다(사이 그림은 출력에만 관여). */
+static void test_motion_mode(const char *rom)
+{
+   int i, f0 = fails, st[4] = { -1, -1, -1, -1 };
+   void (*p_mst)(int *) = dlsym(H, "retro_ngp_motion_stats");
+   char path[1300]; FILE *f;
+   CHECK(p_mst != NULL, "retro_ngp_motion_stats 계기가 있어야");
+   snprintf(path, sizeof path, "%s/ss2_motion.bin", workdir); remove(path);
+   target_hz = 120; opt_framegen = "auto"; opt_mode = "predict"; opt_mult = "4"; opt_idle = "draw"; opt_motion = "cache";
+   load_game(rom);
+   for (i = 0; i < 100; i++) p_run();
+   if (p_mst) { p_mst(st); CHECK(st[0] == 0 && st[2] == 0, "캐시 파일 없음 — 찾음 %d·그림 %d 이어야 0", st[0], st[2]); }
+   CHECK(last_w == 160 && last_h >= 152 && last_h < 200, "사무쇼2 아닌 롬은 원래 크기 (%ux%u)", last_w, last_h);
+   unload_game();
+   f = fopen(path, "wb"); if (f) { fwrite("SS2M\x02\x00\x03\x40\x80\xc0\xff\xff\xff\xff\x00\x00", 1, 16, f); fclose(f); }   /* 머리글은 맞고 바뀜 수가 터무니없음 → -1 */
+   load_game(rom);
+   for (i = 0; i < 50; i++) p_run();
+   if (p_mst) { p_mst(st); CHECK(st[0] == 0, "깨진 캐시 파일은 무시 — 찾음 %d 이어야 0", st[0]); }
+   opt_motion = "off"; var_updated = 1;
+   for (i = 0; i < 10; i++) p_run();
+   unload_game(); remove(path);
+   opt_idle = "off"; opt_motion = "off";
+   printf("12 모션 캐시 옵션 — 파일 없음·깨진 파일에 조용함, 계기 0: %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(int argc, char **argv)
 {
    char rom[1200];
@@ -472,6 +499,7 @@ int main(int argc, char **argv)
    test_retry_forced(rom);
    test_60hz_mode(rom);
    test_idle_mode(rom);
+   test_motion_mode(rom);
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

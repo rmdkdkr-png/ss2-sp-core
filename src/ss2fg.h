@@ -113,6 +113,14 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn);
 int  ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn, int h, int slot);
 void ss2fg_idle_compose(void *dst, int dpitch_px, const void *src, int spitch_px, int w, int h, int bpp, const uint32_t *colormap, int slot);
 void ss2fg_idle_stats(int *out6);   /* 시험용 계기: 배운 바뀜 / 계획 / 조각 / 미리 본 다른 포즈 / 이동표 / 그림 */
+/* 모션 캐시(패치 97) — 시스템 폴더 ss2_motion.bin. open 반환 = 바뀜 수 또는 -1 */
+int  ss2fg_motion_open(const char *path);
+void ss2fg_motion_close(void);
+int  ss2fg_motion_count(void);
+void ss2fg_set_motion(int on);
+void ss2fg_motion_stats(int *out4);   /* 시험용 계기: 찾음 / 있음 / 그림 / 틀 안 맞음 */
+int  ss2fg_motion_miss(uint64_t *sa, uint64_t *sb, int *p);      /* 계기: 캐시에 없던 바뀜 하나 꺼내기(없으면 0) */
+int  ss2fg_idle_pose_info(int p, uint64_t sig, int *out6);       /* 계기: 기억한 포즈 틀 ox oy w h depth first (없으면 0) */
 int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
                   const ss2fg_frame *to_scr, int t_scr,
                   void *dst, int pitch_px, int bpp, const uint32_t *colormap);

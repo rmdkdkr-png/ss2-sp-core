@@ -1056,6 +1056,9 @@ static void check_variables(void)
          ss2fg_set_idle(idle_opt);
          if (cv_booted && was != idle_opt) ss2_set_geometry();
       }
+      var.key   = "ngp_framegen_motion";                  /* 코어 패치 97 — 모든 포즈 바뀜 사이 그림(모션 캐시, 서기 그리기가 켜졌을 때) */
+      var.value = NULL;
+      ss2fg_set_motion(environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "cache"));
       if (!cv_booted || fg_opt != opt0 || fg_mode != mode0)
       { fg_rate_block = 0; fg_block_n = 0; }   /* 프레임 생성 옵션을 바꿨다 — 다시 판정 */
    }
@@ -1234,6 +1237,17 @@ bool retro_load_game(const struct retro_game_info *info)
       ss2comm_toast(ver_toast, 180);
    }
    ss2comm_reset();
+   {  /* 모션 캐시(코어 패치 97) — <시스템 폴더>/ss2_motion.bin. 앱이 팩으로 받아 둔다. 없으면 예전처럼(사이 그림 = 서기만) */
+      const char *md = NULL;
+      char mp[600];
+      if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &md) && md && *md)
+      {
+         int n;
+         snprintf(mp, sizeof mp, "%s/ss2_motion.bin", md);
+         n = ss2fg_motion_open(mp);
+         if (log_cb) log_cb(RETRO_LOG_INFO, "[ss2fg] motion cache %s: %d\n", mp, n);
+      }
+   }
    {  /* 해설 음성 팩 — <시스템 폴더>/ss2_voice_<언어>.pak
          해설 **텍스트표와 음성팩은 한 덩이**다. 재생 키가 문장 해시(fnv1a)라서
          표와 팩의 판이 어긋나면 조회가 전부 빗나가 그냥 조용해진다. 그래서 언어를
@@ -1297,6 +1311,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
 void retro_unload_game(void)
 {
+   ss2fg_motion_close();
    MDFN_FlushGameCheats();
 
    rom_unload(persistent_data);
@@ -1914,3 +1929,7 @@ void retro_ngp_fx_stats(int *out8) { ss2fg_fx_stats(out8); }
 void retro_ngp_pose_stats(int *out4) { ss2fg_pose_stats(out4); }
 /* 시험용 계기 — 서기 사이 그림 6칸 */
 void retro_ngp_idle_stats(int *out6) { ss2fg_idle_stats(out6); }
+/* 시험용 계기 — 모션 캐시(패치 97) 4칸(찾음/있음/그림/틀 안 맞음) · 캐시에 없던 바뀜 꺼내기 · 포즈 틀 조회 (하네스가 가짜 캐시를 만든다) */
+void retro_ngp_motion_stats(int *out4) { ss2fg_motion_stats(out4); }
+int  retro_ngp_motion_miss(uint64_t *sa, uint64_t *sb, int *p) { return ss2fg_motion_miss(sa, sb, p); }
+int  retro_ngp_idle_pose_info(int p, uint64_t sig, int *out6) { return ss2fg_idle_pose_info(p, sig, out6); }

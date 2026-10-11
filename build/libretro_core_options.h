@@ -182,6 +182,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "off"
    },
    {
+      "ngp_framegen_motion",
+      "프레임 생성 — 동작 사이 그림(캐시)",
+      NULL,
+      "공격·맞기 등 모든 포즈 바뀜의 사이 그림을 미리 계산한 캐시(시스템 폴더 ss2_motion.bin — 그림 없이 «어느 화소를 어디서 가져오나»만)에서 꺼내 그린다. 바뀌기 전 마지막 2 프레임에 ¼·½·¾. 서기 자세 그리기를 켰을 때만(4배 출력). 캐시에 없는 바뀜은 원래대로.",
+      NULL,
+      "video",
+      {
+         { "off",   "끔" },
+         { "cache", "캐시로 그리기" },
+         { NULL, NULL },
+      },
+      "off"
+   },
+   {
       "ngp_runahead",
       "런어헤드 (입력 지연 줄이기)",
       NULL,
@@ -304,6 +318,17 @@ struct retro_core_option_definition option_defs_us[] = {
       {
          { "off",  "끔" },
          { "draw", "그리기(¼픽셀)" },
+         { NULL, NULL},
+      },
+      "off",
+   },
+   {
+      "ngp_framegen_motion",
+      "프레임 생성 — 동작 사이 그림(캐시)",
+      "캐시로 그리기 = 공격 등 모든 포즈 바뀜 사이를 미리 계산한 캐시로 그림(서기 자세 그리기를 켰을 때만). 끔 = 원래대로.",
+      {
+         { "off",   "끔" },
+         { "cache", "캐시로 그리기" },
          { NULL, NULL},
       },
       "off",
