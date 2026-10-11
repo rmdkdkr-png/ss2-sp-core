@@ -1891,13 +1891,12 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
    mc_ent *e;
    id_pose *A, *B;
    id_req_t *rq = &id_rq[slot][p];
-   if (!mc_on || !mc_f || !id_cur[p] || f0->ob_x[p] != id_ax[p] || f0->ob_y[p] != id_ay[p]) return 0;
+   if (!mc_on || !mc_f || !id_cur[p]) return 0;
    for (k = 1; k <= 2; k++)
    {
       const ss2fg_frame *g = k == 1 ? f1 : f2;
       uint64_t sg;
       if (!g || !g->valid || g->mono || !g->body_ok || !body_mask(g, p, mm)) return 0;
-      if (g->ob_x[p] != id_ax[p] || g->ob_y[p] != id_ay[p]) return 0;             /* 몸이 움직임 — 아직 안 함 */
       sg = body_sig(g, mm);
       if (sg != id_cur[p]) { sb = sg; K = k; fk = g; break; }
    }
@@ -1918,7 +1917,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
        || B->ox - A->ox != e->bdx || B->oy - A->oy != e->bdy) { mc_stats[3]++; return 0; }
    rq->on = 1; rq->kind = 1; rq->pr = 0; rq->t256 = 64 * (ti + 1);
    rq->e = e; rq->ti = ti; rq->A = A; rq->B = B;
-   rq->ax = id_ax[p]; rq->ay = id_ay[p];
+   rq->ax = f0->ob_x[p]; rq->ay = f0->ob_y[p];              /* 몸 자리는 보여 줄 D 의 것 — 움직이는 몸은 그리기에서 몸 조각의 옮김만큼 더 민다(패치 98) */
    rq->gx = A->ox + e->cx; rq->gy = A->oy + e->cy; rq->gw = e->w; rq->gh = e->h;
    rq->depth = A->depth; rq->first = A->first < B->first ? A->first : B->first;
    return 1;
@@ -2022,17 +2021,27 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
       uint8_t m[64], zrow[256];
       int16_t srow[256];
       uint16_t scan[256];
-      int k, ux0, uy0, x0, y0, x1, y1, y, x, sx, sy, W4;
+      int k, ux0, uy0, x0, y0, x1, y1, y, x, sx, sy, W4, mvx, mvy;
       pt->on = 0;
       if (!rq->on || pp_on || fx_fade_on) continue;           /* 포즈·이펙트 섞기 중엔 몸 뺀 줄을 같게 못 만든다 */
       if (!body_mask(base, p, m)) continue;
-      for (k = 0; k < 64; k++) if (m[k] && offx && (offx[k] || offy[k])) break;
-      if (k < 64) continue;                                     /* 서 있는 몸이 옮겨 그려지는 중 — 안 함 */
+      {  /* 몸 조각이 옮겨 그려지는 만큼(보간 자리) — 모두 같아야. 서기(배운 바뀜)는 제자리만, 캐시는 움직이는 몸도(걷기·점프 등, 패치 98) */
+         int seen = 0, same = 1;
+         mvx = mvy = 0;
+         for (k = 0; k < 64; k++)
+            if (m[k])
+            {
+               int dx = offx ? offx[k] : 0, dy = offy ? offy[k] : 0;
+               if (!seen) { mvx = dx; mvy = dy; seen = 1; }
+               else if (dx != mvx || dy != mvy) { same = 0; break; }
+            }
+         if (!same || (rq->kind == 0 && (mvx || mvy))) continue;
+      }
       if (rq->gw * ID_S * rq->gh * ID_S > (int)(sizeof id_tc / sizeof id_tc[0])) continue;
       if (rq->kind == 1) { mc_draw(rq->e, rq->ti, rq->A, rq->B, id_tc); mc_stats[2]++; }
       else id_draw(rq->pr, rq->t256, id_tc);
       W4 = rq->gw * ID_S;
-      ux0 = rq->ax + rq->gx; uy0 = rq->ay + rq->gy;
+      ux0 = rq->ax + rq->gx + mvx; uy0 = rq->ay + rq->gy + mvy;
       x0 = ux0 < 0 ? 0 : ux0; y0 = uy0 < 0 ? 0 : uy0;
       x1 = ux0 + rq->gw > SS2FG_W ? SS2FG_W : ux0 + rq->gw;
       y1 = uy0 + rq->gh > SS2FG_H ? SS2FG_H : uy0 + rq->gh;
