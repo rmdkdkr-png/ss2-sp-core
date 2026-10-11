@@ -72,20 +72,31 @@ static void resolve_chain(ss2fg_frame *f)
    k 0·1 = P1·P2, 2·3 = 그림자, 4~7 = 기술 이펙트·장풍. 카메라 X 0x176D, 대전 중 = 0x00A7 이 241 */
 #define FG_RAM_MODE   0x00A7
 #define FG_RAM_FIGHT  241
+#define FG_RAM_SELECT 240         /* 캐릭터 고르기·유파 고르기 화면 — 물체 0 = 가운데 미리보기 몸(발 80,76) */
 #define FG_RAM_CAMX   0x176D
 #define FG_RAM_OBJ    0x0E00
 static const uint8_t *fg_ram = 0;
 void ss2fg_set_ram(const uint8_t *ram) { fg_ram = ram; }
+static int id_on;                 /* 서기 사이 그림(아래 «서기 자세») 켬 */
 
 static void capture_body(ss2fg_frame *f)
 {
    const ss2fg_frame *pv = fg_hist[0] >= 0 ? &fg_slot[fg_hist[0]] : 0;   /* 직전 캡처 */
-   int k;
+   int k, sel = 0;
    f->now_ok = (uint8_t)(fg_ram && fg_ram[FG_RAM_MODE] == FG_RAM_FIGHT);
+   /* 고르기 화면 미리보기 — 대전과 같은 서기 그림이 가운데에서 돈다(유저 「여기서는 안 되는 거?」·「대전이랑 같은 애니메이션 나옴」).
+      서기 그리기가 켜졌을 때만, 물체 0 이 미리보기 자리(80,76)·카메라 0 일 때만 몸 0 으로 본다 — 다른 몸·물체는 없음.
+      끄면 예전과 같다(대전 밖은 몸 없음) */
+   if (!f->now_ok && id_on && fg_ram && fg_ram[FG_RAM_MODE] == FG_RAM_SELECT)
+   {
+      const uint8_t *o = fg_ram + FG_RAM_OBJ;
+      sel = !(o[0x36] == 0xFF && o[0x37] == 0xFF) && o[0x38] == 80 && o[0x3A] == 76 && fg_ram[FG_RAM_CAMX] == 0;
+      f->now_ok = (uint8_t)sel;
+   }
    f->ob_now_act = 0;
    for (k = 0; k < SS2FG_OBJS; k++)
    {
-      const uint8_t *o = f->now_ok ? fg_ram + FG_RAM_OBJ + 0x40 * k : 0;
+      const uint8_t *o = f->now_ok && (!sel || k == 0) ? fg_ram + FG_RAM_OBJ + 0x40 * k : 0;
       int act = o && !(o[0x36] == 0xFF && o[0x37] == 0xFF);
       f->ob_now_x[k] = act ? (uint8_t)(o[0x38] - fg_ram[FG_RAM_CAMX]) : 0;
       f->ob_now_y[k] = act ? o[0x3A] : 0;
@@ -1359,34 +1370,34 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const in
 #define ID_LEARN  48            /* 몸마다 배운 바뀜 */
 #define ID_R      3             /* 이동 찾기 범위 ±px */
 #define ID_S      4             /* 4배 */
-#define ID_NONE   0xFFFF        /* 빈 화소(12비트 색은 0x0FFF 까지) */
+#define ID_NONE   0xFFFF        /* 빈 화소(그림 값은 팔레트<<2 | 색 번호 = 0x3F 까지) */
 
 typedef struct {
    uint64_t sig; unsigned used;
    int ox, oy, w, h;            /* 몸 자리(물체 X·Y = 발 가운데) 기준 그림 왼쪽 위, 크기 */
    uint8_t depth, first;        /* 몸 조각의 우선순위<<1, 가장 앞(가장 작은) 슬롯 */
-   uint16_t c[ID_W * ID_H];     /* 12비트 색, ID_NONE = 빈 화소 */
+   uint16_t c[ID_W * ID_H];     /* 팔레트<<2 | 색 번호(1~3), ID_NONE = 빈 화소. 색값이 아니라 번호로 — 같은 포즈라도 팔레트가 바뀐다
+                                   (고르기 화면↔대전, 색 고르기, 화면이 어두워지는 때) — 기억한 색으로 그리면 사이 그림만 다른 색이 된다 */
 } id_pose;
 
 typedef struct {
    uint64_t sa, sb; unsigned used;
    int ox, oy, w, h;            /* 둘을 합친 틀(몸 자리 기준) */
-   uint8_t depth, first;
+   uint8_t depth, first, small;  /* small = 작은 바뀜(옮긴 앞 그림이 뒤 그림 화소를 75% 넘게 맞춤 — 서기처럼) */
    uint16_t ca[ID_W * ID_H], cb[ID_W * ID_H];
    int8_t dax[ID_W * ID_H], day[ID_W * ID_H];   /* A 화소가 B 쪽으로 갈 때의 이동(A 격자) */
    int8_t dbx[ID_W * ID_H], dby[ID_W * ID_H];   /* B 화소가 A 의 어디서 왔나: B(p) = A(p - d) (B 격자) */
 } id_pair;
 
-typedef struct { uint64_t sa, sb; uint16_t hold; uint8_t cnt; } id_learn_t;
+typedef struct { uint64_t sa, sb; unsigned seen; uint16_t hold; uint8_t cnt; } id_learn_t;
 typedef struct { int on; id_pair *pr; int t256, ax, ay; } id_req_t;
 typedef struct { int on, x0, y0, w, h; uint16_t px[(ID_W * ID_S) * (ID_H * ID_S)]; } id_patch_t;   /* px = 12비트 색(반전 적용) — 내보낼 때 색표를 거친다 */
 
-static int        id_on = 0;
 static id_pose    id_pose_c[2][ID_POSES];
 static id_pair    id_pair_c[2][ID_PAIRS];
 static id_learn_t id_lt[2][ID_LEARN];
 static unsigned   id_clock = 0;
-static uint64_t   id_cur[2];
+static uint64_t   id_cur[2], id_prev[2];     /* 지금 포즈, 그 앞 포즈(제자리에서 바뀐 때만 — 왕복 동작의 다음 포즈 고르기) */
 static unsigned   id_start[2];
 static int        id_ax[2], id_ay[2], id_still[2];
 static id_req_t   id_rq[2][2];               /* [출력 칸: 0 = τD, 1 = τD+½][몸] */
@@ -1401,6 +1412,7 @@ void ss2fg_set_idle(int on)
    if (!on && id_on)
    {
       memset(id_cur, 0, sizeof id_cur);
+      memset(id_prev, 0, sizeof id_prev);
       memset(id_rq, 0, sizeof id_rq);
       id_pt[0][0].on = id_pt[0][1].on = id_pt[1][0].on = id_pt[1][1].on = 0;
    }
@@ -1467,7 +1479,7 @@ static void id_capture(const ss2fg_frame *f, int p, const uint8_t *m, uint64_t s
             if (!idx) continue;
             o = (sy + row) * ps->w + sx + col;
             if (ps->c[o] != ID_NONE) continue;                 /* 앞 슬롯이 이미 칠함 */
-            ps->c[o] = ld16(f->pal + ((f->sprcol[k] & 0xF) << 3) + (idx << 1)) & 0x0FFF;
+            ps->c[o] = (uint16_t)(((f->sprcol[k] & 0xF) << 2) | idx);   /* 색은 그릴 때 그 프레임 팔레트로 */
          }
       }
    }
@@ -1482,26 +1494,55 @@ static void id_learn_add(int p, uint64_t sa, uint64_t sb, unsigned hold)
       {
          if (id_lt[p][i].cnt < 250) id_lt[p][i].cnt++;
          id_lt[p][i].hold = (uint16_t)hold;
+         id_lt[p][i].seen = ++id_clock;
          id_stats[0]++;
          return;
       }
-   for (i = 1; i < ID_LEARN; i++) if (id_lt[p][i].cnt < id_lt[p][lo].cnt) lo = i;
+   /* 가장 오래 안 본 칸을 바꾼다. (예전: 횟수가 가장 적은 칸 — 표가 «2번 이상 본 바뀜»으로 다 차면 새 바뀜은 1번째에서
+      서로 밀어내 영영 2번이 못 됐다 = 상대가 바뀌는 아케이드 몇 판 뒤·캐릭터를 바꾼 뒤 서기 그리기가 멈춤) */
+   for (i = 1; i < ID_LEARN; i++) if (id_lt[p][i].seen < id_lt[p][lo].seen) lo = i;
    id_lt[p][lo].sa = sa; id_lt[p][lo].sb = sb; id_lt[p][lo].hold = (uint16_t)hold; id_lt[p][lo].cnt = 1;
+   id_lt[p][lo].seen = ++id_clock;
    id_stats[0]++;
 }
-/* A 다음 포즈 — 같은 바뀜을 2번 이상 봤고 두 번째로 많은 것보다 두 배 이상일 때만 */
-static uint64_t id_next(int p, uint64_t sa, unsigned *hold)
+/* A 다음 포즈 — 같은 바뀜을 2번 이상 봤고 두 번째로 많은 것보다 두 배 이상일 때만. 그래도 못 정하면 방금 온 포즈(from)를 빼고
+   다시 본다 — 왕복 동작의 가운데 포즈(우쿄 서기 57c3→f629→9621→f629→57c3: f629 다음은 온 쪽의 반대) */
+static uint64_t id_next(int p, uint64_t sa, uint64_t from, unsigned *hold)
 {
-   int i, b1 = -1, c2 = 0;
-   for (i = 0; i < ID_LEARN; i++)
+   int pass;
+   for (pass = 0; pass < 2; pass++)
    {
-      if (id_lt[p][i].sa != sa || !id_lt[p][i].cnt) continue;
-      if (b1 < 0 || id_lt[p][i].cnt > id_lt[p][b1].cnt) { if (b1 >= 0 && id_lt[p][b1].cnt > c2) c2 = id_lt[p][b1].cnt; b1 = i; }
-      else if (id_lt[p][i].cnt > c2) c2 = id_lt[p][i].cnt;
+      int i, b1 = -1, c2 = 0;
+      if (pass && !from) break;
+      for (i = 0; i < ID_LEARN; i++)
+      {
+         if (id_lt[p][i].sa != sa || !id_lt[p][i].cnt || (pass && id_lt[p][i].sb == from)) continue;
+         if (b1 < 0 || id_lt[p][i].cnt > id_lt[p][b1].cnt) { if (b1 >= 0 && id_lt[p][b1].cnt > c2) c2 = id_lt[p][b1].cnt; b1 = i; }
+         else if (id_lt[p][i].cnt > c2) c2 = id_lt[p][i].cnt;
+      }
+      if (b1 >= 0 && id_lt[p][b1].cnt >= 2 && id_lt[p][b1].cnt >= 2 * c2)
+      {
+         if (hold) *hold = id_lt[p][b1].hold;
+         return id_lt[p][b1].sb;
+      }
    }
-   if (b1 < 0 || id_lt[p][b1].cnt < 2 || id_lt[p][b1].cnt < 2 * c2) return 0;
-   *hold = id_lt[p][b1].hold;
-   return id_lt[p][b1].sb;
+   return 0;
+}
+/* A→B 가 되풀이 동작(서기처럼 같은 포즈들이 돈다)의 한 칸인가 — B 에서 배운 다음 포즈를 따라가 A 로 돌아오면 1.
+   착지→서기·공격 끝 자세→서기처럼 한 번 지나가는 바뀜은 안 그린다 — 사이 그림은 반쯤에서 다음 그림으로 넘어가서 그 자세가
+   끝나는 때가 앞당겨 보인다(서기는 돌기만 하니 상관없다). 하니스: 점프 착지 a944→3902(22 프레임)를 세 번째부터 그렸다 */
+static int id_loop(int p, uint64_t sa, uint64_t sb)
+{
+   uint64_t from = sa, cur = sb;
+   int n;
+   for (n = 0; n < ID_POSES; n++)
+   {
+      uint64_t nx = id_next(p, cur, from, 0);
+      if (!nx) return 0;
+      if (nx == sa) return 1;
+      from = cur; cur = nx;
+   }
+   return 0;
 }
 
 /* B 의 칠한 화소마다 A 에서 온 이동 d — 5×5 창에서 화소(빈칸 포함)가 다른 수 × 16 + 덜 움직인 쪽을 조금 선호 */
@@ -1595,6 +1636,26 @@ static id_pair *id_get_pair(int p, uint64_t sa, uint64_t sb)
    id_match(pr->cb, pr->ca, pr->w, pr->h, pr->dax, pr->day);          /* A(q) = B(q - e) → A 에서 B 로는 -e */
    id_smooth(pr->ca, pr->w, pr->h, pr->dax, pr->day);
    for (i = 0; i < pr->w * pr->h; i++) { pr->dax[i] = (int8_t)-pr->dax[i]; pr->day[i] = (int8_t)-pr->day[i]; }
+   {  /* 작은 바뀜인가 — 이동표로 옮긴 앞 그림이 뒤 그림 화소를(거꾸로도) 75% 넘게 맞추면. 하니스 실측(하오마루 판):
+         서기 바뀜 80~94%(칼이 크게 도는 것 포함), 착지→서기 65·59%, 공격 끝 자세→서기 60·54%, 공격 중 46~70% */
+      int na = 0, ga = 0, nb = 0, gb = 0, sx, sy, q;
+      for (y = 0; y < pr->h; y++)
+         for (x = 0; x < pr->w; x++)
+         {
+            q = y * pr->w + x;
+            if (pr->cb[q] != ID_NONE)
+            {
+               nb++; sx = x - pr->dbx[q]; sy = y - pr->dby[q];
+               if (sx >= 0 && sy >= 0 && sx < pr->w && sy < pr->h && pr->ca[sy * pr->w + sx] == pr->cb[q]) gb++;
+            }
+            if (pr->ca[q] != ID_NONE)
+            {
+               na++; sx = x + pr->dax[q]; sy = y + pr->day[q];
+               if (sx >= 0 && sy >= 0 && sx < pr->w && sy < pr->h && pr->cb[sy * pr->w + sx] == pr->ca[q]) ga++;
+            }
+         }
+      pr->small = (uint8_t)(na && nb && ga * 4 >= na * 3 && gb * 4 >= nb * 3);
+   }
    id_stats[4]++;
    return pr;
 }
@@ -1656,7 +1717,7 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
       uint8_t m[64];
       uint64_t sg;
       int ax, ay;
-      if (!body_mask(f, p, m)) { id_cur[p] = 0; continue; }
+      if (!body_mask(f, p, m)) { id_cur[p] = id_prev[p] = 0; continue; }
       sg = body_sig(f, m);
       ax = f->ob_x[p]; ay = f->ob_y[p];
       if (!id_find_pose(p, sg)) id_capture(f, p, m, sg);
@@ -1665,7 +1726,9 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
       {
          unsigned hold = realn - id_start[p];
          if (hold >= 3 && hold <= 60) id_learn_add(p, id_cur[p], sg, hold);
+         id_prev[p] = id_cur[p];
       }
+      else id_prev[p] = 0;
       id_cur[p] = sg; id_start[p] = realn; id_ax[p] = ax; id_ay[p] = ay; id_still[p] = 1;
    }
 }
@@ -1684,7 +1747,7 @@ int ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fr
       int k, K = 0, bad = 0, e2, tot2, t256;
       id_pair *pr;
       if (!id_cur[p] || !id_still[p] || f0->ob_x[p] != id_ax[p] || f0->ob_y[p] != id_ay[p]) continue;
-      sb = id_next(p, id_cur[p], &hold);
+      sb = id_next(p, id_cur[p], id_prev[p], &hold);
       if (!sb || !id_find_pose(p, sb)) continue;
       for (k = 1; k <= 2 && !K && !bad; k++)
       {
@@ -1707,6 +1770,9 @@ int ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fr
       if (t256 > 255) t256 = 255;
       pr = id_get_pair(p, id_cur[p], sb);
       if (!pr) continue;
+      /* 큰 바뀜(사이 그림이 반쯤에서 뒤 그림으로 넘어감)은 되풀이 동작(서기)일 때만 — 착지→서기·공격 끝 자세→서기처럼 한 번 지나가는
+         바뀜이면 그 자세가 끝나는 때가 앞당겨 보인다 */
+      if (!pr->small && !id_loop(p, id_cur[p], sb)) continue;
       id_rq[slot][p].on = 1; id_rq[slot][p].pr = pr; id_rq[slot][p].t256 = t256;
       id_rq[slot][p].ax = id_ax[p]; id_rq[slot][p].ay = id_ay[p];
       id_stats[1]++;
@@ -1759,7 +1825,10 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
                   uint16_t c = scan[x], v = tw[(x - ux0) * ID_S + sx];
                   if (v != ID_NONE && in_win && x >= wx0 && x < wx1
                       && (pr->depth > zrow[x] || (pr->depth == zrow[x] && srow[x] > (int)pr->first)))
-                     c = rb->neg ? (uint16_t)~v : v;
+                  {
+                     uint16_t col = ld16(base->pal + ((v >> 2) << 3) + ((v & 3) << 1)) & 0x0FFF;   /* 번호 → 그 프레임 팔레트(패치 96) */
+                     c = rb->neg ? (uint16_t)~col : col;
+                  }
                   *dst++ = (uint16_t)(c & 4095);                   /* 12비트 그대로 — compose 가 화면 형식(16/32비트)의 색표로 바꾼다 */
                }
          }
