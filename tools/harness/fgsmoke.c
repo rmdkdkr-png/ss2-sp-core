@@ -19,7 +19,7 @@
 #include <stdbool.h>
 #include "libretro.h"
 
-static const char *opt_framegen = "auto", *opt_mode = "predict", *opt_mult = "4";
+static const char *opt_framegen = "auto", *opt_mode = "predict", *opt_mult = "4", *opt_idle = "off";
 static float target_hz = 60.0f;
 static int   av_enable = 3, ss_ctx = 0, var_updated = 0, verbose = 0;
 static double last_fps = 0; static int avinfo_calls = 0;
@@ -37,6 +37,7 @@ static bool env_cb(unsigned cmd, void *data)
          if (!strcmp(v->key, "ngp_framegen"))      { v->value = opt_framegen; return true; }
          if (!strcmp(v->key, "ngp_framegen_mode")) { v->value = opt_mode;     return true; }
          if (!strcmp(v->key, "ngp_framegen_mult")) { v->value = opt_mult;     return true; }
+         if (!strcmp(v->key, "ngp_framegen_idle")) { v->value = opt_idle;     return true; }
          v->value = NULL; return false; }
       case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool*)data = var_updated != 0; var_updated = 0; return true;
       case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE: *(float*)data = target_hz; return true;
@@ -428,6 +429,25 @@ static void test_determinism60(const char *rom)
    printf("3b 결정성 (60Hz 사이 그림: 400 실제 프레임 뒤 상태 동일): %s\n", fails == f0 ? "통과" : "실패");
 }
 
+/* 코어 패치 95 — 서기 사이 그림(ngp_framegen_idle=draw): 켜면 최대 기하가 640×608, 사무쇼2가 아닌 롬은 그대로 160×152 로 나온다(죽지 않는다).
+   끄면 최대 기하가 원래대로. (사이 그림 자체는 롬 하네스 fgrom FGROM_IDLE=draw 로) */
+static void test_idle_mode(const char *rom)
+{
+   int i, f0 = fails; struct retro_system_av_info av;
+   target_hz = 120; opt_framegen = "auto"; opt_mode = "predict"; opt_mult = "4"; opt_idle = "draw";
+   load_game(rom);
+   p_get_av(&av);
+   CHECK(av.geometry.max_width == 640 && av.geometry.max_height == 608, "서기 그리기 최대 기하 %ux%u (640x608 기대)", av.geometry.max_width, av.geometry.max_height);
+   for (i = 0; i < 100; i++) p_run();
+   CHECK(last_w == 160 && last_h >= 152 && last_h < 200, "사무쇼2 아닌 롬은 원래 크기로 나와야 (%ux%u)", last_w, last_h);
+   opt_idle = "off"; var_updated = 1;
+   for (i = 0; i < 10; i++) p_run();
+   p_get_av(&av);
+   CHECK(av.geometry.max_width < 640 && av.geometry.max_height < 608, "끄면 최대 기하 복귀 (%ux%u)", av.geometry.max_width, av.geometry.max_height);
+   unload_game();
+   printf("11 서기 사이 그림 옵션 — 기하 640x608·비사무쇼2 원래 크기·끄면 복귀: %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(int argc, char **argv)
 {
    char rom[1200];
@@ -451,6 +471,7 @@ int main(int argc, char **argv)
    test_retry(rom);
    test_retry_forced(rom);
    test_60hz_mode(rom);
+   test_idle_mode(rom);
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

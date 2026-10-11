@@ -202,6 +202,12 @@ static inline int wrapx(int v)
 }
 
 /* gfx.c drawColourPattern 과 같은 동작 — x 는 이미 접힌 좌표(-7..248) */
+/* 서기 사이 그림(패치 100) — 몸 조각만 빼고 줄을 다시 그릴 때: 뺄 조각, 줄 끝 깊이(zbuf) 사본, 화소마다 차지한 스프라이트 슬롯 */
+static const uint8_t *rl_skip = 0;
+static uint8_t *rl_zout = 0;
+static int16_t *rl_slot = 0;
+static int rl_cur_slot = -1;
+
 static void draw_pattern(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *scan, uint8_t *zbuf,
                          int x, unsigned tile, unsigned tiley, int mirror,
                          const uint8_t *palette, unsigned pal, uint8_t depth)
@@ -227,6 +233,7 @@ static void draw_pattern(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *sc
       uint16_t c;
       if (depth <= zbuf[xx] || (index & 3) == 0) continue;
       zbuf[xx] = depth;
+      if (rl_slot) rl_slot[xx] = (int16_t)rl_cur_slot;
       c = ld16(palette + ((index & 3) << 1));
       if (r->neg) c = (uint16_t)~c;
       scan[xx] = c;
@@ -1216,6 +1223,8 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const in
    int in_win = (y >= rb->winy) && (y < rb->winy + rb->winh);
 
    memset(zbuf, 0, sizeof zbuf);
+   rl_cur_slot = -1;
+   if (rl_slot) { int i; for (i = 0; i < 256; i++) rl_slot[i] = -1; }
 
    /* 창 밖 색 */
    c = ld16(base->pal + 0x01F0 + (rb->oowc << 1));
@@ -1227,7 +1236,7 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const in
    }
    for (; x < SS2FG_W; x++) scan[x] = c;
 
-   if (!in_win) return;
+   if (!in_win) { if (rl_zout) memcpy(rl_zout, zbuf, sizeof zbuf); return; }
 
    /* 배경색 */
    c = ld16(base->pal + 0x01E0 + ((rb->bgc & 7) << 1));
@@ -1263,8 +1272,10 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const in
       uint16_t d = ld16(base->spr + spr * 4);
       unsigned priority = (d & 0x1800) >> 11;
       int sx, sy;
-      if (priority != 0 && !(pp_on == 2 && pp_skip[spr]) && !(fx_fade_on && fx_fade_b[spr]))   /* 섞어 그릴 이펙트 — 아래 반투명 단계에서 */
+      if (priority != 0 && !(pp_on == 2 && pp_skip[spr]) && !(fx_fade_on && fx_fade_b[spr])   /* 섞어 그릴 이펙트 — 아래 반투명 단계에서 */
+          && !(rl_skip && rl_skip[spr]))                                                       /* 서기 사이 그림: 몸 뺀 줄 */
       {
+         rl_cur_slot = spr;
          sx = wrapx(base->ax[spr] + rb->spx);
          sy = wrapc(base->ay[spr] + rb->spy);
          if (offx) { sx += offx[spr]; sy += offy[spr]; }
@@ -1325,6 +1336,463 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const in
             }
          }
       }
+   }
+   if (rl_zout) memcpy(rl_zout, zbuf, sizeof zbuf);
+}
+
+/* ══ 서기 사이 그림 (코어 패치 100) ═══════════════════════════════════════════════════════════
+   유저 2026-10-11 「뉴트럴 포즈를 기존 방식대로 일단 해 줘 봐, 그리는 거랑도」 → 비교 영상 → 「ㄱ」.
+   서 있는 몸은 포즈 6~8장을 6~18 프레임씩 돌린다(하오마루 8장×8f, 갈포드 8장×14f …). 장마다 윗몸이 1~2픽셀
+   옮겨진 그림이라 원래 해상도(160칸)에선 그 «사이»가 없다 — 4배 격자(640칸)에 앞 장·뒤 장의 화소를 움직인 만큼의
+   t 씩 ¼픽셀로 옮겨 찍어 사이 그림을 만든다. 섞지 않는다(도트 그대로), 반이 넘으면 뒤 장이 위로.
+   ① 관찰(실제 프레임마다): 몸 포즈 그림을 지문별로 기억하고, 제자리에서 A→B 로 바뀐 것과 A 의 길이를 배운다.
+   ② 계획(출력마다): 지금 포즈 A 다음이 B 로 굳었고(같은 바뀜 2번 이상, 다른 것보다 두 배 이상) B 그림을 기억하면
+      t = A 시작 뒤 지난 시간 / 길이. 미리 돌린 D+1·D+2 에서 B 로 바뀌면 그때 t=1 이 되게 맞추고, 다른 포즈로 바뀌거나
+      몸이 움직이면(기술·걷기) 안 한다.
+   ③ 그리기: 몸 조각만 뺀 줄을 다시 그려(깊이·슬롯 그대로) 4배로 늘리고 그 위에 사이 그림을 원래 앞뒤 규칙대로 얹은
+      «조각»을 만든다. 내보낼 때 화면 전체를 4배로 늘리고 조각을 붙인다(ngp_framegen_idle=draw 일 때만 4배 출력). */
+
+#define ID_W      80            /* 몸 그림 틀 최대 폭·높이(원래 화소) */
+#define ID_H      96
+#define ID_POSES  24            /* 몸마다 기억할 포즈 그림 */
+#define ID_PAIRS  12            /* 몸마다 기억할 (A,B) 이동표 */
+#define ID_LEARN  48            /* 몸마다 배운 바뀜 */
+#define ID_R      3             /* 이동 찾기 범위 ±px */
+#define ID_S      4             /* 4배 */
+#define ID_NONE   0xFFFF        /* 빈 화소(12비트 색은 0x0FFF 까지) */
+
+typedef struct {
+   uint64_t sig; unsigned used;
+   int ox, oy, w, h;            /* 몸 자리(물체 X·Y = 발 가운데) 기준 그림 왼쪽 위, 크기 */
+   uint8_t depth, first;        /* 몸 조각의 우선순위<<1, 가장 앞(가장 작은) 슬롯 */
+   uint16_t c[ID_W * ID_H];     /* 12비트 색, ID_NONE = 빈 화소 */
+} id_pose;
+
+typedef struct {
+   uint64_t sa, sb; unsigned used;
+   int ox, oy, w, h;            /* 둘을 합친 틀(몸 자리 기준) */
+   uint8_t depth, first;
+   uint16_t ca[ID_W * ID_H], cb[ID_W * ID_H];
+   int8_t dax[ID_W * ID_H], day[ID_W * ID_H];   /* A 화소가 B 쪽으로 갈 때의 이동(A 격자) */
+   int8_t dbx[ID_W * ID_H], dby[ID_W * ID_H];   /* B 화소가 A 의 어디서 왔나: B(p) = A(p - d) (B 격자) */
+} id_pair;
+
+typedef struct { uint64_t sa, sb; uint16_t hold; uint8_t cnt; } id_learn_t;
+typedef struct { int on; id_pair *pr; int t256, ax, ay; } id_req_t;
+typedef struct { int on, x0, y0, w, h; uint16_t px[(ID_W * ID_S) * (ID_H * ID_S)]; } id_patch_t;
+
+static int        id_on = 0;
+static id_pose    id_pose_c[2][ID_POSES];
+static id_pair    id_pair_c[2][ID_PAIRS];
+static id_learn_t id_lt[2][ID_LEARN];
+static unsigned   id_clock = 0;
+static uint64_t   id_cur[2];
+static unsigned   id_start[2];
+static int        id_ax[2], id_ay[2], id_still[2];
+static id_req_t   id_rq[2][2];               /* [출력 칸: 0 = τD, 1 = τD+½][몸] */
+static id_patch_t id_pt[2][2];
+static int        id_slot = -1;              /* 지금 그리는 출력 칸(ss2fg_render2 가 본다) */
+static uint16_t   id_tc[(ID_W * ID_S) * (ID_H * ID_S)];
+static uint16_t   id_la[(ID_W * ID_S) * (ID_H * ID_S)], id_lb[(ID_W * ID_S) * (ID_H * ID_S)];
+static int        id_stats[6];               /* 계기: [0] 배운 바뀜 [1] 계획 [2] 패치 [3] 미리 본 다른 포즈 [4] 이동표 [5] 그림 */
+
+void ss2fg_set_idle(int on)
+{
+   if (!on && id_on)
+   {
+      memset(id_cur, 0, sizeof id_cur);
+      memset(id_rq, 0, sizeof id_rq);
+      id_pt[0][0].on = id_pt[0][1].on = id_pt[1][0].on = id_pt[1][1].on = 0;
+   }
+   id_on = on ? 1 : 0;
+}
+int ss2fg_idle_on(void) { return id_on; }
+void ss2fg_idle_slot(int s) { id_slot = s; }
+void ss2fg_idle_stats(int *out6) { int i; for (i = 0; i < 6; i++) out6[i] = id_stats[i]; }
+
+static id_pose *id_find_pose(int p, uint64_t sg)
+{
+   int i;
+   for (i = 0; i < ID_POSES; i++) if (id_pose_c[p][i].sig == sg) { id_pose_c[p][i].used = ++id_clock; return &id_pose_c[p][i]; }
+   return 0;
+}
+
+/* 몸 p 의 조각(마스크 m)을 몸 자리 기준 그림으로 — 슬롯 번호가 작은 조각이 앞(render_line 의 zbuf 규칙과 같음) */
+static void id_capture(const ss2fg_frame *f, int p, const uint8_t *m, uint64_t sg)
+{
+   const ss2fg_regs *r = &f->line[0];
+   int k, x0 = 9999, y0 = 9999, x1 = -9999, y1 = -9999, depth = -1, first = -1, i, oldest = 0;
+   id_pose *ps;
+   for (k = 0; k < 64; k++)
+   {
+      uint16_t w;
+      int sx, sy, pr;
+      if (!m[k]) continue;
+      w = ld16(f->spr + k * 4);
+      pr = (w & 0x1800) >> 11;
+      if (depth < 0) { depth = pr << 1; first = k; }
+      else if ((pr << 1) != depth) return;                    /* 우선순위가 섞인 몸 — 안 다룬다 */
+      sx = wrapx(f->ax[k] + r->spx) - f->ob_x[p];
+      sy = wrapc(f->ay[k] + r->spy) - f->ob_y[p];
+      if (sx < x0) x0 = sx;
+      if (sy < y0) y0 = sy;
+      if (sx + 8 > x1) x1 = sx + 8;
+      if (sy + 8 > y1) y1 = sy + 8;
+   }
+   if (depth <= 0 || x1 - x0 > ID_W || y1 - y0 > ID_H) return;
+   for (i = 1; i < ID_POSES; i++) if (id_pose_c[p][i].used < id_pose_c[p][oldest].used) oldest = i;
+   ps = &id_pose_c[p][oldest];
+   ps->sig = sg; ps->used = ++id_clock;
+   ps->ox = x0; ps->oy = y0; ps->w = x1 - x0; ps->h = y1 - y0;
+   ps->depth = (uint8_t)depth; ps->first = (uint8_t)first;
+   for (i = 0; i < ps->w * ps->h; i++) ps->c[i] = ID_NONE;
+   for (k = 0; k < 64; k++)
+   {
+      uint16_t w;
+      int sx, sy, row, col;
+      unsigned tile;
+      if (!m[k]) continue;
+      w = ld16(f->spr + k * 4);
+      tile = w & 0x01FF;
+      sx = wrapx(f->ax[k] + r->spx) - f->ob_x[p] - x0;
+      sy = wrapc(f->ay[k] + r->spy) - f->ob_y[p] - y0;
+      for (row = 0; row < 8; row++)
+      {
+         unsigned rr = (w & 0x4000) ? 7 - row : row;
+         int v = ld16(f->chr + tile * 16 + rr * 2);
+         if (w & 0x8000) v = mirrored[(v & 0xff00) >> 8] | (mirrored[v & 0xff] << 8);
+         for (col = 0; col < 8; col++)
+         {
+            int idx = (v >> (2 * (7 - col))) & 3, o;
+            if (!idx) continue;
+            o = (sy + row) * ps->w + sx + col;
+            if (ps->c[o] != ID_NONE) continue;                 /* 앞 슬롯이 이미 칠함 */
+            ps->c[o] = ld16(f->pal + ((f->sprcol[k] & 0xF) << 3) + (idx << 1)) & 0x0FFF;
+         }
+      }
+   }
+   id_stats[5]++;
+}
+
+static void id_learn_add(int p, uint64_t sa, uint64_t sb, unsigned hold)
+{
+   int i, lo = 0;
+   for (i = 0; i < ID_LEARN; i++)
+      if (id_lt[p][i].sa == sa && id_lt[p][i].sb == sb)
+      {
+         if (id_lt[p][i].cnt < 250) id_lt[p][i].cnt++;
+         id_lt[p][i].hold = (uint16_t)hold;
+         id_stats[0]++;
+         return;
+      }
+   for (i = 1; i < ID_LEARN; i++) if (id_lt[p][i].cnt < id_lt[p][lo].cnt) lo = i;
+   id_lt[p][lo].sa = sa; id_lt[p][lo].sb = sb; id_lt[p][lo].hold = (uint16_t)hold; id_lt[p][lo].cnt = 1;
+   id_stats[0]++;
+}
+/* A 다음 포즈 — 같은 바뀜을 2번 이상 봤고 두 번째로 많은 것보다 두 배 이상일 때만 */
+static uint64_t id_next(int p, uint64_t sa, unsigned *hold)
+{
+   int i, b1 = -1, c2 = 0;
+   for (i = 0; i < ID_LEARN; i++)
+   {
+      if (id_lt[p][i].sa != sa || !id_lt[p][i].cnt) continue;
+      if (b1 < 0 || id_lt[p][i].cnt > id_lt[p][b1].cnt) { if (b1 >= 0 && id_lt[p][b1].cnt > c2) c2 = id_lt[p][b1].cnt; b1 = i; }
+      else if (id_lt[p][i].cnt > c2) c2 = id_lt[p][i].cnt;
+   }
+   if (b1 < 0 || id_lt[p][b1].cnt < 2 || id_lt[p][b1].cnt < 2 * c2) return 0;
+   *hold = id_lt[p][b1].hold;
+   return id_lt[p][b1].sb;
+}
+
+/* B 의 칠한 화소마다 A 에서 온 이동 d — 5×5 창에서 화소(빈칸 포함)가 다른 수 × 16 + 덜 움직인 쪽을 조금 선호 */
+static void id_match(const uint16_t *ca, const uint16_t *cb, int w, int h, int8_t *dx, int8_t *dy)
+{
+   int x, y;
+   for (y = 0; y < h; y++)
+      for (x = 0; x < w; x++)
+      {
+         int best = 1 << 30, bx = 0, by = 0, ddx, ddy, i = y * w + x;
+         dx[i] = dy[i] = 0;
+         if (cb[i] == ID_NONE) continue;
+         for (ddy = -ID_R; ddy <= ID_R; ddy++)
+            for (ddx = -ID_R; ddx <= ID_R; ddx++)
+            {
+               int cost = (ddx < 0 ? -ddx : ddx) + (ddy < 0 ? -ddy : ddy), wx, wy;
+               for (wy = -2; wy <= 2 && cost < best; wy++)
+                  for (wx = -2; wx <= 2; wx++)
+                  {
+                     int qx = x + wx, qy = y + wy, ax2 = qx - ddx, ay2 = qy - ddy;
+                     uint16_t vb = (qx >= 0 && qy >= 0 && qx < w && qy < h) ? cb[qy * w + qx] : ID_NONE;
+                     uint16_t va = (ax2 >= 0 && ay2 >= 0 && ax2 < w && ay2 < h) ? ca[ay2 * w + ax2] : ID_NONE;
+                     if (va != vb) cost += 16;
+                  }
+               if (cost < best) { best = cost; bx = ddx; by = ddy; }
+            }
+         dx[i] = (int8_t)bx; dy[i] = (int8_t)by;
+      }
+}
+static int id_med(int *v, int n)
+{
+   int i, j, t;
+   for (i = 1; i < n; i++) for (j = i; j > 0 && v[j] < v[j - 1]; j--) { t = v[j]; v[j] = v[j - 1]; v[j - 1] = t; }
+   return v[n / 2];
+}
+/* 칠한 화소끼리 3×3 중앙값으로 두 번 다듬는다(외톨이 엉터리 이동 지우기) */
+static void id_smooth(const uint16_t *c, int w, int h, int8_t *dx, int8_t *dy)
+{
+   static int8_t tx[ID_W * ID_H], ty[ID_W * ID_H];
+   int it, x, y;
+   for (it = 0; it < 2; it++)
+   {
+      for (y = 0; y < h; y++)
+         for (x = 0; x < w; x++)
+         {
+            int vx[9], vy[9], n = 0, i = y * w + x, a, b;
+            tx[i] = dx[i]; ty[i] = dy[i];
+            if (c[i] == ID_NONE) continue;
+            for (b = -1; b <= 1; b++)
+               for (a = -1; a <= 1; a++)
+               {
+                  int qx = x + a, qy = y + b, j;
+                  if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
+                  j = qy * w + qx;
+                  if (c[j] == ID_NONE) continue;
+                  vx[n] = dx[j]; vy[n] = dy[j]; n++;
+               }
+            tx[i] = (int8_t)id_med(vx, n); ty[i] = (int8_t)id_med(vy, n);
+         }
+      memcpy(dx, tx, (size_t)w * h); memcpy(dy, ty, (size_t)w * h);
+   }
+}
+
+static id_pair *id_get_pair(int p, uint64_t sa, uint64_t sb)
+{
+   int i, oldest = 0, x, y;
+   id_pose *A, *B;
+   id_pair *pr;
+   for (i = 0; i < ID_PAIRS; i++)
+      if (id_pair_c[p][i].sa == sa && id_pair_c[p][i].sb == sb) { id_pair_c[p][i].used = ++id_clock; return &id_pair_c[p][i]; }
+   A = id_find_pose(p, sa); B = id_find_pose(p, sb);
+   if (!A || !B || A->depth != B->depth) return 0;
+   for (i = 1; i < ID_PAIRS; i++) if (id_pair_c[p][i].used < id_pair_c[p][oldest].used) oldest = i;
+   pr = &id_pair_c[p][oldest];
+   {
+      int x0 = A->ox < B->ox ? A->ox : B->ox, y0 = A->oy < B->oy ? A->oy : B->oy;
+      int x1 = A->ox + A->w > B->ox + B->w ? A->ox + A->w : B->ox + B->w;
+      int y1 = A->oy + A->h > B->oy + B->h ? A->oy + A->h : B->oy + B->h;
+      if (x1 - x0 > ID_W || y1 - y0 > ID_H) return 0;
+      pr->ox = x0; pr->oy = y0; pr->w = x1 - x0; pr->h = y1 - y0;
+   }
+   pr->sa = sa; pr->sb = sb; pr->used = ++id_clock;
+   pr->depth = A->depth; pr->first = A->first < B->first ? A->first : B->first;
+   for (i = 0; i < pr->w * pr->h; i++) pr->ca[i] = pr->cb[i] = ID_NONE;
+   for (y = 0; y < A->h; y++) for (x = 0; x < A->w; x++)
+      pr->ca[(y + A->oy - pr->oy) * pr->w + x + A->ox - pr->ox] = A->c[y * A->w + x];
+   for (y = 0; y < B->h; y++) for (x = 0; x < B->w; x++)
+      pr->cb[(y + B->oy - pr->oy) * pr->w + x + B->ox - pr->ox] = B->c[y * B->w + x];
+   id_match(pr->ca, pr->cb, pr->w, pr->h, pr->dbx, pr->dby);          /* B(p) = A(p - d) */
+   id_smooth(pr->cb, pr->w, pr->h, pr->dbx, pr->dby);
+   id_match(pr->cb, pr->ca, pr->w, pr->h, pr->dax, pr->day);          /* A(q) = B(q - e) → A 에서 B 로는 -e */
+   id_smooth(pr->ca, pr->w, pr->h, pr->dax, pr->day);
+   for (i = 0; i < pr->w * pr->h; i++) { pr->dax[i] = (int8_t)-pr->dax[i]; pr->day[i] = (int8_t)-pr->day[i]; }
+   id_stats[4]++;
+   return pr;
+}
+
+static int id_rnd(int num)                     /* num / 256 반올림(음수 대칭) */
+{
+   return num >= 0 ? (num + 128) >> 8 : -((-num + 128) >> 8);
+}
+/* 사이 그림(4배 격자) — A 화소는 t·(A→B), B 화소는 (1−t)·(B→A) 만큼 옮겨 찍고, 반 넘으면 B 를 위로.
+   위 그림의 «틈»(좌우나 위아래 양쪽 한 도트 안에 위 그림이 있는 빈칸)만 아래 그림으로 메운다 — 새 자리로 간 큰 부분은
+   안 메워 두 번 보이지 않게 */
+static void id_draw(const id_pair *pr, int t256, uint16_t *out)
+{
+   int W4 = pr->w * ID_S, H4 = pr->h * ID_S, x, y, n = W4 * H4, i;
+   uint16_t *top, *und;
+   for (i = 0; i < n; i++) id_la[i] = id_lb[i] = ID_NONE;
+   for (y = 0; y < pr->h; y++)
+      for (x = 0; x < pr->w; x++)
+      {
+         int q = y * pr->w + x, X, Y, a, b;
+         if (pr->ca[q] != ID_NONE)
+         {
+            X = x * ID_S + id_rnd(ID_S * pr->dax[q] * t256); Y = y * ID_S + id_rnd(ID_S * pr->day[q] * t256);
+            for (b = 0; b < ID_S; b++) for (a = 0; a < ID_S; a++)
+               if (X + a >= 0 && Y + b >= 0 && X + a < W4 && Y + b < H4) id_la[(Y + b) * W4 + X + a] = pr->ca[q];
+         }
+         if (pr->cb[q] != ID_NONE)
+         {
+            X = x * ID_S - id_rnd(ID_S * pr->dbx[q] * (256 - t256)); Y = y * ID_S - id_rnd(ID_S * pr->dby[q] * (256 - t256));
+            for (b = 0; b < ID_S; b++) for (a = 0; a < ID_S; a++)
+               if (X + a >= 0 && Y + b >= 0 && X + a < W4 && Y + b < H4) id_lb[(Y + b) * W4 + X + a] = pr->cb[q];
+         }
+      }
+   top = t256 < 128 ? id_la : id_lb; und = t256 < 128 ? id_lb : id_la;
+   for (y = 0; y < H4; y++)
+      for (x = 0; x < W4; x++)
+      {
+         int o = y * W4 + x, k, l = 0, r = 0, u = 0, d = 0;
+         out[o] = top[o];
+         if (top[o] != ID_NONE || und[o] == ID_NONE) continue;
+         for (k = 1; k <= ID_S; k++)
+         {
+            if (x - k >= 0 && top[o - k] != ID_NONE) l = 1;
+            if (x + k < W4 && top[o + k] != ID_NONE) r = 1;
+            if (y - k >= 0 && top[o - k * W4] != ID_NONE) u = 1;
+            if (y + k < H4 && top[o + k * W4] != ID_NONE) d = 1;
+         }
+         if ((l && r) || (u && d)) out[o] = und[o];
+      }
+}
+
+/* 실제 프레임마다(보여 줄 D) — 포즈 그림 기억 + 제자리 바뀜 배우기 */
+void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
+{
+   int p;
+   if (!id_on || !f || !f->valid || f->mono) return;
+   for (p = 0; p < 2; p++)
+   {
+      uint8_t m[64];
+      uint64_t sg;
+      int ax, ay;
+      if (!body_mask(f, p, m)) { id_cur[p] = 0; continue; }
+      sg = body_sig(f, m);
+      ax = f->ob_x[p]; ay = f->ob_y[p];
+      if (!id_find_pose(p, sg)) id_capture(f, p, m, sg);
+      if (sg == id_cur[p]) { if (ax != id_ax[p] || ay != id_ay[p]) id_still[p] = 0; continue; }
+      if (id_cur[p] && id_still[p] && ax == id_ax[p] && ay == id_ay[p])
+      {
+         unsigned hold = realn - id_start[p];
+         if (hold >= 3 && hold <= 60) id_learn_add(p, id_cur[p], sg, hold);
+      }
+      id_cur[p] = sg; id_start[p] = realn; id_ax[p] = ax; id_ay[p] = ay; id_still[p] = 1;
+   }
+}
+
+/* 출력 칸 slot(0 = τD, 1 = τD+½, h = 반 프레임) 의 사이 그림 계획. f1·f2 = 미리 돌린 D+1·D+2. 반환 1 = 그릴 몸이 있음 */
+int ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn, int h, int slot)
+{
+   int p, any = 0;
+   if (slot < 0 || slot > 1) return 0;
+   for (p = 0; p < 2; p++) { id_rq[slot][p].on = 0; id_pt[slot][p].on = 0; }
+   if (!id_on || !f0 || !f0->body_ok) return 0;
+   for (p = 0; p < 2; p++)
+   {
+      unsigned hold = 0;
+      uint64_t sb;
+      int k, K = 0, bad = 0, e2, tot2, t256;
+      id_pair *pr;
+      if (!id_cur[p] || !id_still[p] || f0->ob_x[p] != id_ax[p] || f0->ob_y[p] != id_ay[p]) continue;
+      sb = id_next(p, id_cur[p], &hold);
+      if (!sb || !id_find_pose(p, sb)) continue;
+      for (k = 1; k <= 2 && !K && !bad; k++)
+      {
+         const ss2fg_frame *fk = k == 1 ? f1 : f2;
+         uint8_t mm[64];
+         uint64_t s;
+         if (!fk || !fk->body_ok || !body_mask(fk, p, mm)) { bad = 1; break; }
+         if (fk->ob_x[p] != id_ax[p] || fk->ob_y[p] != id_ay[p]) { bad = 1; break; }   /* 움직이기 시작 */
+         s = body_sig(fk, mm);
+         if (s == id_cur[p]) continue;
+         if (s == sb) K = k; else bad = 1;
+      }
+      if (bad) { id_stats[3]++; continue; }
+      e2 = 2 * (int)(realn - id_start[p]) + h;
+      if (K) tot2 = 2 * (int)(realn + K - id_start[p]);
+      else { tot2 = 2 * (int)hold; if (tot2 < e2 + 6) tot2 = e2 + 6; }      /* D+2 까진 안 바뀜 — 적어도 3 프레임 남음 */
+      if (tot2 <= 0) continue;
+      t256 = 256 * e2 / tot2;
+      if (t256 <= 0) continue;
+      if (t256 > 255) t256 = 255;
+      pr = id_get_pair(p, id_cur[p], sb);
+      if (!pr) continue;
+      id_rq[slot][p].on = 1; id_rq[slot][p].pr = pr; id_rq[slot][p].t256 = t256;
+      id_rq[slot][p].ax = id_ax[p]; id_rq[slot][p].ay = id_ay[p];
+      id_stats[1]++;
+      any = 1;
+   }
+   return any;
+}
+
+/* ss2fg_render2 끝에서 — 이 출력 칸의 몸마다 «몸 뺀 줄 + 사이 그림» 4배 조각 */
+static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_scr,
+                     const int16_t *offx, const int16_t *offy, const uint32_t *colormap)
+{
+   int s = id_slot, p;
+   if (s < 0 || s > 1 || !id_on) return;
+   for (p = 0; p < 2; p++)
+   {
+      id_req_t *rq = &id_rq[s][p];
+      id_patch_t *pt = &id_pt[s][p];
+      uint8_t m[64], zrow[256];
+      int16_t srow[256];
+      uint16_t scan[256];
+      int k, ux0, uy0, x0, y0, x1, y1, y, x, sx, sy, W4;
+      const id_pair *pr = rq->pr;
+      pt->on = 0;
+      if (!rq->on || pp_on || fx_fade_on) continue;           /* 포즈·이펙트 섞기 중엔 몸 뺀 줄을 같게 못 만든다 */
+      if (!body_mask(base, p, m)) continue;
+      for (k = 0; k < 64; k++) if (m[k] && offx && (offx[k] || offy[k])) break;
+      if (k < 64) continue;                                     /* 서 있는 몸이 옮겨 그려지는 중 — 안 함 */
+      id_draw(pr, rq->t256, id_tc);
+      W4 = pr->w * ID_S;
+      ux0 = rq->ax + pr->ox; uy0 = rq->ay + pr->oy;
+      x0 = ux0 < 0 ? 0 : ux0; y0 = uy0 < 0 ? 0 : uy0;
+      x1 = ux0 + pr->w > SS2FG_W ? SS2FG_W : ux0 + pr->w;
+      y1 = uy0 + pr->h > SS2FG_H ? SS2FG_H : uy0 + pr->h;
+      if (x1 <= x0 || y1 <= y0) continue;
+      rl_skip = m; rl_zout = zrow; rl_slot = srow;
+      for (y = y0; y < y1; y++)
+      {
+         const ss2fg_regs *rb = &base->line[y];
+         int in_win = (y >= rb->winy) && (y < rb->winy + rb->winh);
+         int wx0 = rb->winx, wx1 = imin(rb->winx + rb->winw, SS2FG_W);
+         render_line(base, to_scr, offx, offy, t_scr, y, scan);
+         for (sy = 0; sy < ID_S; sy++)
+         {
+            uint16_t *dst = pt->px + ((y - y0) * ID_S + sy) * ((x1 - x0) * ID_S);
+            const uint16_t *tw = id_tc + ((y - uy0) * ID_S + sy) * W4;
+            for (x = x0; x < x1; x++)
+               for (sx = 0; sx < ID_S; sx++)
+               {
+                  uint16_t c = scan[x], v = tw[(x - ux0) * ID_S + sx];
+                  if (v != ID_NONE && in_win && x >= wx0 && x < wx1
+                      && (pr->depth > zrow[x] || (pr->depth == zrow[x] && srow[x] > (int)pr->first)))
+                     c = rb->neg ? (uint16_t)~v : v;
+                  *dst++ = (uint16_t)colormap[c & 4095];
+               }
+         }
+      }
+      rl_skip = 0; rl_zout = 0; rl_slot = 0;
+      pt->x0 = x0; pt->y0 = y0; pt->w = x1 - x0; pt->h = y1 - y0; pt->on = 1;
+      id_stats[2]++;
+   }
+}
+
+/* 내보내기 — 원래 그림(16bpp)을 4배로 늘리고 출력 칸 slot 의 조각을 붙인다 */
+void ss2fg_idle_compose(uint16_t *dst, int dpitch, const uint16_t *src, int spitch, int w, int h, int slot)
+{
+   int y, x, sy, p;
+   for (y = 0; y < h; y++)
+   {
+      uint16_t *row = dst + (size_t)(y * ID_S) * dpitch;
+      const uint16_t *s = src + (size_t)y * spitch;
+      for (x = 0; x < w; x++)
+      {
+         uint16_t v = s[x];
+         row[x * 4] = row[x * 4 + 1] = row[x * 4 + 2] = row[x * 4 + 3] = v;
+      }
+      for (sy = 1; sy < ID_S; sy++) memcpy(row + (size_t)sy * dpitch, row, (size_t)w * ID_S * sizeof(uint16_t));
+   }
+   if (slot < 0 || slot > 1) return;
+   for (p = 0; p < 2; p++)
+   {
+      const id_patch_t *pt = &id_pt[slot][p];
+      int pw = pt->w * ID_S, r;
+      if (!pt->on || pt->x0 + pt->w > w || pt->y0 + pt->h > h) continue;
+      for (r = 0; r < pt->h * ID_S; r++)
+         memcpy(dst + (size_t)(pt->y0 * ID_S + r) * dpitch + pt->x0 * ID_S, pt->px + (size_t)r * pw, (size_t)pw * sizeof(uint16_t));
    }
 }
 
@@ -1478,6 +1946,7 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
             row[x] = (uint16_t)colormap[scan[x] & 4095];
       }
    }
+   if (bpp == 2) id_build(base, to_scr, t_scr, have_off ? offx : 0, offy, colormap);   /* 서기 사이 그림 조각(패치 100) */
    fg_ov_on[0] = fg_ov_on[1] = 0;                              /* 몸 따로 박자는 한 번 그리기용 */
    pp_on = 0;
    return 1;

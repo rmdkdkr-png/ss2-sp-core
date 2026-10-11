@@ -168,6 +168,20 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "blend"
    },
    {
+      "ngp_framegen_idle",
+      "프레임 생성 — 서기 자세",
+      NULL,
+      "서 있을 때 게임은 몸 포즈를 6~18 프레임마다 1~2픽셀씩 바꿔 숨 쉬듯 움직인다(포즈 6~8장 순환). 그리기 = 화면을 4배(640×608)로 내보내며 앞뒤 포즈 사이를 ¼픽셀씩 옮겨 그린 그림으로 잇는다(도트 그대로, 섞지 않음 — 같은 바뀜을 두 번 본 뒤부터, 사무쇼2 예측 4배·60Hz 사이 그림에서). 끔 = 원래대로.",
+      NULL,
+      "video",
+      {
+         { "off",  "끔" },
+         { "draw", "그리기(¼픽셀)" },
+         { NULL, NULL },
+      },
+      "off"
+   },
+   {
       "ngp_runahead",
       "런어헤드 (입력 지연 줄이기)",
       NULL,
@@ -282,6 +296,17 @@ struct retro_core_option_definition option_defs_us[] = {
          { NULL, NULL},
       },
       "blend",
+   },
+   {
+      "ngp_framegen_idle",
+      "프레임 생성 — 서기 자세",
+      "그리기 = 서 있을 때 앞뒤 포즈 사이를 ¼픽셀씩 옮겨 그려 이음(화면 4배 출력). 끔 = 원래대로.",
+      {
+         { "off",  "끔" },
+         { "draw", "그리기(¼픽셀)" },
+         { NULL, NULL},
+      },
+      "off",
    },
    { NULL, NULL, NULL, { NULL, NULL }, NULL },
 };

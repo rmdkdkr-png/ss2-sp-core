@@ -669,11 +669,14 @@ static int body_pos_differs(const ss2fg_frame *a, const ss2fg_frame *b, int p)
    return a->ob_x[p] != b->ob_x[p] || a->ob_y[p] != b->ob_y[p];
 }
 static int fg_no_next = 0;                       /* 60Hz 사이 그림 — τ=D 만 그리고 τ=D+½(fg_next)는 건너뛴다 */
+/* 서기 사이 그림(코어 패치 100) — 켜면 화면을 4배(640×608)로 내보낸다. idle_out_slot = 이번 출력의 사이 그림 칸(0 τD · 1 τD+½ · -1 없음) */
+static int idle_opt = 0, idle_out_slot = -1;
+static uint16_t idle_out4[(FB_WIDTH * 4) * (FB_HEIGHT * 4)];
 static int fg_predict4(int ra)
 {
    int k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel, extra = 0, p;
    int ts0, ts1, tb0, tb1;
-   int ov[2] = { 0, 0 }, ovx0[2], ovy0[2], ovx1[2], ovy1[2];
+   int ov[2] = { 0, 0 }, ovx0[2], ovy0[2], ovx1[2], ovy1[2], id0 = 0, id1 = 0;
    const ss2fg_frame *f0, *f1, *f2, *fp, *tos, *tob, *fk[5];
 
    if (!ss2fg_hist(0)) return 0;
@@ -689,6 +692,12 @@ static int fg_predict4(int ra)
    m01 = ss2fg_motion(f0, f1);
    m12 = ss2fg_motion(f1, f2);
    (void)k;
+   if (idle_opt && ss2comm_rom_is_ss2())
+   {  /* 서기 사이 그림 — 보여 줄 D 를 관찰하고, τD·τD+½ 의 사이 그림을 계획(미리 돌린 D+1·D+2 로 확인) */
+      ss2fg_idle_observe(f0, fg_realn);
+      id0 = ss2fg_idle_plan(f0, f1, f2, fg_realn, 0, 0);
+      id1 = fg_no_next ? 0 : ss2fg_idle_plan(f0, f1, f2, fg_realn, 1, 1);
+   }
 
    /* 스프라이트: 다음 바뀌는 프레임 K(D 기준 +1/+2), 지난번 바뀐 때 L(≤0, K-2 이상) */
    Ks = (m01 & 1) ? 1 : (m12 & 1) ? 2 : 0;
@@ -732,13 +741,17 @@ static int fg_predict4(int ra)
 
    /* τ=D — 둘 다 0 이면 실제 D 그대로 (fg_real = D 의 그림) */
    for (p = 0; p < 2; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx0[p], ovy0[p]);
-   if (!(ts0 || tb0 || ov[0] || ov[1]) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
+   ss2fg_idle_slot(id0 ? 0 : -1);
+   if (!(ts0 || tb0 || ov[0] || ov[1] || id0) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(surf->pixels, fg_real, sizeof fg_real);
    /* τ=D+½ */
    for (p = 0; p < 2 && !fg_no_next; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx1[p], ovy1[p]);
-   if (!fg_no_next && (!(ts1 || tb1 || ov[0] || ov[1]) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap)))
+   ss2fg_idle_slot(id1 ? 1 : -1);
+   if (!fg_no_next && (!(ts1 || tb1 || ov[0] || ov[1] || id1) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap)))
       memcpy(fg_next, fg_real, sizeof fg_real);
+   ss2fg_idle_slot(-1);
    ss2fg_body_override(0, 0, 0, 0); ss2fg_body_override(1, 0, 0, 0);
+   idle_out_slot = 0;                                  /* 이번 실제 호출은 τD(조각 칸 0) */
 
    fg_snap_load(ra + 2 + extra);                       /* 숨은 프레임 캡처를 무른다 */
    return 1;
@@ -917,8 +930,8 @@ static void ss2_set_geometry(void)
    int band = ss2comm_band_h();
    geom.base_width   = ss2_sides ? SS2_WIDE_W : FB_WIDTH;
    geom.base_height  = FB_HEIGHT + band;
-   geom.max_width    = SS2_WIDE_W;
-   geom.max_height   = FB_HEIGHT + SS2COMM_BAND_MAX;
+   geom.max_width    = idle_opt && FB_WIDTH * 4 > SS2_WIDE_W ? FB_WIDTH * 4 : SS2_WIDE_W;
+   geom.max_height   = idle_opt ? FB_HEIGHT * 4 : FB_HEIGHT + SS2COMM_BAND_MAX;
    geom.aspect_ratio = (float)geom.base_width / (float)geom.base_height;
    if (environ_cb)
       environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geom);
@@ -1034,6 +1047,15 @@ static void check_variables(void)
       var.value = NULL;
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
          ss2fg_set_pose(strcmp(var.value, "off") != 0);
+
+      var.key   = "ngp_framegen_idle";                    /* 코어 패치 100 — 서기 사이 그림(¼픽셀, 4배 출력) */
+      var.value = NULL;
+      {
+         int was = idle_opt;
+         idle_opt = (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "draw")) ? 1 : 0;
+         ss2fg_set_idle(idle_opt);
+         if (cv_booted && was != idle_opt) ss2_set_geometry();
+      }
       if (!cv_booted || fg_opt != opt0 || fg_mode != mode0)
       { fg_rate_block = 0; fg_block_n = 0; }   /* 프레임 생성 옵션을 바꿨다 — 다시 판정 */
    }
@@ -1421,6 +1443,7 @@ void retro_run(void)
    EmulateSpecStruct spec;
    bool updated = false;
    int synth = 0, hidden = 0, ss2_paused;
+   idle_out_slot = -1;                                  /* 서기 사이 그림 조각 — 이번 출력이 쓸 칸은 아래에서 정한다 */
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
       check_variables();
@@ -1543,7 +1566,7 @@ void retro_run(void)
       else if (fg_mode == 0 && !ngplink_active())                   /* 링크 플레이 중엔 예측이 통신을 먹는다 → 합성 없이 지난 화면 */
       {
          if (fg_next_ok)                                           /* 4배: 실제 호출 때 미리 만들어 둔 반 프레임 뒤 그림 */
-            memcpy(surf->pixels, fg_next, sizeof fg_next);
+         {  memcpy(surf->pixels, fg_next, sizeof fg_next); idle_out_slot = 1; }
          else if (!fg_predict())                                   /* 합성 못 하면 실제 N 을 한 번 더 */
             memcpy(surf->pixels, fg_real, sizeof fg_real);
          fg_next_ok = 0;
@@ -1589,7 +1612,13 @@ void retro_run(void)
    {
       if (ss2_paused)
          ss2comm_overlay_draw((uint16_t *)surf->pixels, FB_WIDTH, (int)width, (int)height);
-      video_cb(surf->pixels, width, height, FB_WIDTH * 2);
+      if (idle_opt && ss2comm_rom_is_ss2() && !hidden && width == FB_WIDTH && height == FB_HEIGHT)
+      {  /* 서기 사이 그림 — 4배로 늘리고 이번 출력의 조각을 붙여 640×608 로 */
+         ss2fg_idle_compose(idle_out4, FB_WIDTH * 4, (const uint16_t *)surf->pixels, FB_WIDTH, (int)width, (int)height, idle_out_slot);
+         video_cb(idle_out4, width * 4, height * 4, FB_WIDTH * 4 * 2);
+      }
+      else
+         video_cb(surf->pixels, width, height, FB_WIDTH * 2);
    }
 
    /* 소리 — 2배 출력 중엔 실제 프레임의 샘플을 반씩 두 호출에 나눈다 */
@@ -1646,8 +1675,8 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
       int band = ss2comm_band_h();                   /* 해설 확장 띠(20px) 사용 시에만 > 0 */
       info->geometry.base_width   = ss2_sides ? SS2_WIDE_W : MEDNAFEN_CORE_GEOMETRY_BASE_W;
       info->geometry.base_height  = MEDNAFEN_CORE_GEOMETRY_BASE_H + band;
-      info->geometry.max_width    = SS2_WIDE_W;
-      info->geometry.max_height   = MEDNAFEN_CORE_GEOMETRY_MAX_H + SS2COMM_BAND_MAX;
+      info->geometry.max_width    = idle_opt && FB_WIDTH * 4 > SS2_WIDE_W ? FB_WIDTH * 4 : SS2_WIDE_W;   /* 서기 사이 그림 = 4배 */
+      info->geometry.max_height   = idle_opt ? FB_HEIGHT * 4 : MEDNAFEN_CORE_GEOMETRY_MAX_H + SS2COMM_BAND_MAX;
       info->geometry.aspect_ratio = (float)info->geometry.base_width /
                                     (float)(MEDNAFEN_CORE_GEOMETRY_BASE_H + band);
    }
@@ -1883,3 +1912,5 @@ void MDFN_MakeFName(uint8_t type, char *s, size_t len,
 void retro_ngp_fx_stats(int *out8) { ss2fg_fx_stats(out8); }
 /* 시험용 계기 — 포즈 섞기 4칸 */
 void retro_ngp_pose_stats(int *out4) { ss2fg_pose_stats(out4); }
+/* 시험용 계기 — 서기 사이 그림 6칸 */
+void retro_ngp_idle_stats(int *out6) { ss2fg_idle_stats(out6); }

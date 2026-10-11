@@ -103,6 +103,16 @@ int  ss2fg_get_pose(void);
 void ss2fg_pose_stats(int *out4);  /* 시험용 계기 */
 /* 몸 p(0·1)를 이번 합성에서 x256/256, y256/256 px 옮긴다(on=0 이면 끔). 몸 박자가 다른 조각과 어긋날 때 libretro.c·앱이 넣는다 */
 void ss2fg_body_override(int p, int on, int x256, int y256);
+/* 서기 사이 그림(코어 패치 95) — 서 있는 몸의 앞뒤 포즈 사이를 ¼픽셀 격자(4배)로 옮겨 그린다. 코어 옵션 ngp_framegen_idle(off 기본 / draw).
+   observe = 실제 프레임마다 포즈 기억·바뀜 배우기, plan = 출력 칸(0 τD·1 τD+½)의 사이 그림 계획, slot = 지금 그리는 칸(render2 가 조각을 만든다),
+   compose = 원래 그림을 4배로 늘리고 그 칸의 조각을 붙인다 */
+void ss2fg_set_idle(int on);
+int  ss2fg_idle_on(void);
+void ss2fg_idle_slot(int s);
+void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn);
+int  ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn, int h, int slot);
+void ss2fg_idle_compose(uint16_t *dst, int dpitch, const uint16_t *src, int spitch, int w, int h, int slot);
+void ss2fg_idle_stats(int *out6);   /* 시험용 계기: 배운 바뀜 / 계획 / 조각 / 미리 본 다른 포즈 / 이동표 / 그림 */
 int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
                   const ss2fg_frame *to_scr, int t_scr,
                   void *dst, int pitch_px, int bpp, const uint32_t *colormap);

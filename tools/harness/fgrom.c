@@ -4,6 +4,8 @@
  *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로) · FGROM_RAM=<파일> (실제 프레임마다 시스템 RAM 16KB)
  *       FGROM_RA=0|1|2 (런어헤드 프레임 수, 기본 0 — 기준 대조는 그만큼 앞 번호와 견준다) · FGROM_FX=move|blend|off (이펙트 규칙, 기본 move) · FGROM_POSE=blend|off (포즈 섞기, 기본 blend)
  *       FGROM_FG=auto|enabled|60|disabled (ngp_framegen 값을 mode 인자 대신 직접 — 60 = 60Hz 사이 그림, 패치 90) · FGROM_HZ=<목표 주사율> (기본 120)
+ *       FGROM_IDLE=draw|off (서기 사이 그림, 기본 off — draw 면 코어가 640×608 로 내보낸다: 비교용 cur 에는 칸마다 왼쪽 위 부화소를 담고(조각 밖은 원래 화소와 같다),
+ *         FGROM_DUMPALL 은 4배 그림도 o<번호>_<위상>.x4 로 떨어뜨린다. 요약의 out4/patched = 4배 출력 수 / 조각이 실제로 붙은 수)
  *   출력 요약의 out/same_prev: 출력 프레임 수와 «바로 앞 출력 프레임과 픽셀까지 같은» 수 — 60Hz 사이 그림의 효과(30Hz 움직임 → 60Hz)를 센다
  *   script: "s-e:BTN,..."  BTN 글자: U D L R A B S(option)  예) "200-205:S,400-405:A"
  *   매 합성 프레임: 앞 실제 N, 뒤 실제 N+1 과 비교해 3x3 이웃 어디에도 없는 색의 픽셀 수(=깨진 픽셀) 기록
@@ -17,11 +19,14 @@
 #include "libretro.h"
 #define W 160
 #define H 152
-static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4", *opt_ra = "0", *opt_fx = "move", *opt_pose = "blend";   /* FGROM_FX=move|blend|off (이펙트, 기본 옮기기) · FGROM_POSE=blend|off (포즈 섞기, 기본 섞기) */   /* FGROM_MULT=2|4 · FGROM_RA=0|1|2 (런어헤드, 기본 끔) */
+static const char *opt_framegen = "disabled", *opt_mode = "predict", *opt_mult = "4", *opt_ra = "0", *opt_fx = "move", *opt_pose = "blend", *opt_idle = "off";   /* FGROM_FX=move|blend|off (이펙트, 기본 옮기기) · FGROM_POSE=blend|off (포즈 섞기, 기본 섞기) */   /* FGROM_MULT=2|4 · FGROM_RA=0|1|2 (런어헤드, 기본 끔) */
 static int ra_off = 0;   /* 런어헤드 프레임 수 — 기준 프레임 대조의 번호 오프셋 */
 static float target_hz = 120.0f;
 static char workdir[1024];
 static uint16_t cur[W*H]; static int have_frame = 0;
+#define W4 (W*4)
+#define H4 (H*4)
+static uint16_t cur4[W4*H4]; static int cur_is4 = 0, n4 = 0, n4patched = 0;   /* 서기 사이 그림: 4배 출력 */
 static bool env_cb(unsigned cmd, void *data)
 {
    switch (cmd)
@@ -35,6 +40,7 @@ static bool env_cb(unsigned cmd, void *data)
          if (!strcmp(v->key, "ngp_runahead"))      { v->value = opt_ra;       return true; }
          if (!strcmp(v->key, "ngp_framegen_fx"))   { v->value = opt_fx;       return true; }
          if (!strcmp(v->key, "ngp_framegen_pose")) { v->value = opt_pose;     return true; }
+         if (!strcmp(v->key, "ngp_framegen_idle")) { v->value = opt_idle;     return true; }
          v->value = NULL; return false; }
       case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool*)data = false; return true;
       case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE: *(float*)data = target_hz; return true;
@@ -49,8 +55,19 @@ static bool env_cb(unsigned cmd, void *data)
 }
 static void video_cb(const void *data, unsigned w, unsigned h, size_t pitch)
 {
-   unsigned y; if (!data) return;
-   for (y = 0; y < h && y < H; y++) memcpy(cur + y*W, (const uint8_t*)data + y*pitch, (w < W ? w : W) * 2);
+   unsigned y, x; if (!data) return;
+   cur_is4 = 0;
+   if (w >= 2*W && w % W == 0 && h == H * (w / W))
+   {  /* 4배 출력 — 전체는 cur4 에, 비교용 cur 에는 칸마다 왼쪽 위 부화소(조각 밖은 원래 화소와 같다) */
+      unsigned s = w / W, cw = w < W4 ? w : W4, ch = h < H4 ? h : H4; int patched = 0;
+      for (y = 0; y < ch; y++) memcpy(cur4 + y*W4, (const uint8_t*)data + y*pitch, cw * 2);
+      for (y = 0; y < H; y++) for (x = 0; x < W; x++) cur[y*W+x] = cur4[(y*s)*W4 + x*s];
+      for (y = 0; y < ch && !patched; y++) for (x = 0; x < cw; x++) if (cur4[y*W4+x] != cur[(y/s)*W + x/s]) { patched = 1; break; }
+      cur_is4 = 1; n4++; n4patched += patched;
+      if (patched && getenv("FGROM_IDLE_LOG")) fprintf(stderr, "  [idle] 4배 출력 %d 번째에 조각\n", n4);
+   }
+   else
+      for (y = 0; y < h && y < H; y++) memcpy(cur + y*W, (const uint8_t*)data + y*pitch, (w < W ? w : W) * 2);
    have_frame = 1;
 }
 static void audio_cb(int16_t l, int16_t r) { (void)l; (void)r; }
@@ -124,7 +141,7 @@ int main(int argc, char **argv)
    mode = argv[4]; frames = atoi(argv[5]); parse_script(argv[6]);
    if (argc > 7) dump_every = atoi(argv[7]); if (argc > 8) metric_from = atoi(argv[8]);
    if (!strcmp(mode, "off")) opt_framegen = "disabled"; else { opt_framegen = "enabled"; opt_mode = mode; }
-   { const char *m = getenv("FGROM_FG"); if (m) opt_framegen = m; m = getenv("FGROM_HZ"); if (m) target_hz = (float)atof(m); }
+   { const char *m = getenv("FGROM_FG"); if (m) opt_framegen = m; m = getenv("FGROM_HZ"); if (m) target_hz = (float)atof(m); m = getenv("FGROM_IDLE"); if (m) opt_idle = m; }
    { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; m = getenv("FGROM_RA"); if (m) { opt_ra = m; ra_off = atoi(m); } m = getenv("FGROM_FX"); if (m) opt_fx = m; m = getenv("FGROM_POSE"); if (m) opt_pose = m; refdir = getenv("FGROM_REF"); }
    Hd = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL); if (!Hd) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
    SYM(p_set_environment, "retro_set_environment"); SYM(p_set_video, "retro_set_video_refresh");
@@ -150,7 +167,8 @@ int main(int argc, char **argv)
       nOut++; if (haveP0 && !memcmp(cur, P0, sizeof cur)) nSame++; memcpy(P0, cur, sizeof P0); haveP0 = 1;
       {  /* 기준 대조·전부 떨어뜨리기 — 출력 프레임마다(두 위상 모두). 합성 호출의 실제 번호는 직전 실제 프레임(real-1) */
          int idx = is_synth ? real - 1 : real;
-         if (getenv("FGROM_DUMPALL")) { char nm[64]; snprintf(nm, sizeof nm, "o%06d_%d", idx, is_synth ? 1 : 0); dump(nm, cur); }
+         if (getenv("FGROM_DUMPALL")) { char nm[64]; snprintf(nm, sizeof nm, "o%06d_%d", idx, is_synth ? 1 : 0); dump(nm, cur);
+            if (cur_is4) { char p[1200]; FILE *f4; snprintf(p, sizeof p, "%s/%s.x4", workdir, nm); f4 = fopen(p, "wb"); if (f4) { fwrite(cur4, 2, W4*H4, f4); fclose(f4); } } }
          if (refdir && idx >= metric_from && ref_load(idx + ra_off, Q0) && ref_load(idx + ra_off + 1, Q1) && ref_load(idx + ra_off + 2, Q2))   /* 런어헤드면 보여 주는 그림이 ra 프레임 앞 */
          {
             int a = artifacts3(cur, Q0, Q1, Q2); nR++; sumR += a; if (a > 40) badR++;
@@ -172,8 +190,8 @@ int main(int argc, char **argv)
       real++;
    }
    { const char *st = getenv("FGROM_SAVE"); if (st) { FILE *f = fopen(st, "wb"); size_t n = p_ser_size(); void *b = malloc(n); if (f && p_ser(b, n)) { fwrite(b, 1, n, f); fprintf(stderr, "상태 저장 %s (%zu)\n", st, n); } if (f) fclose(f); free(b); } }
-   printf("mode=%s fg=%s hz=%g real=%d calls=%d out=%d same_prev=%d synth_measured=%d artifacts: mean=%.2f max=%d (at real %d) frames>40px=%d  mean|A-B|=%.1f\n",
-          mode, opt_framegen, (double)target_hz, real, calls, nOut, nSame, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0);
+   printf("mode=%s fg=%s hz=%g idle=%s real=%d calls=%d out=%d same_prev=%d out4=%d patched=%d synth_measured=%d artifacts: mean=%.2f max=%d (at real %d) frames>40px=%d  mean|A-B|=%.1f\n",
+          mode, opt_framegen, (double)target_hz, opt_idle, real, calls, nOut, nSame, n4, n4patched, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0);
    if (refdir) printf("ref-score(mult=%s): frames=%d mean=%.2f max=%d (at real %d phase %d) frames>40px=%d\n", opt_mult, nR, nR ? (double)sumR / nR : 0.0, maxR, maxRat, maxRph, badR);
    if (oamf) fclose(oamf); if (chrf) fclose(chrf); if (csvf) fclose(csvf); if (ramf) fclose(ramf);
    {  /* 이펙트 계기(코어가 내보내면): 살핀 무리 / 물체 등속 / 몸에 붙음 / 테두리 등속 / 앞 캡처 없음 / 조각 없음 / 등속 아님 / 2px 미만·방향 */
@@ -181,6 +199,8 @@ int main(int argc, char **argv)
       if (p_fx) { int st[8]; p_fx(st); printf("fx(%s): seen=%d obj=%d attach=%d vec=%d | noprev=%d nobox=%d notconst=%d small=%d\n", opt_fx, st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]); }
       p_fx = dlsym(Hd, "retro_ngp_pose_stats");   /* 포즈 섞기 계기: 몸 포즈 바뀜 / 번갈음 아님 / 섞음 / 안 움직임 */
       if (p_fx) { int st[4]; p_fx(st); printf("pose(%s): changed=%d notalt=%d blended=%d still=%d\n", opt_pose, st[0], st[1], st[2], st[3]); }
+      p_fx = dlsym(Hd, "retro_ngp_idle_stats");   /* 서기 사이 그림 계기: 배운 바뀜 / 계획 / 조각 / 미리 본 다른 포즈 / 이동표 / 그림 */
+      if (p_fx) { int st[6]; p_fx(st); printf("idle(%s): learned=%d planned=%d patches=%d prelook_other=%d pairs=%d pics=%d\n", opt_idle, st[0], st[1], st[2], st[3], st[4], st[5]); }
    }
    p_unload(); p_deinit();
    return 0;
