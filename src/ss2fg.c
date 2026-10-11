@@ -1091,17 +1091,27 @@ static int16_t pp_dx[64], pp_dy[64];
 static const ss2fg_frame *pp_to = 0;
 static int pp_ymin, pp_ymax;
 
-/* 조각의 겉모습 지문 — 플립·우선순위 비트, 팔레트, 타일 그림 16바이트 (same_piece 와 같은 것을 본다) */
+/* 조각의 겉모습 지문 — 반전(H/V)까지 적용한 8×8 2bpp 8줄의 FNV-1a(빈 조각 = 0). 팔레트·우선순위는 안 본다.
+   PocketCore 방 10_ss2fg_consensus.patch 의 piece_look 과 **바이트까지 같아야 한다**: body_sig(몸 포즈 지문)가 이걸로 만들어지고,
+   모션 캐시(ss2_motion.bin, 패치 97)의 색인·순환 표 열쇠가 바로 그 지문이다. 예전 main 은 «반전·우선순위 비트 + 팔레트 + 타일 16바이트»
+   를 해시해서(패치 80 이식 때 그쪽 piece_look 이 없어 대신 둔 것) 지문이 달라 진짜 캐시(44,438 바뀜)를 하나도 못 찾았다 */
 static uint64_t piece_look(const ss2fg_frame *f, int k)
 {
    uint16_t w = ld16(f->spr + k * 4);
-   const uint8_t *t = f->chr + (w & 0x1FF) * 16;
+   unsigned tile = w & 0x01FF, r;
    uint64_t h = 1469598103934665603ULL;
-   int i;
-   h = (h ^ (uint64_t)(w & 0xD800)) * 1099511628211ULL;
-   h = (h ^ (uint64_t)f->sprcol[k]) * 1099511628211ULL;
-   for (i = 0; i < 16; i++) h = (h ^ (uint64_t)t[i]) * 1099511628211ULL;
-   return h;
+   int any = 0;
+   if (!(w & 0x1800)) return 0;
+   for (r = 0; r < 8; r++)
+   {
+      unsigned row = (w & 0x4000) ? 7 - r : r;
+      uint16_t v = ld16(f->chr + tile * 16 + row * 2);
+      if (w & 0x8000) v = (uint16_t)(mirrored[(v & 0xff00) >> 8] | (mirrored[v & 0xff] << 8));
+      if (v) any = 1;
+      h = (h ^ (v & 0xff)) * 1099511628211ULL;
+      h = (h ^ (v >> 8)) * 1099511628211ULL;
+   }
+   return any ? (h | 1) : 0;                                   /* 빈 조각은 0 */
 }
 
 /* f 의 몸 p 조각 — 몸 팔레트(P1 0 · P2 5) 무리(sprite_moves 와 같은 무리 나누기) 중 테두리가 몸 자리 근처(body_vec 과 같은 창) */
@@ -1731,6 +1741,11 @@ typedef struct mc_ent {
 static FILE    *mc_f = 0;
 static mc_idx_t *mc_ix = 0;
 static uint32_t mc_n = 0;
+/* 순환 표(패치 99b) — 모아 둔 판들에서 본 되풀이 동작(걷기·서기 등)의 «A 다음 B, 길이». 파일 끝 12바이트 'SS2L' u32 개수 u32 자리,
+   항목 20바이트(u64 A, u64 B, u16 길이, u16 0), A 오름차순. 이걸로 배우기 전(그 판 처음 몇 걸음)부터 한 걸음 내내 편다 */
+typedef struct { uint64_t sa, sb; uint16_t hold; } mc_loop_t;
+static mc_loop_t *mc_lp = 0;
+static uint32_t mc_ln = 0;
 static int      mc_on = 0;
 static mc_ent   mc_c[8];
 static int      mc_stats[4];               /* [0] 찾음 [1] 있음 [2] 그림 [3] 틀 안 맞음 */
@@ -1776,6 +1791,7 @@ void ss2fg_motion_close(void)
    int i;
    if (mc_f) fclose(mc_f);
    mc_f = 0; free(mc_ix); mc_ix = 0; mc_n = 0;
+   free(mc_lp); mc_lp = 0; mc_ln = 0;
    for (i = 0; i < 8; i++) { free(mc_c[i].buf); memset(&mc_c[i], 0, sizeof mc_c[i]); }
 }
 /* 반환: 바뀜 수(0 이상), 없거나 틀리면 -1 */
@@ -1798,7 +1814,40 @@ int ss2fg_motion_open(const char *path)
    }
    free(ib);
    mc_n = n;
+   {  /* 순환 표(있으면) */
+      uint8_t tr[12];
+      if (!fseek(mc_f, -12, SEEK_END) && fread(tr, 1, 12, mc_f) == 12 && !memcmp(tr, "SS2L", 4))
+      {
+         uint32_t ln = mc_rd32(tr + 4), lo = mc_rd32(tr + 8);
+         uint8_t *lb;
+         if (ln && ln < 1000000u && (lb = (uint8_t *)malloc((size_t)ln * 20)) != 0)
+         {
+            if (!fseek(mc_f, (long)lo, SEEK_SET) && fread(lb, 20, ln, mc_f) == ln && (mc_lp = (mc_loop_t *)malloc((size_t)ln * sizeof *mc_lp)) != 0)
+            {
+               for (i = 0; i < ln; i++)
+               {
+                  mc_lp[i].sa = mc_rd64(lb + i * 20); mc_lp[i].sb = mc_rd64(lb + i * 20 + 8);
+                  mc_lp[i].hold = (uint16_t)(lb[i * 20 + 16] | (lb[i * 20 + 17] << 8));
+               }
+               mc_ln = ln;
+            }
+            free(lb);
+         }
+      }
+   }
    return (int)n;
+}
+/* 순환 표에서 A 다음 — 없으면 0 */
+static uint64_t mc_loop_next(uint64_t sa, unsigned *hold)
+{
+   int lo = 0, hi = (int)mc_ln - 1;
+   while (lo <= hi)
+   {
+      int mid = (lo + hi) >> 1;
+      if (mc_lp[mid].sa == sa) { *hold = mc_lp[mid].hold; return mc_lp[mid].sb; }
+      if (mc_lp[mid].sa < sa) lo = mid + 1; else hi = mid - 1;
+   }
+   return 0;
 }
 static mc_ent *mc_get(uint64_t sa, uint64_t sb)
 {
@@ -1909,6 +1958,12 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
       unsigned hold = 0;
       uint64_t nb = id_next(p, id_cur[p], id_prev[p], &hold);
       int loop = nb && hold >= 3 && hold <= 60 && id_loop(p, id_cur[p], nb) && (!K || sb == nb);
+      if (!loop && mc_ln)
+      {  /* 아직 못 배웠으면 캐시의 순환 표로(패치 99b) */
+         unsigned h2 = 0;
+         uint64_t cb = mc_loop_next(id_cur[p], &h2);
+         if (cb && h2 >= 3 && h2 <= 60 && (!K || sb == cb)) { nb = cb; hold = h2; loop = 1; }
+      }
       if (!K && !loop) return 0;
       if (loop)
       {

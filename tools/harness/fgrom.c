@@ -1,7 +1,7 @@
 /* fgrom — 실제 롬으로 프레임 생성 품질을 잰다 (롬은 저장소 밖에 둔다 — 절대 커밋하지 않는다).
  * 사용: fgrom <core.so> <rom> <workdir> <mode:off|interp|predict> <frames> <script> [dump_every] [metric_from]
  * 환경: FGROM_MULT=2|4 (프레임 생성 배수, 기본 4) · FGROM_REF=<off 실행 dump_every=1 디렉터리> (출력 프레임을 기준 N·N+1·N+2 와 대조)
- *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로) · FGROM_RAM=<파일> (실제 프레임마다 시스템 RAM 16KB)
+ *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로, FGROM_DUMP_FROM·FGROM_DUMP_TO 면 그 실제 번호 구간만) · FGROM_RAM=<파일> (실제 프레임마다 시스템 RAM 16KB)
  *       FGROM_RA=0|1|2 (런어헤드 프레임 수, 기본 0 — 기준 대조는 그만큼 앞 번호와 견준다) · FGROM_FX=move|blend|off (이펙트 규칙, 기본 move) · FGROM_POSE=blend|off (포즈 섞기, 기본 blend)
  *       FGROM_FG=auto|enabled|60|disabled (ngp_framegen 값을 mode 인자 대신 직접 — 60 = 60Hz 사이 그림, 패치 90) · FGROM_HZ=<목표 주사율> (기본 120)
  *       FGROM_IDLE=draw|off (서기 사이 그림, 기본 off — draw 면 코어가 640×608 로 내보낸다: 비교용 cur 에는 칸마다 왼쪽 위 부화소를 담고(조각 밖은 원래 화소와 같다),
@@ -129,6 +129,7 @@ static int differ(const uint16_t *A, const uint16_t *B) { int i, n = 0; for (i =
    기준 N·N+1·N+2 의 3x3 이웃과 견준다(목표 K ≤ N+2). 어느 쪽에도 없는 색의 픽셀 수 = 깨짐 후보 */
 static const char *refdir = NULL;
 static uint64_t ohash = 0xcbf29ce484222325ULL;
+static int dump_from = 0, dump_to = 1 << 30;   /* FGROM_DUMP_FROM / FGROM_DUMP_TO — FGROM_DUMPALL 을 이 실제 번호 구간만 */
 static FILE *mlogf = 0; static int nmlog = 0; static void (*p_mstat)(int *) = 0; static int mdrawn = 0;
 static int (*p_mmiss)(uint64_t *, uint64_t *, int *) = 0; static int (*p_pinfo)(int, uint64_t, int *) = 0;
 static struct { uint64_t sa, sb; int p, age; } pend[256]; static int npend = 0;
@@ -149,7 +150,7 @@ int main(int argc, char **argv)
    mode = argv[4]; frames = atoi(argv[5]); parse_script(argv[6]);
    if (argc > 7) dump_every = atoi(argv[7]); if (argc > 8) metric_from = atoi(argv[8]);
    if (!strcmp(mode, "off")) opt_framegen = "disabled"; else { opt_framegen = "enabled"; opt_mode = mode; }
-   { const char *m = getenv("FGROM_FG"); if (m) opt_framegen = m; m = getenv("FGROM_HZ"); if (m) target_hz = (float)atof(m); m = getenv("FGROM_IDLE"); if (m) opt_idle = m; m = getenv("FGROM_MOTION"); if (m) opt_motion = m; }
+   { const char *m = getenv("FGROM_FG"); if (m) opt_framegen = m; m = getenv("FGROM_HZ"); if (m) target_hz = (float)atof(m); m = getenv("FGROM_IDLE"); if (m) opt_idle = m; m = getenv("FGROM_MOTION"); if (m) opt_motion = m; m = getenv("FGROM_DUMP_FROM"); if (m) dump_from = atoi(m); m = getenv("FGROM_DUMP_TO"); if (m) dump_to = atoi(m); }
    { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; m = getenv("FGROM_RA"); if (m) { opt_ra = m; ra_off = atoi(m); } m = getenv("FGROM_FX"); if (m) opt_fx = m; m = getenv("FGROM_POSE"); if (m) opt_pose = m; refdir = getenv("FGROM_REF"); }
    Hd = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL); if (!Hd) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
    SYM(p_set_environment, "retro_set_environment"); SYM(p_set_video, "retro_set_video_refresh");
@@ -180,7 +181,7 @@ int main(int argc, char **argv)
          for (hi = 0; hi < hn; hi++) { ohash ^= hb[hi]; ohash *= 0x100000001b3ULL; } }
       {  /* 기준 대조·전부 떨어뜨리기 — 출력 프레임마다(두 위상 모두). 합성 호출의 실제 번호는 직전 실제 프레임(real-1) */
          int idx = is_synth ? real - 1 : real;
-         if (getenv("FGROM_DUMPALL")) { char nm[64]; snprintf(nm, sizeof nm, "o%06d_%d", idx, is_synth ? 1 : 0); dump(nm, cur);
+         if (getenv("FGROM_DUMPALL") && idx >= dump_from && idx <= dump_to) { char nm[64]; snprintf(nm, sizeof nm, "o%06d_%d", idx, is_synth ? 1 : 0); dump(nm, cur);
             if (cur_is4) { char p[1200]; FILE *f4; snprintf(p, sizeof p, "%s/%s.x4", workdir, nm); f4 = fopen(p, "wb"); if (f4) { fwrite(cur4, 2, W4*H4, f4); fclose(f4); } } }
          if (refdir && idx >= metric_from && ref_load(idx + ra_off, Q0) && ref_load(idx + ra_off + 1, Q1) && ref_load(idx + ra_off + 2, Q2))   /* 런어헤드면 보여 주는 그림이 ra 프레임 앞 */
          {
