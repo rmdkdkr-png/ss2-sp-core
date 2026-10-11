@@ -229,6 +229,8 @@ int main(int argc, char **argv)
       if (p_fx) { int st[6]; p_fx(st); printf("idle(%s): learned=%d planned=%d patches=%d prelook_other=%d pairs=%d pics=%d\n", opt_idle, st[0], st[1], st[2], st[3], st[4], st[5]); }
       p_fx = dlsym(Hd, "retro_ngp_motion_stats");   /* 모션 캐시 계기: 찾음 / 있음 / 그림 / 틀 안 맞음 */
       if (p_fx) { int st[4]; p_fx(st); printf("motion(%s): lookups=%d found=%d drawn=%d mismatch=%d", opt_motion, st[0], st[1], st[2], st[3]); if (mlogf) printf(" logged=%d", nmlog); printf("\n"); }
+      p_fx = dlsym(Hd, "retro_ngp_motion_stats2");   /* main 계기: 틀 안 맞음 중 B 그림 없음 / 순환 예측 그만 / 지운 조각 칸 */
+      if (p_fx) { int st[3]; p_fx(st); printf("motion2: b_unknown=%d loop_stop=%d speck_cells=%d\n", st[0], st[1], st[2]); }
       if (mlogf) fclose(mlogf);
    }
    p_unload(); p_deinit();

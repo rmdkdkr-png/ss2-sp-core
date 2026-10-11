@@ -121,6 +121,7 @@ void ss2fg_set_motion(int on);
 void ss2fg_motion_stats(int *out4);   /* 시험용 계기: 찾음 / 있음 / 그림 / 틀 안 맞음 */
 int  ss2fg_motion_miss(uint64_t *sa, uint64_t *sb, int *p);      /* 계기: 캐시에 없던 바뀜 하나 꺼내기(없으면 0) */
 int  ss2fg_idle_pose_info(int p, uint64_t sig, int *out6);       /* 계기: 기억한 포즈 틀 ox oy w h depth first (없으면 0) */
+void ss2fg_motion_stats2(int *out3);  /* 계기(main): 틀 안 맞음 중 B 그림 없음 / 순환 예측 그만 / 지운 조각 칸 */
 int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
                   const ss2fg_frame *to_scr, int t_scr,
                   void *dst, int pitch_px, int bpp, const uint32_t *colormap);

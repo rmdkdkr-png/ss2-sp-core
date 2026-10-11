@@ -30,6 +30,7 @@ void dac_write_right(uint8_t);
 void MDFNNGPCSOUND_SetEnable(bool set);
 void MDFNNGPCSOUND_Init(void);
 int MDFNNGPCSOUND_StateAction(void *data, int load, int data_only);
+void MDFNNGPCSOUND_Recover(void);   /* 99d: 소리 칸 없는 상태 — 소리칩 켜기 */
 void MDFNNGPC_SetSoundRate(void);
 int32_t MDFNNGPCSOUND_Flush(int16_t *SoundBuf, const int32_t MaxSoundFrames);
 

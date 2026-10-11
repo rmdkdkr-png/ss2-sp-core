@@ -93,7 +93,15 @@ static int32 z80_runtime;
 /* 프레임 생성 예측용 가벼운 스냅샷 — StateAction 에서 건너뛸 섹션 (정의는 아래 ss2fg 배관 참고) */
 #define FG_SKIP_SND   1
 #define FG_SKIP_FLASH 2
-static int fg_state_skip = 0;
+/* 스레드마다 따로(패치 99d) — 앱이 GL 스레드가 숨은 프레임을 돌리는 도중에 다른 스레드(onPause 오토세이브)에서
+   retro_serialize 를 부르면, 이 표시가 전역이라 오토세이브에서도 소리·플래시 칸이 빠졌다 → 이어하기 하면 소리칩이 꺼진 채
+   (리셋해야 나옴). 유저 2026-10-11 「사운드가 자주 안 나옴 // 리셋하면 나옴」. 숨은 프레임은 늘 같은 스레드에서 저장·복원한다. */
+#if defined(_MSC_VER)
+#define FG_TLS __declspec(thread)
+#else
+#define FG_TLS __thread
+#endif
+static FG_TLS int fg_state_skip = 0;
 
 extern int32_t ngpc_soundTS;
 
@@ -323,7 +331,10 @@ void StateAction(StateMem *sm, int load, int data_only)
    MDFNSS_StateAction(sm, load, data_only, TLCS_StateRegs, "TLCS", false);
    MDFNNGPCDMA_StateAction(sm, load, data_only);
    if (!(fg_state_skip & FG_SKIP_SND))     /* 예측 스냅샷: 소리는 뮤트라 안 바뀐다 — 로드가 Blip 버퍼를 비우는 것도 피한다 */
-      MDFNNGPCSOUND_StateAction(sm, load, data_only);
+   {
+      if (!MDFNNGPCSOUND_StateAction(sm, load, data_only) && load)
+         MDFNNGPCSOUND_Recover();   /* 소리 칸이 없는 상태(예전 앱이 숨은 프레임과 겹쳐 뜬 오토세이브) — 소리칩을 켠 채로 (99d) */
+   }
    ngpgfx_StateAction(NGPGfx, sm, load, data_only);
    MDFNNGPCZ80_StateAction(sm, load, data_only);
    int_timer_StateAction(sm, load, data_only);
@@ -1821,6 +1832,9 @@ bool retro_serialize(void *data, size_t size)
 
    ret = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
 
+   /* 크기를 잰 뒤 상태가 커졌으면 잘린 상태다 — 실패로 알린다. 작아졌으면 꼬리를 0 으로(쓰레기가 칸 머리로 읽히지 않게) (99d) */
+   if (st.len > size) ret = false;                 /* st.loc 은 머리(크기)를 고쳐 쓴 자리라 끝이 아니다 — st.len 이 쓴 길이 */
+   else if (st.len < size) memset(st.data + st.len, 0, size - st.len);
    memcpy(data, st.data, size);
    free(st.data);
 
@@ -1931,5 +1945,6 @@ void retro_ngp_pose_stats(int *out4) { ss2fg_pose_stats(out4); }
 void retro_ngp_idle_stats(int *out6) { ss2fg_idle_stats(out6); }
 /* 시험용 계기 — 모션 캐시(패치 97) 4칸(찾음/있음/그림/틀 안 맞음) · 캐시에 없던 바뀜 꺼내기 · 포즈 틀 조회 (하네스가 가짜 캐시를 만든다) */
 void retro_ngp_motion_stats(int *out4) { ss2fg_motion_stats(out4); }
+void retro_ngp_motion_stats2(int *out3) { ss2fg_motion_stats2(out3); }
 int  retro_ngp_motion_miss(uint64_t *sa, uint64_t *sb, int *p) { return ss2fg_motion_miss(sa, sb, p); }
 int  retro_ngp_idle_pose_info(int p, uint64_t sig, int *out6) { return ss2fg_idle_pose_info(p, sig, out6); }

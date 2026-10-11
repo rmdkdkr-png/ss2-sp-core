@@ -40,6 +40,7 @@ extern uint8_t CPUExRAM[16384];
 #define OFF_MODE       0x00A7   /* 메뉴/전투 판별 */
 #define OFF_HP1        0x1A46
 #define OFF_HP2        0x1C46
+#define OFF_CMDRING    0x1DD0   /* 커맨드 고리 — [0x1DD0] = 커서(0~0x7F), 칸 k 는 0x1DD0+k (0 칸은 게임이 안 쓴다) */
 
 /* ── 패드 비트 (libretro.c의 input_buf 인코딩과 동일) ────────────── */
 #define PAD_UP    0x01
@@ -50,10 +51,12 @@ extern uint8_t CPUExRAM[16384];
 #define PAD_B     0x20          /* NGP B = 강베기 */
 
 /* ── 타이밍 (프레임) ────────────────────────────────────────────── */
-static int ss2_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_STEP"); v=e?atoi(e):3;} return v; }
+/* 99c: 3 → 2 — 게임은 2 프레임(1 틱)마다 패드를 읽는다. 1 은 틱 사이에 빠져 안 되고, 2 는 실측 76/76(15인·두 유파) */
+static int ss2_step_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_STEP"); v=e?atoi(e):2;} return v; }
 #define STEP_FRAMES   ss2_step_frames()   /* 방향 1개 유지 */
-/* 버튼 유지 프레임 — 실험용으로 SS2SP_HOLD 로 바꿔 볼 수 있다(브라우저 최속은 3) */
-static int ss2_hold_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_HOLD"); v=e?atoi(e):6;} return v; }
+/* 버튼 유지 프레임 — 실험용으로 SS2SP_HOLD 로 바꿔 볼 수 있다(브라우저 최속은 3).
+   99c: 6 → 2 — 약은 버튼을 떼야 나가서(강약을 누른 길이로 가른다) 오래 잡을수록 늦었다. 2 = 한 틱은 꼭 보인다(실측 76/76) */
+static int ss2_hold_frames(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_HOLD"); v=e?atoi(e):2;} return v; }
 #define HOLD_FRAMES   ss2_hold_frames()
 /* ── 강/약 ────────────────────────────────────────────────────────
    게임은 버튼을 얼마나 오래 잡고 있었는지로 강·약을 가른다.
@@ -166,10 +169,76 @@ static uint8_t ss2_mirror(uint8_t pad)
    게임이 버튼을 점프 준비 프레임 너머로 버퍼링해서 이륙 즉시(저공) 발동한다.
    실측(우쿄 나찰 츠바메, 간다라전): 모션 직후 ↑+A 동시(t=0)부터 t=9까지 전부 성공,
    t=0이 최저공. 사람 손의 2368/2369 입력(유저 제보)을 그대로 기계화한 것. */
+/* ── 최속 발동(코어 패치 99c) — 모션을 손 대신 게임의 커맨드 고리에 바로 적는다 ───────────────────────
+   게임은 1 틱(2 프레임)마다 패드 바이트를 128칸 고리(0x1DD0 + 커서)에 적고, 버튼이 들어온 틱에 매처가 커서에서 뒤로 훑는다.
+   리셋(0x1DCD=1)이 하는 일은 «지금 칸 바로 앞에 0xFF(센티널)» 하나다(실측). 그래서 SP 를 누른 프레임에
+   고리의 바로 앞 칸들에 모션 방향(방향마다 2칸 = 사람이 4 프레임씩 잡은 것)을 적고 그 앞에 센티널을 적은 뒤,
+   이번 프레임부터 «마지막 방향+버튼» 만 낸다 → 모션을 치는 프레임이 없다.
+   실측(15인·두 유파, 같은 기술이 나오는지 매크로와 대조): 눌러서 필살기 액션까지 중앙 3 프레임(예전 매크로 3·6 은 16, 2·2 는 10).
+   유저 2026-10-11 「그 커맨드 입력 자리 메모리를 알아서 커맨드 때려 넣어서 최속 발동으로는 안 되나」.
+   센티널·모션·버튼 칸이 고리의 0 칸에 걸리면(커서가 한 바퀴 도는 자리, 드물다) 예전 매크로로. SS2SP_INJECT=0 = 늘 매크로(대조용) */
+#define INJ_REP 2
+static int ss2_inject_on(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_INJECT"); v=e?atoi(e):1;} return v; }
+/* 자기 기본기를 막 낸 참이면 게임이 필살기 버튼을 아직 안 받는다(실측: 약베기 3~5 프레임 뒤에 누르면 불발, 7 부터 됨 —
+   예전 매크로는 모션을 치느라 버튼이 늦게 들어가 우연히 맞았다). 그 나이가 될 때까지 미뤘다가 써 넣는다 */
+static int ss2_atk_wait(void){ static int v=-1; if(v<0){const char*e=getenv("SS2SP_ATKWAIT"); v=e?atoi(e):7;} return v; }
+static const ss2_move *deferred;   /* 미룬 기술 */
+static int       deferred_tk, deferred_left;
+static uint32_t  atk_since;        /* 지금 자기 기본기(0x50~0xFF)가 시작된 프레임 */
+static int       atk_prev = -1;
+static uint32_t  btn_since = (uint32_t)-1000;   /* 유저가 A·B 를 마지막으로 새로 누른 프레임 — 액션이 바뀌기 전 1~2 프레임도 기본기로 본다 */
+static uint8_t   prev_btn;
+static const ss2_move *retry_m;    /* 기본기 중에 써 넣었는데 안 나가면 기본기가 끝날 때 한 번 더 */
+static int       retry_tk, retry_left;
+static int ss2_atk_young(int act)
+{
+   int w = ss2_atk_wait();
+   if ((int)(frame_no - btn_since) < w) return 1;
+   return act >= 0x50 && act <= 0xFF && (int)(frame_no - atk_since) < w;
+}
+static int ss2_inject(const ss2_move *m, int tk, int mirror)
+{
+   uint8_t dirs[16], fin;
+   int nd = 0, ne, c, k, last = tk ? m->len : m->len - 1;
+   if (!ss2_inject_on() || last < 0) return 0;
+   {
+      int act = CPUExRAM[OFF_ACT] | (CPUExRAM[OFF_ACT + 1] << 8);
+      if (ss2_atk_young(act)) { deferred = m; deferred_tk = tk; deferred_left = 40; return -1; }
+      /* 기본기 중이면(받아 줄 수도, 안 받아 줄 수도) — 안 나가면 기본기가 끝날 때 한 번 더 */
+      if (act >= 0x50 && act <= 0xFF) { retry_m = m; retry_tk = tk; retry_left = 60; }
+      else retry_m = 0;
+   }
+   for (k = 0; k < last; k++)
+   {
+      uint8_t d = m->motion[k];
+      if (mirror) d = ss2_mirror(d);
+      if (nd >= 16) return 0;
+      dirs[nd++] = d;
+   }
+   ne = nd * INJ_REP;
+   c = CPUExRAM[OFF_CMDRING] & 0x7F;
+   for (k = -ne; k <= 2; k++) if (((c + k) & 0x7F) == 0) return 0;   /* 0 칸에 걸림 — 매크로로 */
+   CPUExRAM[OFF_CMDRING + ((c - ne) & 0x7F)] = 0xFF;                   /* 센티널 = 게임 리셋과 같은 것 */
+   for (k = 0; k < ne; k++) CPUExRAM[OFF_CMDRING + ((c - ne + 1 + k) & 0x7F)] = dirs[k / INJ_REP];
+   if (tk) { uint8_t d9 = PAD_UP | PAD_RIGHT; if (mirror) d9 = ss2_mirror(d9); fin = (uint8_t)(d9 | m->btn); }
+   else    { uint8_t d = m->len ? m->motion[m->len - 1] : 0; if (mirror) d = ss2_mirror(d); fin = (uint8_t)(d | m->btn); }
+   q_n = q_i = 0;
+   q[q_n].pad = fin; q[q_n].frames = HOLD_FRAMES; q[q_n].sustain = 1; q_n++;   /* 트리거를 잡고 있으면 늘어난다(강) */
+   q[q_n].pad = 0; q[q_n].frames = TAIL_FRAMES; q[q_n].sustain = 0; q_n++;
+   if (ss2_dbg()) fprintf(stderr, "[ss2sp] inject %s c=%d ne=%d fin=%02x\n", m->name, c, ne, fin);
+   return 1;
+}
+
 static void ss2_compile_ex(const ss2_move *m, int tk)
 {
    int i, mirror = (CPUExRAM[OFF_FACING] == 1);
    q_n = q_i = 0;
+
+   {
+      int r = ss2_inject(m, tk, mirror);
+      if (r > 0) goto started;
+      if (r < 0) return;                       /* 미뤘다 — ss2sp_frame 이 때가 되면 다시 부른다 */
+   }
 
    /* 방향 오염 보정 — ⚠️ **조건부**로만 넣는다.
       좌/우로 시작하는 커맨드는 걷던 입력과 이어붙어 매처가 엉뚱하게 물린다.
@@ -226,6 +295,7 @@ static void ss2_compile_ex(const ss2_move *m, int tk)
       if (!noreset) CPUExRAM[OFF_CMDRESET] = 1;   /* ★ 입력 이력 리셋 */
    }
 
+started:
    q_left = q[0].frames;
    hold_elapsed = 0;
    ss2sp_last_strong = 0;
@@ -358,6 +428,42 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
    frame_no++;
    if (CPUExRAM[OFF_MODE] == 241) { if (ss2_mode_warm < 1000) ss2_mode_warm++; }
    else ss2_mode_warm = 0;
+   {  /* 자기 기본기 나이 — 새 기본기(다른 액션)로 바뀌면 다시 0 부터. 유저가 A·B 를 새로 누른 때도 */
+      int act = CPUExRAM[OFF_ACT] | (CPUExRAM[OFF_ACT + 1] << 8);
+      int a = (act >= 0x50 && act <= 0xFF) ? act : -1;
+      uint8_t b = (uint8_t)(pad & (PAD_A | PAD_B));
+      if (a >= 0 && a != atk_prev) atk_since = frame_no;
+      atk_prev = a;
+      if (b & ~prev_btn) btn_since = frame_no;
+      prev_btn = b;
+   }
+   /* 기본기 중에 써 넣은 기술이 안 나갔다 — 기본기가 끝나 서면 한 번 더(그때는 늘 받아 준다) */
+   if (retry_m && !ss2_active() && !deferred)
+   {
+      int act = CPUExRAM[OFF_ACT] | (CPUExRAM[OFF_ACT + 1] << 8);
+      if (act >= 0x180 || act >= 0x100 || CPUExRAM[OFF_MODE] != 241 || --retry_left <= 0 || edge) retry_m = 0;   /* 나갔거나 맞았거나 새 입력 */
+      else if (act < 0x50 && CPUExRAM[OFF_Y] == 128 && ss2_actable())
+      {
+         const ss2_move *rm = retry_m;
+         retry_m = 0;
+         ss2_compile_ex(rm, retry_tk);
+         if (ss2_active()) return ss2_step_out(hold_bit && (trig & hold_bit));
+      }
+   }
+   /* 미룬 기술(최속 발동이 자기 기본기 직후라 기다리는 중) — 때가 되면 써 넣고, 그동안은 중립 */
+   if (deferred && !ss2_active())
+   {
+      int act = CPUExRAM[OFF_ACT] | (CPUExRAM[OFF_ACT + 1] << 8);
+      if (CPUExRAM[OFF_MODE] != 241 || act >= 0x100 || --deferred_left <= 0) deferred = 0;   /* 판이 끝났거나 맞았다 */
+      else if (!ss2_atk_young(act))
+      {
+         const ss2_move *dm = deferred;
+         deferred = 0;
+         ss2_compile_ex(dm, deferred_tk);
+      }
+      if (deferred) return 0;
+      if (ss2_active()) return ss2_step_out(hold_bit && (trig & hold_bit));
+   }
    /* v0.5.4: 전투가 끝났는데 보류(pending)가 남아 있으면 버린다.
       라운드가 끝나는 순간 누른 입력이 다음 라운드에서 뒤늦게 터지는 것을 막는다
       (브라우저판 사용자 제보: "SP가 귀신터치마냥 눌린다"). */
@@ -399,6 +505,7 @@ uint8_t ss2sp_frame(uint8_t pad, uint16_t trig)
       if (ab && !prev_ab && back && !ss2_active() && !pending)
       {
          hold_bit = 0;                       /* 비오의는 강약이 없다 */
+         btn_since = (uint32_t)-1000;        /* 이 A+B 는 비오의 트리거 — 기본기로 보고 미루지 않는다(게임엔 안 들어간다) */
          if (CPUExRAM[OFF_Y] == 128 && ss2_actable()) ss2_compile(&ss2_super);
          else { pending = &ss2_super; pending_left = 40;   /* v0.5.4: 90f(1.5초) → 40f(0.67초) */ }
       }
@@ -623,6 +730,7 @@ void ss2sp_reset(void)
    hold_bit = 0; hold_elapsed = 0; ss2sp_last_strong = 0;
    verify_left = 0;
    ss2_mode_warm = 0;
+   deferred = 0; deferred_left = 0; atk_prev = -1; retry_m = 0; btn_since = (uint32_t)-1000; prev_btn = 0;
    ss2sp_last_ok = -1;
    ss2sp_last_name = 0;
 }

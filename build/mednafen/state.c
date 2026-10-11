@@ -407,32 +407,30 @@ static int MDFNSS_StateAction_internal(
 
       uint32_t tmp_size = 0;
       int found         = 0;
-      uint32_t total    = 0;
+      /* 찾기를 시작한 자리 — 실패해도 늘 여기로 되돌린다(패치 99d). 예전엔 칸 머리가 깨졌거나(쓰레기 꼬리) 크기가 끝을 넘으면
+         되돌리지 않고 0 을 돌려줘서, 뒤에 찾는 칸(그림·Z80·타이머…)이 전부 «없음»이 됐다. */
+      uint32_t start    = st->loc;
 
       while(smem_read(st, (uint8_t *)sname, 32) == 32)
       {
          if(smem_read32le(st, &tmp_size) != 4)
-            return 0;
-
-         total += tmp_size + 32 + 4;
+            break;
 
          /* Yay, we found the section */
          if(!strncmp(sname, section->name, 32))
          {
-            if(!ReadStateChunk(st, section->sf, tmp_size))
-               return 0;
-            found = 1;
+            if(tmp_size <= st->len - st->loc && ReadStateChunk(st, section->sf, tmp_size))
+               found = 1;
             break;
          } 
          else
          {
             if(smem_seek(st, tmp_size, SSEEK_CUR) < 0)
-               return 0;
+               break;
          }
       }
 
-      if(smem_seek(st, -total, SSEEK_CUR) < 0)
-         return 0;
+      st->loc = start;
 
       if(!found) /* Not found.  We are sad! */
          return 0;

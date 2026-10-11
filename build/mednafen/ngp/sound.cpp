@@ -98,6 +98,18 @@ extern "C" void MDFNNGPC_SetSoundRate(void)
    buf.set_sample_rate(44100, 60);
 }
 
+/* 상태에 소리 칸이 없을 때(패치 99d) — 게임은 켤 때 소리칩을 한 번 켜고(0xB8=0x55) 다시 안 켠다. 소리 칸이 빠진 상태를
+   막 켠 코어에 불러오면 소리칩이 꺼진 채(부팅 전 값) 남아 리셋할 때까지 무음이었다. 켜 두고 레지스터는 처음 값으로 —
+   드라이버가 다음 음부터 다시 쓴다. */
+extern "C" void MDFNNGPCSOUND_Recover(void)
+{
+   schipenable = 1;
+   apu.reset();
+   buf.clear();
+   CurrentDACLeft = CurrentDACRight = 0;
+   LastDACLeft = LastDACRight = 0;
+}
+
 extern "C" int MDFNNGPCSOUND_StateAction(void *data, int load, int data_only)
 {
    T6W28_ApuState sn_state;
