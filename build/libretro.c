@@ -372,7 +372,7 @@ static bool update_video = false;
 #else
 #include <time.h>
 #endif
-static int      fg_opt    = 1;         /* 0 끔 · 1 자동 · 2 켬 */
+static int      fg_opt    = 1;         /* 0 끔 · 1 자동 · 2 켬 · 3 60Hz(2배 출력 없이 사이 그림 — 패치 90) */
 static int      fg_mode   = 0;         /* 0 예측(지연 0) · 1 보간(+8ms) */
 static int      fg_active = 0;         /* 지금 2배 fps 로 내보내는 중 */
 static int      fg_phase  = 0;         /* 0 실제 프레임 · 1 합성 프레임 */
@@ -413,7 +413,7 @@ static int fg_want(void)
 {
    float hz = 0;
    int want = 0;
-   if (fg_opt == 0) return 0;
+   if (fg_opt == 0 || fg_opt == 3) return 0;                          /* 3 = 60Hz 사이 그림 — 120 출력은 안 한다 */
    if (fg_rate_block)                                                /* 호출 속도가 60/s 에 머물렀다 — 패널이 120Hz 가 아니다.
                                                                         '켬' 도 따른다 — 아니면 끄고 켜기를 2.5초마다 되풀이한다 */
       return 0;
@@ -497,9 +497,9 @@ static void fg_watch_rate(void)
          if (fg_block_n < FG_BLOCK_RETRIES + 1) fg_block_n++;
          fg_apply(0);
          if (fg_block_n <= FG_BLOCK_RETRIES)
-            snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (%d초 뒤 다시 시도)", (int)fg_block_wait());
-         else
-            snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 프레임 생성을 껐습니다 (삼성 게임 부스터·주사율 설정 확인 뒤 옵션을 껐다 켜면 재시도)");
+            snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 60Hz 사이 그림으로 (%d초 뒤 120 다시 시도)", (int)fg_block_wait());
+         else                                      /* 자동·켬 모두 차단 뒤엔 60Hz 사이 그림(패치 90)으로 이어진다 — 「껐다」가 아니다 */
+            snprintf(text, sizeof text, "화면이 120Hz 로 돌지 않습니다 — 60Hz 사이 그림으로 (삼성 게임 부스터·주사율 설정 확인 뒤 옵션을 껐다 켜면 120 재시도)");
          msg.msg    = text;
          msg.frames = 300;
          environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
@@ -519,7 +519,7 @@ static void fg_apply(int on)
    retro_get_system_av_info(&av);                 /* fps 가 fg_active 에 따라 60.25 / 120.5 */
    environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &av);
    msg.msg    = on ? (fg_mode ? "프레임 생성 켬 — 120Hz 출력 (보간)" : "프레임 생성 켬 — 120Hz 출력 (예측)")
-                   : "프레임 생성 끔 — 60Hz 출력";
+                   : fg_opt ? "프레임 생성 — 120Hz 출력 끔, 60Hz 사이 그림" : "프레임 생성 끔 — 60Hz 출력";   /* 옵션이 끔이 아니면 사이 그림(패치 90)은 이어진다 */
    msg.frames = 150;
    environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
 }
@@ -668,6 +668,7 @@ static int body_pos_differs(const ss2fg_frame *a, const ss2fg_frame *b, int p)
    if (!(a->ob_act & b->ob_act & (1u << p))) return 0;
    return a->ob_x[p] != b->ob_x[p] || a->ob_y[p] != b->ob_y[p];
 }
+static int fg_no_next = 0;                       /* 60Hz 사이 그림 — τ=D 만 그리고 τ=D+½(fg_next)는 건너뛴다 */
 static int fg_predict4(int ra)
 {
    int k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel, extra = 0, p;
@@ -734,8 +735,8 @@ static int fg_predict4(int ra)
    if (!(ts0 || tb0 || ov[0] || ov[1]) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(surf->pixels, fg_real, sizeof fg_real);
    /* τ=D+½ */
-   for (p = 0; p < 2; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx1[p], ovy1[p]);
-   if (!(ts1 || tb1 || ov[0] || ov[1]) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap))
+   for (p = 0; p < 2 && !fg_no_next; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx1[p], ovy1[p]);
+   if (!fg_no_next && (!(ts1 || tb1 || ov[0] || ov[1]) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap)))
       memcpy(fg_next, fg_real, sizeof fg_real);
    ss2fg_body_override(0, 0, 0, 0); ss2fg_body_override(1, 0, 0, 0);
 
@@ -1007,7 +1008,7 @@ static void check_variables(void)
       var.key   = "ngp_framegen";
       var.value = NULL;
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-         fg_opt = !strcmp(var.value, "disabled") ? 0 : !strcmp(var.value, "enabled") ? 2 : 1;
+         fg_opt = !strcmp(var.value, "disabled") ? 0 : !strcmp(var.value, "enabled") ? 2 : !strcmp(var.value, "60") ? 3 : 1;
 
       var.key   = "ngp_framegen_mode";
       var.value = NULL;
@@ -1493,6 +1494,17 @@ void retro_run(void)
                ss2fg_render(ss2fg_cur(), ss2fg_prev(), 128, (uint16_t *)surf->pixels, FB_WIDTH, NGPGfx->ColorMap);
             else if (fg_mult == 4 && !hidden && !ngplink_active()) /* 4배: 지금 그림도 박자에 맞춰 옮겨 그린다 */
                fg_next_ok = fg_predict4(ra);
+         }
+         else if (fg_opt != 0 && !hidden && !ngplink_active())
+         {  /* 60Hz 사이 그림(코어 패치 90) — 2배 출력 없이 실제 프레임마다 «게임 박자에 맞춘 자리»로 다시 그린다.
+               사무쇼2 는 캐릭터·배경이 2 프레임마다(30Hz) 바뀐다 — 안 바뀌는 프레임에 다음 그림까지의 반 자리를 그려 60Hz 로
+               움직이게(예측이라 지연 없음). 120Hz 출력이 아닐 때(60Hz 화면·자동이 아직 안 켬·켬이 막힘) 자동·켬도 이 길로.
+               유저 2026-10-11 「60Hz 도 넣어야지」·「일단 사무라이 기준으로」. 사무쇼2 가 아니면 fg_predict4 가 0 → 런어헤드만 */
+            memcpy(fg_real, surf->pixels, sizeof fg_real);
+            fg_no_next = 1;
+            if (!fg_predict4(ra) && ra) ra_plain(ra);
+            fg_no_next = 0;
+            fg_next_ok = 0;
          }
          else if (ra)
             ra_plain(ra);                                          /* 프레임 생성 없이 런어헤드만 */

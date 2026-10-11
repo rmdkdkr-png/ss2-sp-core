@@ -102,9 +102,10 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       NULL,
       "video",
       {
-         { "auto",     "자동 (120Hz 설정일 때)" },
+         { "auto",     "자동 (120Hz 설정일 때, 아니면 60Hz 사이 그림)" },
          { "disabled", "끔" },
          { "enabled",  "켬" },
+         { "60",       "60Hz 사이 그림" },
          { NULL, NULL },
       },
       "auto"
@@ -220,6 +221,7 @@ struct retro_core_option_definition option_defs_us[] = {
          { "auto",     NULL },
          { "disabled", NULL },
          { "enabled",  NULL },
+         { "60",       NULL },
          { NULL, NULL},
       },
       "auto",

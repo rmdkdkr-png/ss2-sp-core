@@ -6,6 +6,7 @@
  *   · 보간 모드: 돌아간다, 오디오 분배 같음
  *   · 런어헤드 흉내(저장 문맥=1 + 매 프레임 serialize): 자동 모드가 켜지지 않는다
  *   · 숨은 호출(비디오 꺼짐) 섞여도 죽지 않는다
+ *   · 60Hz 사이 그림(ngp_framegen=60): 목표 120 이어도 2배 출력 안 켬, 상태 복원 완전, 값 바꾸면 전환
  *
  * 빌드 (build/ 에서):  gcc -O1 -std=gnu99 -Ilibretro-common/include -o fgsmoke ../tools/harness/fgsmoke.c -ldl
  * 실행:                 ./fgsmoke ./mednafen_ngp_libretro.so <작업폴더>
@@ -372,6 +373,61 @@ static void test_retry_forced(const char *rom)
    printf("9 강제 켬도 차단·재시도를 따름: %s\n", fails == f0 ? "통과" : "실패");
 }
 
+/* 코어 패치 90 — 「60Hz 사이 그림」(ngp_framegen=60): 목표가 120 이어도 2배 출력을 안 켠다 — SET_SYSTEM_AV_INFO 0 번,
+   fps 60.25, 호출마다 비디오 한 번·오디오 ~732. 값을 자동으로 바꾸면 30 프레임 뒤 120 출력, 다시 60 으로 돌리면 60.25 복귀.
+   (합성 롬엔 사무쇼2 캡처가 없어 사이 그림 자체는 안 그려진다 — 배관만 본다. 그림은 롬 하네스 fgrom FGROM_FG=60 로) */
+static void test_60hz_mode(const char *rom)
+{
+   int i, f0 = fails; size_t a[8]; int act, ph; struct retro_system_av_info av;
+   target_hz = 120; opt_framegen = "60"; opt_mode = "predict"; opt_mult = "4";
+   load_game(rom);
+   p_get_av(&av);
+   CHECK(av.timing.fps > 60 && av.timing.fps < 61, "60 모드 로드 직후 av_info fps %.3f (60.25 기대)", av.timing.fps);
+   for (i = 0; i < 200; i++) { p_run(); if (i >= 192) a[i - 192] = audio_last; }
+   p_fg_state(&act, &ph, 0);
+   CHECK(act == 0, "60 모드인데 목표 120 에서 2배 출력이 켜졌다");
+   CHECK(avinfo_calls == 0, "60 모드인데 SET_SYSTEM_AV_INFO 가 %d번 불렸다", avinfo_calls);
+   CHECK(video_calls == 200, "비디오 호출 %d (200 기대)", video_calls);
+   for (i = 0; i < 8; i++) CHECK(a[i] >= 700 && a[i] <= 760, "호출당 오디오 %zu (약 732 기대)", a[i]);
+   opt_framegen = "auto"; var_updated = 1;
+   for (i = 0; i < 40; i++) p_run();
+   p_fg_state(&act, &ph, 0);
+   CHECK(act == 1 && avinfo_calls == 1 && last_fps > 120.4 && last_fps < 120.6, "60 → 자동 뒤 120 출력 (act %d av %d fps %.2f)", act, avinfo_calls, last_fps);
+   opt_framegen = "60"; var_updated = 1;
+   for (i = 0; i < 80; i++) p_run();
+   p_fg_state(&act, &ph, 0);
+   CHECK(act == 0 && avinfo_calls == 2 && last_fps > 60 && last_fps < 61, "자동 → 60 뒤 60.25 복귀 (act %d av %d fps %.2f)", act, avinfo_calls, last_fps);
+   unload_game();
+   printf("10 60Hz 사이 그림 모드 — 2배 출력 안 켬·값 바꾸면 전환: %s\n", fails == f0 ? "통과" : "실패");
+}
+
+/* 60Hz 사이 그림도 실제 프레임마다 N+1·N+2 를 미리 돌리고 되돌린다 — 400 프레임 뒤 상태가 끔과 바이트 단위로 같아야 */
+static void test_determinism60(const char *rom)
+{
+   int f0 = fails; size_t n0, n1; uint8_t *s0, *s1;
+   target_hz = 60; opt_framegen = "disabled"; opt_mode = "predict"; opt_mult = "4";
+   load_game(rom);
+   real_frames_run(400);
+   n0 = p_ser_size(); s0 = malloc(n0); CHECK(p_ser(s0, n0), "serialize A");
+   unload_game();
+   opt_framegen = "60";
+   load_game(rom);
+   { int calls = real_frames_run(400); int act, ph; p_fg_state(&act, &ph, 0);
+     CHECK(act == 0, "60 모드에서 2배 출력이 켜졌다");
+     CHECK(calls == 400, "60 모드 호출 수 %d (400 기대 — 합성 호출 없음)", calls); }
+   n1 = p_ser_size(); s1 = malloc(n1); CHECK(p_ser(s1, n1), "serialize B");
+   unload_game();
+   CHECK(n0 == n1, "상태 크기 다름 %zu vs %zu", n0, n1);
+   if (n0 == n1)
+   {
+      size_t i, d = (size_t)-1;
+      for (i = 0; i < n0; i++) if (s0[i] != s1[i]) { d = i; break; }
+      CHECK(d == (size_t)-1, "상태가 다르다 — 첫 차이 오프셋 %zu (0x%zx): %02x vs %02x", d, d, s0[d], s1[d]);
+   }
+   free(s0); free(s1);
+   printf("3b 결정성 (60Hz 사이 그림: 400 실제 프레임 뒤 상태 동일): %s\n", fails == f0 ? "통과" : "실패");
+}
+
 int main(int argc, char **argv)
 {
    char rom[1200];
@@ -387,12 +443,14 @@ int main(int argc, char **argv)
    test_determinism(rom, "predict", "4");   /* 4배: 실제 프레임마다 N+1·N+2 를 미리 돌리고 되돌린다 */
    test_determinism(rom, "predict", "2");
    test_determinism(rom, "interp", "4");
+   test_determinism60(rom);                 /* 60Hz 사이 그림(패치 90): 2배 출력 없이 N+1·N+2 미리 돌리고 되돌림 */
    test_runahead_guard(rom);
    test_hidden(rom);
    test_hidden_auto(rom);
    test_watchdog(rom);
    test_retry(rom);
    test_retry_forced(rom);
+   test_60hz_mode(rom);
    printf("%d 검사 중 %d 실패\n", tests, fails);
    return fails ? 1 : 0;
 }

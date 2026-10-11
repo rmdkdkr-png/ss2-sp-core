@@ -3,6 +3,8 @@
  * 환경: FGROM_MULT=2|4 (프레임 생성 배수, 기본 4) · FGROM_REF=<off 실행 dump_every=1 디렉터리> (출력 프레임을 기준 N·N+1·N+2 와 대조)
  *       FGROM_DUMPALL=1 (출력 프레임 전부 o<실제번호>_<위상>.565 로) · FGROM_RAM=<파일> (실제 프레임마다 시스템 RAM 16KB)
  *       FGROM_RA=0|1|2 (런어헤드 프레임 수, 기본 0 — 기준 대조는 그만큼 앞 번호와 견준다) · FGROM_FX=move|blend|off (이펙트 규칙, 기본 move) · FGROM_POSE=blend|off (포즈 섞기, 기본 blend)
+ *       FGROM_FG=auto|enabled|60|disabled (ngp_framegen 값을 mode 인자 대신 직접 — 60 = 60Hz 사이 그림, 패치 90) · FGROM_HZ=<목표 주사율> (기본 120)
+ *   출력 요약의 out/same_prev: 출력 프레임 수와 «바로 앞 출력 프레임과 픽셀까지 같은» 수 — 60Hz 사이 그림의 효과(30Hz 움직임 → 60Hz)를 센다
  *   script: "s-e:BTN,..."  BTN 글자: U D L R A B S(option)  예) "200-205:S,400-405:A"
  *   매 합성 프레임: 앞 실제 N, 뒤 실제 N+1 과 비교해 3x3 이웃 어디에도 없는 색의 픽셀 수(=깨진 픽셀) 기록
  */
@@ -114,6 +116,7 @@ int main(int argc, char **argv)
 {
    const char *mode; int frames, dump_every = 0, metric_from = 0, real = 0, calls = 0;
    static uint16_t R0[W*H], R1[W*H], Sy[W*H], Q0[W*H], Q1[W*H], Q2[W*H]; int haveS = 0, haveR0 = 0, nS = 0; long sumA = 0; int maxA = 0, maxAt = -1, bad = 0; long sumD = 0;
+   static uint16_t P0[W*H]; int haveP0 = 0, nOut = 0, nSame = 0;   /* 바로 앞 출력 프레임과 같은 출력 수 */
    long sumR = 0; int nR = 0, maxR = 0, maxRat = -1, maxRph = 0, badR = 0;
    struct retro_game_info gi;
    if (argc < 7) { fprintf(stderr, "사용: fgrom <core.so> <rom> <workdir> <off|interp|predict> <frames> <script> [dump_every] [metric_from]\n"); return 2; }
@@ -121,6 +124,7 @@ int main(int argc, char **argv)
    mode = argv[4]; frames = atoi(argv[5]); parse_script(argv[6]);
    if (argc > 7) dump_every = atoi(argv[7]); if (argc > 8) metric_from = atoi(argv[8]);
    if (!strcmp(mode, "off")) opt_framegen = "disabled"; else { opt_framegen = "enabled"; opt_mode = mode; }
+   { const char *m = getenv("FGROM_FG"); if (m) opt_framegen = m; m = getenv("FGROM_HZ"); if (m) target_hz = (float)atof(m); }
    { const char *m = getenv("FGROM_MULT"); if (m) opt_mult = m; m = getenv("FGROM_RA"); if (m) { opt_ra = m; ra_off = atoi(m); } m = getenv("FGROM_FX"); if (m) opt_fx = m; m = getenv("FGROM_POSE"); if (m) opt_pose = m; refdir = getenv("FGROM_REF"); }
    Hd = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL); if (!Hd) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
    SYM(p_set_environment, "retro_set_environment"); SYM(p_set_video, "retro_set_video_refresh");
@@ -143,6 +147,7 @@ int main(int argc, char **argv)
       p_fg_state(&act, &ph, 0); is_synth = act && ph == (!strcmp(mode, "interp") ? 0 : 1);
       have_frame = 0; p_run(); calls++;
       if (!have_frame) continue;
+      nOut++; if (haveP0 && !memcmp(cur, P0, sizeof cur)) nSame++; memcpy(P0, cur, sizeof P0); haveP0 = 1;
       {  /* 기준 대조·전부 떨어뜨리기 — 출력 프레임마다(두 위상 모두). 합성 호출의 실제 번호는 직전 실제 프레임(real-1) */
          int idx = is_synth ? real - 1 : real;
          if (getenv("FGROM_DUMPALL")) { char nm[64]; snprintf(nm, sizeof nm, "o%06d_%d", idx, is_synth ? 1 : 0); dump(nm, cur); }
@@ -167,8 +172,8 @@ int main(int argc, char **argv)
       real++;
    }
    { const char *st = getenv("FGROM_SAVE"); if (st) { FILE *f = fopen(st, "wb"); size_t n = p_ser_size(); void *b = malloc(n); if (f && p_ser(b, n)) { fwrite(b, 1, n, f); fprintf(stderr, "상태 저장 %s (%zu)\n", st, n); } if (f) fclose(f); free(b); } }
-   printf("mode=%s real=%d calls=%d synth_measured=%d artifacts: mean=%.2f max=%d (at real %d) frames>40px=%d  mean|A-B|=%.1f\n",
-          mode, real, calls, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0);
+   printf("mode=%s fg=%s hz=%g real=%d calls=%d out=%d same_prev=%d synth_measured=%d artifacts: mean=%.2f max=%d (at real %d) frames>40px=%d  mean|A-B|=%.1f\n",
+          mode, opt_framegen, (double)target_hz, real, calls, nOut, nSame, nS, nS ? (double)sumA / nS : 0.0, maxA, maxAt, bad, nS ? (double)sumD / nS : 0.0);
    if (refdir) printf("ref-score(mult=%s): frames=%d mean=%.2f max=%d (at real %d phase %d) frames>40px=%d\n", opt_mult, nR, nR ? (double)sumR / nR : 0.0, maxR, maxRat, maxRph, badR);
    if (oamf) fclose(oamf); if (chrf) fclose(chrf); if (csvf) fclose(csvf); if (ramf) fclose(ramf);
    {  /* 이펙트 계기(코어가 내보내면): 살핀 무리 / 물체 등속 / 몸에 붙음 / 테두리 등속 / 앞 캡처 없음 / 조각 없음 / 등속 아님 / 2px 미만·방향 */
