@@ -1396,6 +1396,7 @@ typedef struct id_pose_s {
 typedef struct {
    uint64_t sa, sb; unsigned used;
    int ox, oy, w, h;            /* 둘을 합친 틀(몸 자리 기준) */
+   int aox, aoy, box, boy;      /* 만들 때의 A·B 자리(몸 자리 기준 왼쪽 위) — 지금 기억한 포즈와 다르면 다시 만든다(패치 99e) */
    uint8_t depth, first, small;  /* small = 작은 바뀜(옮긴 앞 그림이 뒤 그림 화소를 75% 넘게 맞춤 — 서기처럼) */
    uint16_t ca[ID_W * ID_H], cb[ID_W * ID_H];
    int8_t dax[ID_W * ID_H], day[ID_W * ID_H];   /* A 화소가 B 쪽으로 갈 때의 이동(A 격자) */
@@ -1670,11 +1671,19 @@ static id_pair *id_get_pair(int p, uint64_t sa, uint64_t sb)
    int i, oldest = 0, x, y;
    id_pose *A, *B;
    id_pair *pr;
-   for (i = 0; i < ID_PAIRS; i++)
-      if (id_pair_c[p][i].sa == sa && id_pair_c[p][i].sb == sb) { id_pair_c[p][i].used = ++id_clock; return &id_pair_c[p][i]; }
    A = id_find_pose(p, sa); B = id_find_pose(p, sb);
+   for (i = 0; i < ID_PAIRS; i++)
+      if (id_pair_c[p][i].sa == sa && id_pair_c[p][i].sb == sb)
+      {
+         pr = &id_pair_c[p][i];
+         /* 99e: 포즈가 밀려났다 다시 잡혔거나 장면이 바뀌어 자리·우선순위가 달라졌으면 옛 틀로 그리면 옆으로 밀린다 — 이 칸에 다시 만든다 */
+         if (A && B && pr->aox == A->ox && pr->aoy == A->oy && pr->box == B->ox && pr->boy == B->oy && pr->depth == A->depth
+             && B->depth == A->depth) { pr->used = ++id_clock; return pr; }
+         pr->sa = pr->sb = 0; oldest = i; break;
+      }
    if (!A || !B || A->depth != B->depth) return 0;
-   for (i = 1; i < ID_PAIRS; i++) if (id_pair_c[p][i].used < id_pair_c[p][oldest].used) oldest = i;
+   if (i == ID_PAIRS)
+      for (i = 1; i < ID_PAIRS; i++) if (id_pair_c[p][i].used < id_pair_c[p][oldest].used) oldest = i;
    pr = &id_pair_c[p][oldest];
    {
       int x0 = A->ox < B->ox ? A->ox : B->ox, y0 = A->oy < B->oy ? A->oy : B->oy;
@@ -1682,6 +1691,7 @@ static id_pair *id_get_pair(int p, uint64_t sa, uint64_t sb)
       int y1 = A->oy + A->h > B->oy + B->h ? A->oy + A->h : B->oy + B->h;
       if (x1 - x0 > ID_W || y1 - y0 > ID_H) return 0;
       pr->ox = x0; pr->oy = y0; pr->w = x1 - x0; pr->h = y1 - y0;
+      pr->aox = A->ox; pr->aoy = A->oy; pr->box = B->ox; pr->boy = B->oy;
    }
    pr->sa = sa; pr->sb = sb; pr->used = ++id_clock;
    pr->depth = A->depth; pr->first = A->first < B->first ? A->first : B->first;
@@ -2030,6 +2040,7 @@ static int mc_top_left(const ss2fg_frame *f, int p, int *x, int *y)
    return 1;
 }
 /* 출력 칸 slot 의 몸 p — D+1·D+2 에서 포즈가 바뀌면(제자리) 캐시로. 1 = 계획함 */
+static void id_realign(const ss2fg_frame *f, int p, uint64_t sg);
 static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn, int h, int slot, int p)
 {
    uint8_t mm[64];
@@ -2062,13 +2073,12 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          uint64_t cb = mc_loop_next(id_cur[p], &h2);
          if (cb && h2 >= 3 && h2 <= 60 && (!K || sb == cb)) { nb = cb; hold = h2; loop = 1; }
       }
-      if (!K && !loop) return 0;
-      if (loop && !K && (int)(realn - id_start[p]) > (int)hold + 2)
-      {  /* (main) 배운 길이를 2 프레임 넘게 지났는데 D+1·D+2 에도 바뀜이 없다 — 이번엔 순환이 아니다(걷다 멈춤, 막기, 다른 갈래).
-            예전엔 t 가 1 쪽으로 기어가며 오지 않을 포즈를 ¾ 로 붙든 채 남았다(검수: 19 실제 프레임 동안 다른 자세, s133~s139) */
-         mc_loopstop++;
-         return 0;
+      if (loop && 2 * (int)(realn - id_start[p]) + h + 6 > 2 * (int)hold + 4)
+      {  /* 99e: 배운 길이보다 오래 머묾 — 순환이 아니라 붙잡은 자세. 바뀌기 직전 2 프레임만(아래) */
+         loop = 0;
+         if (!K) mc_loopstop++;        /* (main 계기) 확인 안 된 순환 예측을 그만둔 수 */
       }
+      if (!K && !loop) return 0;
       if (loop)
       {
          int e2 = 2 * (int)(realn - id_start[p]) + h, tot2;
@@ -2099,6 +2109,8 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
    A = id_find_pose(p, id_cur[p]);
    B = id_find_pose(p, sb);
    if (!B && fk) { id_capture(fk, p, mm, sb); B = id_find_pose(p, sb); }
+   else if (B && fk) id_realign(fk, p, sb);                    /* 뒤 포즈가 다른 장면에서 잡힌 것이면 지금 것으로(99e) */
+   else if (A && B && B->depth != A->depth) B->depth = A->depth; /* 아직 안 보인 뒤 포즈의 우선순위는 지금 장면(A) 것으로(99e) */
    if (A && !B && !fk) { mc_bunk++; mc_stats[3]++; return 0; }   /* (main 계기) 되풀이 길의 다음 포즈를 아직 못 봤거나 잊음 — 캐시엔 그림이 없다 */
    if (!A || !B || A->depth != B->depth || A->w != e->aw || A->h != e->ah || B->w != e->bw || B->h != e->bh) { mc_stats[3]++; return 0; }
    {  /* 자리(패치 99c) — 전엔 기억한 두 포즈의 «물체 자리 기준 왼쪽 위» 차가 캐시의 B 자리(bdx·bdy)와 한 픽셀이라도 다르면 버렸다.
@@ -2123,6 +2135,30 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
 }
 
 /* 실제 프레임마다(보여 줄 D) — 포즈 그림 기억 + 제자리 바뀜 배우기 */
+/* 포즈 맞춤(패치 99e) — 같은 포즈(지문)라도 장면·동작마다 물체 자리(RAM X·Y)와 그림 사이(왼쪽 위)와 스프라이트 우선순위가 다르다
+   (고르기 화면 미리보기·판 시작 «승부»·대전·공격 끝 자세 등). 기억한 포즈는 처음 잡은 장면 것을 계속 써서
+   ① 다른 장면에서 배운 서기 사이 그림이 그만큼 옆으로 그려졌다 — 조각 틀 밖에 남은 진짜 몸과 겹쳐 «몸이 둘»
+   ② 앞·뒤 포즈의 우선순위가 달라 보여(한쪽은 이 장면, 한쪽은 다른 장면 것) 캐시·배운 바뀜 모두 «안 맞음»으로 건너뜀 — 고르기 화면에서 되다 안 되다
+   (유저 2026-10-12 「뉴트럴에서 … 이러기도 함」·「캐릭 선택창에는 적용이 되다 안 되다」). 지금 몸 조각에서 다시 재 기억을 고친다 —
+   그 포즈가 든 배운 바뀜은 id_get_pair 가 자리·우선순위가 다른 걸 보고 다시 만든다. */
+static void id_realign(const ss2fg_frame *f, int p, uint64_t sg)
+{
+   id_pose *P = id_find_pose(p, sg);
+   uint8_t m[64];
+   int x, y, k, depth = -1;
+   if (!P || !body_mask(f, p, m) || !mc_top_left(f, p, &x, &y)) return;
+   for (k = 0; k < 64; k++)
+      if (m[k])
+      {
+         int pr = (ld16(f->spr + k * 4) & 0x1800) >> 11;
+         if (depth < 0) depth = pr << 1;
+         else if ((pr << 1) != depth) return;                    /* 우선순위가 섞인 몸 — 그대로 둔다 */
+      }
+   /* 가장 앞 슬롯(first)은 프레임마다 바뀌어(스프라이트 칸 배정) 맞추지 않는다 — 자리·우선순위만 */
+   if (depth <= 0 || (x == P->ox && y == P->oy && depth == P->depth)) return;
+   P->ox = x; P->oy = y; P->depth = (uint8_t)depth;
+}
+
 void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
 {
    int p;
@@ -2136,6 +2172,7 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
       sg = body_sig(f, m);
       ax = f->ob_x[p]; ay = f->ob_y[p];
       if (!id_find_pose(p, sg)) id_capture(f, p, m, sg);
+      else id_realign(f, p, sg);
       if (sg == id_cur[p]) { if (ax != id_ax[p] || ay != id_ay[p]) id_still[p] = 0; continue; }
       if (id_cur[p])
       {  /* 움직이는 바뀜도 배운다(패치 99) — 걷기 순환을 알아야 사이 그림을 한 걸음 내내 펼 수 있다. 서기 그리기(±3)는 여전히 제자리만 */
@@ -2187,8 +2224,24 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
          if (s == sb) K = k; else bad = 1;
       }
       if (bad) { id_stats[3]++; return 0; }
+      if (K) id_realign(K == 1 ? f1 : f2, p, sb);      /* 뒤 포즈도 지금 장면 것으로(99e) */
+      else
+      {  /* 아직 안 보인 뒤 포즈 — 우선순위는 지금 장면(A) 것으로 본다(다른 장면에서 잡힌 값이면 바뀜을 못 만든다). 보이면 id_realign 이 고친다 */
+         id_pose *QA = id_find_pose(p, id_cur[p]), *QB = id_find_pose(p, sb);
+         if (QA && QB && QB->depth != QA->depth) QB->depth = QA->depth;
+      }
       e2 = 2 * (int)(realn - id_start[p]) + h;
-      if (K) tot2 = 2 * (int)(realn + K - id_start[p]);
+      /* 99e: 배운 길이보다 2 프레임 넘게 머물면 붙잡은 자세(앉아 방어·서서 막기 등) — 예전엔 «적어도 3 프레임 남음»으로 길이를 늘려
+         t 가 1 쪽으로 다가가, 자세를 쥐고 있는 내내 다음 포즈 쪽으로 ¾ 쯤 바뀐 그림이 나왔다(유저 2026-10-12 「앉아 방어 자세에서 글리치」).
+         그동안은 그리지 않고, 실제로 바뀔 때는(미리 돌린 D+1·D+2 에 보이면) 바뀌기 직전 2 프레임에만 */
+      if (e2 + 6 > 2 * (int)hold + 4)
+      {
+         if (!K) return 0;
+         tot2 = 2 * (int)(realn + K - id_start[p]);
+         e2 -= tot2 - 4; tot2 = 4;
+         if (e2 <= 0) return 0;
+      }
+      else if (K) tot2 = 2 * (int)(realn + K - id_start[p]);
       else { tot2 = 2 * (int)hold; if (tot2 < e2 + 6) tot2 = e2 + 6; }      /* D+2 까진 안 바뀜 — 적어도 3 프레임 남음 */
       if (tot2 <= 0) return 0;
       t256 = 256 * e2 / tot2;
