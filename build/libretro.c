@@ -1614,7 +1614,7 @@ void retro_run(void)
          ss2comm_overlay_draw((uint16_t *)surf->pixels, FB_WIDTH, (int)width, (int)height);
       if (idle_opt && ss2comm_rom_is_ss2() && !hidden && width == FB_WIDTH && height == FB_HEIGHT)
       {  /* 서기 사이 그림 — 4배로 늘리고 이번 출력의 조각을 붙여 640×608 로 */
-         ss2fg_idle_compose(idle_out4, FB_WIDTH * 4, (const uint16_t *)surf->pixels, FB_WIDTH, (int)width, (int)height, idle_out_slot);
+         ss2fg_idle_compose(idle_out4, FB_WIDTH * 4, surf->pixels, FB_WIDTH, (int)width, (int)height, 2, NGPGfx->ColorMap, idle_out_slot);
          video_cb(idle_out4, width * 4, height * 4, FB_WIDTH * 4 * 2);
       }
       else

@@ -1379,7 +1379,7 @@ typedef struct {
 
 typedef struct { uint64_t sa, sb; uint16_t hold; uint8_t cnt; } id_learn_t;
 typedef struct { int on; id_pair *pr; int t256, ax, ay; } id_req_t;
-typedef struct { int on, x0, y0, w, h; uint16_t px[(ID_W * ID_S) * (ID_H * ID_S)]; } id_patch_t;
+typedef struct { int on, x0, y0, w, h; uint16_t px[(ID_W * ID_S) * (ID_H * ID_S)]; } id_patch_t;   /* px = 12비트 색(반전 적용) — 내보낼 때 색표를 거친다 */
 
 static int        id_on = 0;
 static id_pose    id_pose_c[2][ID_POSES];
@@ -1717,7 +1717,7 @@ int ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fr
 
 /* ss2fg_render2 끝에서 — 이 출력 칸의 몸마다 «몸 뺀 줄 + 사이 그림» 4배 조각 */
 static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_scr,
-                     const int16_t *offx, const int16_t *offy, const uint32_t *colormap)
+                     const int16_t *offx, const int16_t *offy)
 {
    int s = id_slot, p;
    if (s < 0 || s > 1 || !id_on) return;
@@ -1760,7 +1760,7 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
                   if (v != ID_NONE && in_win && x >= wx0 && x < wx1
                       && (pr->depth > zrow[x] || (pr->depth == zrow[x] && srow[x] > (int)pr->first)))
                      c = rb->neg ? (uint16_t)~v : v;
-                  *dst++ = (uint16_t)colormap[c & 4095];
+                  *dst++ = (uint16_t)(c & 4095);                   /* 12비트 그대로 — compose 가 화면 형식(16/32비트)의 색표로 바꾼다 */
                }
          }
       }
@@ -1770,31 +1770,43 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
    }
 }
 
-/* 내보내기 — 원래 그림(16bpp)을 4배로 늘리고 출력 칸 slot 의 조각을 붙인다 */
-void ss2fg_idle_compose(uint16_t *dst, int dpitch, const uint16_t *src, int spitch, int w, int h, int slot)
+/* 내보내기 — 원래 그림(화면 형식 그대로, bpp 2 또는 4)을 4배로 늘리고 출력 칸 slot 의 조각을 색표를 거쳐 붙인다.
+   dpitch·spitch 는 화소 단위. 코어판은 16비트, 앱은 화면에 따라 16/32비트라 둘 다 받는다 */
+#define ID_COMPOSE(T)                                                                                     \
+   {                                                                                                      \
+      T *dst = (T *)dstv; const T *src = (const T *)srcv;                                                 \
+      for (y = 0; y < h; y++)                                                                             \
+      {                                                                                                   \
+         T *row = dst + (size_t)(y * ID_S) * dpitch;                                                      \
+         const T *s = src + (size_t)y * spitch;                                                           \
+         for (x = 0; x < w; x++)                                                                          \
+         {                                                                                                \
+            T v = s[x];                                                                                   \
+            row[x * 4] = row[x * 4 + 1] = row[x * 4 + 2] = row[x * 4 + 3] = v;                            \
+         }                                                                                                \
+         for (sy = 1; sy < ID_S; sy++) memcpy(row + (size_t)sy * dpitch, row, (size_t)w * ID_S * sizeof(T)); \
+      }                                                                                                   \
+      if (slot >= 0 && slot <= 1)                                                                         \
+         for (p = 0; p < 2; p++)                                                                          \
+         {                                                                                                \
+            const id_patch_t *pt = &id_pt[slot][p];                                                       \
+            int pw = pt->w * ID_S, r, c;                                                                  \
+            if (!pt->on || pt->x0 + pt->w > w || pt->y0 + pt->h > h) continue;                            \
+            for (r = 0; r < pt->h * ID_S; r++)                                                            \
+            {                                                                                             \
+               T *o = dst + (size_t)(pt->y0 * ID_S + r) * dpitch + pt->x0 * ID_S;                         \
+               const uint16_t *q = pt->px + (size_t)r * pw;                                               \
+               for (c = 0; c < pw; c++) o[c] = (T)colormap[q[c] & 4095];                                  \
+            }                                                                                             \
+         }                                                                                                \
+   }
+void ss2fg_idle_compose(void *dstv, int dpitch, const void *srcv, int spitch, int w, int h, int bpp, const uint32_t *colormap, int slot)
 {
    int y, x, sy, p;
-   for (y = 0; y < h; y++)
-   {
-      uint16_t *row = dst + (size_t)(y * ID_S) * dpitch;
-      const uint16_t *s = src + (size_t)y * spitch;
-      for (x = 0; x < w; x++)
-      {
-         uint16_t v = s[x];
-         row[x * 4] = row[x * 4 + 1] = row[x * 4 + 2] = row[x * 4 + 3] = v;
-      }
-      for (sy = 1; sy < ID_S; sy++) memcpy(row + (size_t)sy * dpitch, row, (size_t)w * ID_S * sizeof(uint16_t));
-   }
-   if (slot < 0 || slot > 1) return;
-   for (p = 0; p < 2; p++)
-   {
-      const id_patch_t *pt = &id_pt[slot][p];
-      int pw = pt->w * ID_S, r;
-      if (!pt->on || pt->x0 + pt->w > w || pt->y0 + pt->h > h) continue;
-      for (r = 0; r < pt->h * ID_S; r++)
-         memcpy(dst + (size_t)(pt->y0 * ID_S + r) * dpitch + pt->x0 * ID_S, pt->px + (size_t)r * pw, (size_t)pw * sizeof(uint16_t));
-   }
+   if (bpp == 4) ID_COMPOSE(uint32_t)
+   else          ID_COMPOSE(uint16_t)
 }
+#undef ID_COMPOSE
 
 /* 4배(게임 박자 맞춤)용 — 스프라이트와 스크롤의 목표 프레임·진행도를 따로 준다.
    사무쇼2 는 캐릭터를 짝수 프레임에만, 배경 스크롤을 홀수 프레임에만 움직인다(실측) — 둘의 «다음 바뀌는 때»가
@@ -1946,7 +1958,7 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
             row[x] = (uint16_t)colormap[scan[x] & 4095];
       }
    }
-   if (bpp == 2) id_build(base, to_scr, t_scr, have_off ? offx : 0, offy, colormap);   /* 서기 사이 그림 조각(패치 100) */
+   id_build(base, to_scr, t_scr, have_off ? offx : 0, offy);   /* 서기 사이 그림 조각(패치 95) — 12비트 색, 16/32비트 화면 모두 */
    fg_ov_on[0] = fg_ov_on[1] = 0;                              /* 몸 따로 박자는 한 번 그리기용 */
    pp_on = 0;
    return 1;

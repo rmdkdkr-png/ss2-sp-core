@@ -111,7 +111,7 @@ int  ss2fg_idle_on(void);
 void ss2fg_idle_slot(int s);
 void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn);
 int  ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn, int h, int slot);
-void ss2fg_idle_compose(uint16_t *dst, int dpitch, const uint16_t *src, int spitch, int w, int h, int slot);
+void ss2fg_idle_compose(void *dst, int dpitch_px, const void *src, int spitch_px, int w, int h, int bpp, const uint32_t *colormap, int slot);
 void ss2fg_idle_stats(int *out6);   /* 시험용 계기: 배운 바뀜 / 계획 / 조각 / 미리 본 다른 포즈 / 이동표 / 그림 */
 int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
                   const ss2fg_frame *to_scr, int t_scr,
