@@ -72,7 +72,7 @@ static void resolve_chain(ss2fg_frame *f)
    k 0·1 = P1·P2, 2·3 = 그림자, 4~7 = 기술 이펙트·장풍. 카메라 X 0x176D, 대전 중 = 0x00A7 이 241 */
 #define FG_RAM_MODE   0x00A7
 #define FG_RAM_FIGHT  241
-#define FG_RAM_SELECT 240         /* 캐릭터 고르기·유파 고르기 화면 — 물체 0 = 가운데 미리보기 몸(발 80,76) */
+#define FG_RAM_SELECT 240         /* 대전 밖 — 캐릭터·유파 고르기 화면(물체 0 = 가운데 미리보기 몸 80,76), 판 시작 전 소개 */
 #define FG_RAM_CAMX   0x176D
 #define FG_RAM_OBJ    0x0E00
 static const uint8_t *fg_ram = 0;
@@ -84,19 +84,20 @@ static void capture_body(ss2fg_frame *f)
    const ss2fg_frame *pv = fg_hist[0] >= 0 ? &fg_slot[fg_hist[0]] : 0;   /* 직전 캡처 */
    int k, sel = 0;
    f->now_ok = (uint8_t)(fg_ram && fg_ram[FG_RAM_MODE] == FG_RAM_FIGHT);
-   /* 고르기 화면 미리보기 — 대전과 같은 서기 그림이 가운데에서 돈다(유저 「여기서는 안 되는 거?」·「대전이랑 같은 애니메이션 나옴」).
-      서기 그리기가 켜졌을 때만, 물체 0 이 미리보기 자리(80,76)·카메라 0 일 때만 몸 0 으로 본다 — 다른 몸·물체는 없음.
+   /* 대전 밖(모드 240) — 고르기 화면 미리보기(물체 0 = 가운데 80,76, 유저 「여기서는 안 되는 거?」, 패치 96) +
+      판 시작 전 소개(«いざ尋常に»·«一本目» 동안 두 캐릭터가 대전 자리에 서 있다 — 모드가 240 이라 사이 그림이 대전부터만 나왔다,
+      유저 「대전 시작 전에도 좀 되게」, 패치 99). 서기 그리기가 켜졌을 때만, 몸(물체 0·1)만 — 그림자·이펙트 물체는 안 본다.
       끄면 예전과 같다(대전 밖은 몸 없음) */
    if (!f->now_ok && id_on && fg_ram && fg_ram[FG_RAM_MODE] == FG_RAM_SELECT)
    {
       const uint8_t *o = fg_ram + FG_RAM_OBJ;
-      sel = !(o[0x36] == 0xFF && o[0x37] == 0xFF) && o[0x38] == 80 && o[0x3A] == 76 && fg_ram[FG_RAM_CAMX] == 0;
+      sel = !(o[0x36] == 0xFF && o[0x37] == 0xFF);
       f->now_ok = (uint8_t)sel;
    }
    f->ob_now_act = 0;
    for (k = 0; k < SS2FG_OBJS; k++)
    {
-      const uint8_t *o = f->now_ok && (!sel || k == 0) ? fg_ram + FG_RAM_OBJ + 0x40 * k : 0;
+      const uint8_t *o = f->now_ok && (!sel || k <= 1) ? fg_ram + FG_RAM_OBJ + 0x40 * k : 0;
       int act = o && !(o[0x36] == 0xFF && o[0x37] == 0xFF);
       f->ob_now_x[k] = act ? (uint8_t)(o[0x38] - fg_ram[FG_RAM_CAMX]) : 0;
       f->ob_now_y[k] = act ? o[0x3A] : 0;
@@ -1900,19 +1901,42 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
       sg = body_sig(g, mm);
       if (sg != id_cur[p]) { sb = sg; K = k; fk = g; break; }
    }
-   if (!K) return 0;
-   L = (int)(realn + (unsigned)K - id_start[p]);                                   /* A 가 보이는 프레임 수(바뀔 때까지) */
-   if (L > 2) L = 2;
-   if (L < 1) return 0;
-   num = 2 * L - (2 * K - h);                                                      /* t = num / (2L) */
-   if (num <= 0) return 0;
-   ti = L == 2 ? num - 1 : 1;                                                      /* ¼·½·¾ 칸 */
-   if (ti < 0 || ti > 2) return 0;
+   /* 되풀이 동작(배운 순환 — 걷기 등): 다음 포즈를 미리 알면 사이 그림을 한 걸음 내내 고르게 편다(패치 99).
+      바뀌기 직전 2 프레임에만 몰면, 걷기는 몸은 120Hz 로 매끄럽게 가는데 다리는 6 프레임 멈춰 미끄러지듯 보였다
+      (유저 「앞으로 올 때 슬라이딩하는 것처럼 보일 때가 있다」). t = 지난 시간/길이 → ¼·½·¾ 중 가까운 칸(⅛ 전엔 A 그대로).
+      미리 돌린 D+1·D+2 가 다른 포즈면 순환이 아닌 것으로 — 아래 «마지막 2 프레임» 으로 그 포즈를 향한다 */
+   {
+      unsigned hold = 0;
+      uint64_t nb = id_next(p, id_cur[p], id_prev[p], &hold);
+      int loop = nb && hold >= 3 && hold <= 60 && id_loop(p, id_cur[p], nb) && (!K || sb == nb);
+      if (!K && !loop) return 0;
+      if (loop)
+      {
+         int e2 = 2 * (int)(realn - id_start[p]) + h, tot2;
+         if (!K) sb = nb;
+         tot2 = K ? 2 * (int)(realn + (unsigned)K - id_start[p]) : 2 * (int)hold;
+         if (!K && tot2 < e2 + 6) tot2 = e2 + 6;                                 /* D+2 까진 안 바뀜 — 적어도 3 프레임 남음 */
+         if (tot2 <= 0 || e2 < 0) return 0;
+         ti = (8 * e2 + tot2) / (2 * tot2) - 1;                                   /* round(4t) − 1 */
+         if (ti < 0) return 0;
+         if (ti > 2) ti = 2;
+      }
+      else
+      {
+         L = (int)(realn + (unsigned)K - id_start[p]);                            /* A 가 보이는 프레임 수(바뀔 때까지) */
+         if (L > 2) L = 2;
+         if (L < 1) return 0;
+         num = 2 * L - (2 * K - h);                                               /* t = num / (2L) */
+         if (num <= 0) return 0;
+         ti = L == 2 ? num - 1 : 1;                                               /* ¼·½·¾ 칸 */
+         if (ti < 0 || ti > 2) return 0;
+      }
+   }
    e = mc_get(id_cur[p], sb);
    if (!e) { mc_miss_push(p, id_cur[p], sb); return 0; }
    A = id_find_pose(p, id_cur[p]);
    B = id_find_pose(p, sb);
-   if (!B) { id_capture(fk, p, mm, sb); B = id_find_pose(p, sb); }
+   if (!B && fk) { id_capture(fk, p, mm, sb); B = id_find_pose(p, sb); }
    if (!A || !B || A->depth != B->depth || A->w != e->aw || A->h != e->ah || B->w != e->bw || B->h != e->bh
        || B->ox - A->ox != e->bdx || B->oy - A->oy != e->bdy) { mc_stats[3]++; return 0; }
    rq->on = 1; rq->kind = 1; rq->pr = 0; rq->t256 = 64 * (ti + 1);
@@ -1938,8 +1962,8 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
       ax = f->ob_x[p]; ay = f->ob_y[p];
       if (!id_find_pose(p, sg)) id_capture(f, p, m, sg);
       if (sg == id_cur[p]) { if (ax != id_ax[p] || ay != id_ay[p]) id_still[p] = 0; continue; }
-      if (id_cur[p] && id_still[p] && ax == id_ax[p] && ay == id_ay[p])
-      {
+      if (id_cur[p])
+      {  /* 움직이는 바뀜도 배운다(패치 99) — 걷기 순환을 알아야 사이 그림을 한 걸음 내내 펼 수 있다. 서기 그리기(±3)는 여전히 제자리만 */
          unsigned hold = realn - id_start[p];
          if (hold >= 3 && hold <= 60) id_learn_add(p, id_cur[p], sg, hold);
          id_prev[p] = id_cur[p];
