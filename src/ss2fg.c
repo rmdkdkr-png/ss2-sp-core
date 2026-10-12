@@ -1604,6 +1604,22 @@ static int id_loop(int p, uint64_t sa, uint64_t sb)
    }
    return 0;
 }
+/* (main) 왕복 동작(P0→P1→P2→P3→P2→P1→P0, 고르기 화면 미리보기)의 가운데 포즈에서 «온 쪽으로 되돌아감» 예측을 믿지 않는 때 —
+   id_next 의 «두 배» 규칙은 가운데 포즈의 두 갈래 횟수가 2:1 일 때 온 쪽을 골라, 미리 본 프레임으로 확인하기 전까지 반대 방향으로
+   그리다가 되돌아왔다(검수: 고르기 화면 P3 다음 P2 에서 P3 쪽으로 80% 까지 갔다가 P1 로). 다른 갈래가 온 쪽의 반 이상이면 의심.
+   끝 포즈(P0·P3)는 다른 장면에서 한 번 본 갈래가 있어도 온 쪽 횟수가 3 이 되면 다시 믿는다 */
+static int id_back_doubt(int p, uint64_t sa, uint64_t from, uint64_t nb)
+{
+   int i, cf = 0, ca = 0;
+   if (!from || nb != from) return 0;
+   for (i = 0; i < ID_LEARN; i++)
+      if (id_lt[p][i].sa == sa && id_lt[p][i].cnt)
+      {
+         if (id_lt[p][i].sb == from) cf = id_lt[p][i].cnt;
+         else if (id_lt[p][i].cnt > ca) ca = id_lt[p][i].cnt;
+      }
+   return ca && 2 * ca >= cf;
+}
 
 /* B 의 칠한 화소마다 A 에서 온 이동 d — 5×5 창에서 화소(빈칸 포함)가 다른 수 × 16 + 덜 움직인 쪽을 조금 선호 */
 static void id_match(const uint16_t *ca, const uint16_t *cb, int w, int h, int8_t *dx, int8_t *dy)
@@ -1996,6 +2012,10 @@ static void mc_draw(const mc_ent *e, int ti, const id_pose *A, const id_pose *B,
    그림일 때만(속도선·떨어진 이펙트가 원래 그림에 있으면 손대지 않는다), MC_SPECK 칸 미만이고 가장 큰 덩이의 절반 미만인 덩이를 비운다.
    비운 자리는 몸 뺀 줄(배경·다른 스프라이트)이 보인다. 반환 = 지운 칸 수 */
 #define MC_SPECK 16
+/* (main) 오래 머무는(24 프레임 이상) 자세 — 고르기 화면 미리보기의 34 프레임 서기 등 — 는 캐시 사이 그림을 마지막 8 프레임에만 편다.
+   ¼·½·¾ 석 장을 34 프레임에 펴면 한 장이 열 프레임 넘게 머물러 게임에 없는 자세로 보였다(검수). 걷기 한 걸음(6) 등은 그대로 */
+#define MC_WIN 8
+#define MC_LONG 24
 static int mc_despeckle(uint16_t *out, int w, int h, const id_pose *A, const id_pose *B)
 {
    static uint8_t occ[ID_W * ID_H];
@@ -2066,15 +2086,19 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
    {
       unsigned hold = 0;
       uint64_t nb = id_next(p, id_cur[p], id_prev[p], &hold);
-      int loop = nb && hold >= 3 && hold <= 60 && id_loop(p, id_cur[p], nb) && (!K || sb == nb);
+      int loop = nb && hold >= 3 && hold <= 60 && id_loop(p, id_cur[p], nb) && (!K || sb == nb) && !id_back_doubt(p, id_cur[p], id_prev[p], nb);
       if (!loop && mc_ln)
-      {  /* 아직 못 배웠으면 캐시의 순환 표로(패치 99b) */
+      {  /* 아직 못 배웠으면 캐시의 순환 표로(패치 99b). (main) 표는 포즈마다 다음 하나뿐이라 왕복 동작의 가운데 포즈에선
+            방향을 모른다 — 온 쪽으로 되돌아가는 예측은 펴지 않는다(미리 본 프레임에 보이면 아래 «마지막 2 프레임») */
          unsigned h2 = 0;
          uint64_t cb = mc_loop_next(id_cur[p], &h2);
-         if (cb && h2 >= 3 && h2 <= 60 && (!K || sb == cb)) { nb = cb; hold = h2; loop = 1; }
+         if (cb && cb == nb && hold >= 3) h2 = hold;   /* (main) 여기서 잰 길이가 있으면 그것 — 표의 길이는 같은 걷기도 14·18 (실제 6) */
+         if (cb && h2 >= 3 && h2 <= 60 && (!K || sb == cb) && cb != id_prev[p]) { nb = cb; hold = h2; loop = 1; }
       }
-      if (loop && 2 * (int)(realn - id_start[p]) + h + 6 > 2 * (int)hold + 4)
-      {  /* 99e: 배운 길이보다 오래 머묾 — 순환이 아니라 붙잡은 자세. 바뀌기 직전 2 프레임만(아래) */
+      if (loop && (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : 2 * (int)(realn - id_start[p]) + h + 6 > 2 * (int)hold + 4))
+      {  /* 99e: 배운 길이보다 오래 머묾 — 순환이 아니라 붙잡은 자세. 바뀌기 직전 2 프레임만(아래).
+            (main) 미리 본 프레임에 바뀜이 보이면 실제 길이(지난 + K)로 판단 — 99e 식은 길이가 배운 것과 똑같아도 마지막 반 프레임에
+            걸려 «2 프레임» 쪽으로 넘어가며 ¾ 에서 ¼ 로 되돌아가기도 했다 */
          loop = 0;
          if (!K) mc_loopstop++;        /* (main 계기) 확인 안 된 순환 예측을 그만둔 수 */
       }
@@ -2086,6 +2110,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          tot2 = K ? 2 * (int)(realn + (unsigned)K - id_start[p]) : 2 * (int)hold;
          if (!K && tot2 < e2 + 6) tot2 = e2 + 6;                                 /* D+2 까진 안 바뀜 — 적어도 3 프레임 남음 */
          if (tot2 <= 0 || e2 < 0) return 0;
+         if (tot2 >= 2 * MC_LONG) { e2 -= tot2 - 2 * MC_WIN; tot2 = 2 * MC_WIN; if (e2 <= 0) return 0; }
          ti = (8 * e2 + tot2) / (2 * tot2) - 1;                                   /* round(4t) − 1 */
          if (ti < 0) return 0;
          if (ti > 2) ti = 2;
@@ -2206,12 +2231,13 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
    {
       unsigned hold = 0;
       uint64_t sb;
-      int k, K = 0, bad = 0, e2, tot2, t256;
+      int k, K = 0, bad = 0, e2, tot2, t256, doubt;
       id_pair *pr;
       id_req_t *rq = &id_rq[slot][p];
       if (!id_cur[p] || !id_still[p] || f0->ob_x[p] != id_ax[p] || f0->ob_y[p] != id_ay[p]) return 0;
       sb = id_next(p, id_cur[p], id_prev[p], &hold);
       if (!sb || !id_find_pose(p, sb)) return 0;
+      doubt = id_back_doubt(p, id_cur[p], id_prev[p], sb);
       for (k = 1; k <= 2 && !K && !bad; k++)
       {
          const ss2fg_frame *fk = k == 1 ? f1 : f2;
@@ -2224,6 +2250,7 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
          if (s == sb) K = k; else bad = 1;
       }
       if (bad) { id_stats[3]++; return 0; }
+      if (doubt && !K) return 0;                        /* (main) 온 쪽으로 되돌아감 예측 — 미리 본 프레임으로 확인될 때만(그때는 마지막 2 프레임) */
       if (K) id_realign(K == 1 ? f1 : f2, p, sb);      /* 뒤 포즈도 지금 장면 것으로(99e) */
       else
       {  /* 아직 안 보인 뒤 포즈 — 우선순위는 지금 장면(A) 것으로 본다(다른 장면에서 잡힌 값이면 바뀜을 못 만든다). 보이면 id_realign 이 고친다 */
@@ -2234,8 +2261,8 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
       /* 99e: 배운 길이보다 2 프레임 넘게 머물면 붙잡은 자세(앉아 방어·서서 막기 등) — 예전엔 «적어도 3 프레임 남음»으로 길이를 늘려
          t 가 1 쪽으로 다가가, 자세를 쥐고 있는 내내 다음 포즈 쪽으로 ¾ 쯤 바뀐 그림이 나왔다(유저 2026-10-12 「앉아 방어 자세에서 글리치」).
          그동안은 그리지 않고, 실제로 바뀔 때는(미리 돌린 D+1·D+2 에 보이면) 바뀌기 직전 2 프레임에만 */
-      if (e2 + 6 > 2 * (int)hold + 4)
-      {
+      if (doubt || (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : e2 + 6 > 2 * (int)hold + 4))
+      {  /* (main) 바뀜이 보이면 실제 길이로 — 99e 식은 길이가 배운 것과 같아도 마지막 반 프레임에 걸려 t 가 0.94 → 0.75 로 되돌아갔다 */
          if (!K) return 0;
          tot2 = 2 * (int)(realn + K - id_start[p]);
          e2 -= tot2 - 4; tot2 = 4;
