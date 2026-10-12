@@ -1383,6 +1383,7 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const in
 #define ID_R      3             /* 이동 찾기 범위 ±px */
 #define ID_S      4             /* 4배 */
 #define ID_NONE   0xFFFF        /* 빈 화소(그림 값은 팔레트<<2 | 색 번호 = 0x3F 까지) */
+#define ID_BIGP   16            /* 99f: 안 맞는 덩어리가 이만큼(화소) 되면 «부분이 멀리 감» — 캐시 항목이 있으면 캐시로 */
 
 typedef struct id_pose_s {
    uint64_t sig; unsigned used;
@@ -1398,6 +1399,7 @@ typedef struct {
    int ox, oy, w, h;            /* 둘을 합친 틀(몸 자리 기준) */
    int aox, aoy, box, boy;      /* 만들 때의 A·B 자리(몸 자리 기준 왼쪽 위) — 지금 기억한 포즈와 다르면 다시 만든다(패치 99e) */
    uint8_t depth, first, small;  /* small = 작은 바뀜(옮긴 앞 그림이 뒤 그림 화소를 75% 넘게 맞춤 — 서기처럼) */
+   uint8_t bigp;                 /* 99f: 이동표로 안 맞는 화소의 가장 큰 덩어리(8방향)가 ID_BIGP 넘음 — 칼처럼 가는 부분이 ±3px 밖으로 감 */
    uint16_t ca[ID_W * ID_H], cb[ID_W * ID_H];
    int8_t dax[ID_W * ID_H], day[ID_W * ID_H];   /* A 화소가 B 쪽으로 갈 때의 이동(A 격자) */
    int8_t dbx[ID_W * ID_H], dby[ID_W * ID_H];   /* B 화소가 A 의 어디서 왔나: B(p) = A(p - d) (B 격자) */
@@ -1741,6 +1743,56 @@ static id_pair *id_get_pair(int p, uint64_t sa, uint64_t sb)
          }
       pr->small = (uint8_t)(na && nb && ga * 4 >= na * 3 && gb * 4 >= nb * 3);
    }
+   {  /* 99f: 작은 바뀜이라도(서기 80~94% 맞음) 칼·창처럼 가는 부분이 ±3px 밖으로 옮겨 가면 그 부분만 이동표가 못 따라가
+         사이 그림에서 칼 가운데가 끊기거나 조각이 흩어진다(유저 2026-10-12 「하오마루 뉴트럴 칼 빈틈」 — 서기 8장 중 5바뀜, 덩어리 22~78).
+         숨쉬기처럼 1~2px 움직임은 안 맞는 화소가 흩어져 덩어리가 작다(대전 제자리 바뀜 1,045개: 가운데 14, 칼 끊김 보인 것 19 이상).
+         양쪽(B→A·A→B) 안 맞는 화소의 가장 큰 덩어리를 재어 둔다 — id_plan_learned 가 캐시 항목이 있으면 캐시에 맡긴다 */
+      static uint8_t um[ID_W * ID_H];
+      static int stk[ID_W * ID_H];
+      int side, best = 0, n = pr->w * pr->h, q;
+      for (side = 0; side < 2; side++)
+      {
+         for (q = 0; q < n; q++)
+         {
+            int xq = q % pr->w, yq = q / pr->w, sx, sy, ok;
+            um[q] = 0;
+            if (side == 0)
+            {
+               if (pr->cb[q] == ID_NONE) continue;
+               sx = xq - pr->dbx[q]; sy = yq - pr->dby[q];
+               ok = sx >= 0 && sy >= 0 && sx < pr->w && sy < pr->h && pr->ca[sy * pr->w + sx] == pr->cb[q];
+            }
+            else
+            {
+               if (pr->ca[q] == ID_NONE) continue;
+               sx = xq + pr->dax[q]; sy = yq + pr->day[q];
+               ok = sx >= 0 && sy >= 0 && sx < pr->w && sy < pr->h && pr->cb[sy * pr->w + sx] == pr->ca[q];
+            }
+            um[q] = (uint8_t)!ok;
+         }
+         for (q = 0; q < n; q++)
+            if (um[q])
+            {
+               int sp = 0, cnt = 0;
+               um[q] = 0; stk[sp++] = q;
+               while (sp)
+               {
+                  int c = stk[--sp], cx = c % pr->w, cy = c / pr->w, a, b;
+                  cnt++;
+                  for (b = -1; b <= 1; b++)
+                     for (a = -1; a <= 1; a++)
+                     {
+                        int nx = cx + a, ny = cy + b, j;
+                        if (nx < 0 || ny < 0 || nx >= pr->w || ny >= pr->h) continue;
+                        j = ny * pr->w + nx;
+                        if (um[j]) { um[j] = 0; stk[sp++] = j; }
+                     }
+               }
+               if (cnt > best) best = cnt;
+            }
+      }
+      pr->bigp = (uint8_t)(best >= ID_BIGP);
+   }
    id_stats[4]++;
    return pr;
 }
@@ -1920,6 +1972,20 @@ static uint64_t mc_loop_next(uint64_t sa, unsigned *hold)
    }
    return 0;
 }
+/* 99f: 캐시에 (sa, sb) 항목이 있나 — 색인만 본다(읽지 않음) */
+static int mc_has(uint64_t sa, uint64_t sb)
+{
+   int lo = 0, hi = (int)mc_n - 1;
+   if (!mc_on || !mc_f || !mc_ix) return 0;
+   while (lo <= hi)
+   {
+      int mid = (lo + hi) >> 1;
+      const mc_idx_t *x = &mc_ix[mid];
+      if (x->sa == sa && x->sb == sb) return 1;
+      if (x->sa < sa || (x->sa == sa && x->sb < sb)) lo = mid + 1; else hi = mid - 1;
+   }
+   return 0;
+}
 static mc_ent *mc_get(uint64_t sa, uint64_t sb)
 {
    int lo = 0, hi = (int)mc_n - 1, i, old = 0;
@@ -2012,8 +2078,9 @@ static void mc_draw(const mc_ent *e, int ti, const id_pose *A, const id_pose *B,
    그림일 때만(속도선·떨어진 이펙트가 원래 그림에 있으면 손대지 않는다), MC_SPECK 칸 미만이고 가장 큰 덩이의 절반 미만인 덩이를 비운다.
    비운 자리는 몸 뺀 줄(배경·다른 스프라이트)이 보인다. 반환 = 지운 칸 수 */
 #define MC_SPECK 16
-/* (main) 오래 머무는(24 프레임 이상) 자세 — 고르기 화면 미리보기의 34 프레임 서기 등 — 는 캐시 사이 그림을 마지막 8 프레임에만 편다.
-   ¼·½·¾ 석 장을 34 프레임에 펴면 한 장이 열 프레임 넘게 머물러 게임에 없는 자세로 보였다(검수). 걷기 한 걸음(6) 등은 그대로 */
+/* (main) 캐시 사이 그림(¼·½·¾ 석 장)은 머무는 길이가 8 프레임을 넘으면 마지막 8 프레임에만 편다 — 고르기 화면 미리보기의 34·14 프레임
+   서기에 석 장을 펴면 한 장이 6~19 프레임 머물러 게임에 없는 자세로 보였다(검수). 걷기 한 걸음(6)은 그대로. 길이를 여기서 잰 것이거나
+   미리 본 프레임으로 바뀜이 보일 때만 — 캐시 순환 표의 길이만 있을 때는(같은 걷기가 14·18, 실제 6) 24 프레임 이상일 때만 */
 #define MC_WIN 8
 #define MC_LONG 24
 static int mc_despeckle(uint16_t *out, int w, int h, const id_pose *A, const id_pose *B)
@@ -2087,6 +2154,8 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
       unsigned hold = 0;
       uint64_t nb = id_next(p, id_cur[p], id_prev[p], &hold);
       int loop = nb && hold >= 3 && hold <= 60 && id_loop(p, id_cur[p], nb) && (!K || sb == nb) && !id_back_doubt(p, id_cur[p], id_prev[p], nb);
+      int measured = loop;                /* (main) 길이를 믿을 만함 = 배운 순환(id_loop)으로 확인됨. 캐시 표의 길이(같은 걷기가 14·18, 실제 6)나
+                                             순환 확인 없이 배운 길이(다른 장면에서 그 바뀜을 본 길이 — 걷기 첫 걸음에 18)는 못 믿는다 */
       if (!loop && mc_ln)
       {  /* 아직 못 배웠으면 캐시의 순환 표로(패치 99b). (main) 표는 포즈마다 다음 하나뿐이라 왕복 동작의 가운데 포즈에선
             방향을 모른다 — 온 쪽으로 되돌아가는 예측은 펴지 않는다(미리 본 프레임에 보이면 아래 «마지막 2 프레임») */
@@ -2110,7 +2179,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          tot2 = K ? 2 * (int)(realn + (unsigned)K - id_start[p]) : 2 * (int)hold;
          if (!K && tot2 < e2 + 6) tot2 = e2 + 6;                                 /* D+2 까진 안 바뀜 — 적어도 3 프레임 남음 */
          if (tot2 <= 0 || e2 < 0) return 0;
-         if (tot2 >= 2 * MC_LONG) { e2 -= tot2 - 2 * MC_WIN; tot2 = 2 * MC_WIN; if (e2 <= 0) return 0; }
+         if (tot2 > 2 * MC_WIN && (K || measured || tot2 >= 2 * MC_LONG)) { e2 -= tot2 - 2 * MC_WIN; tot2 = 2 * MC_WIN; if (e2 <= 0) return 0; }
          ti = (8 * e2 + tot2) / (2 * tot2) - 1;                                   /* round(4t) − 1 */
          if (ti < 0) return 0;
          if (ti > 2) ti = 2;
@@ -2279,6 +2348,7 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
       /* 큰 바뀜(사이 그림이 반쯤에서 뒤 그림으로 넘어감)은 되풀이 동작(서기)일 때만 — 착지→서기·공격 끝 자세→서기처럼 한 번 지나가는
          바뀜이면 그 자세가 끝나는 때가 앞당겨 보인다 */
       if (!pr->small && !id_loop(p, id_cur[p], sb)) return 0;
+      if (pr->bigp && mc_has(id_cur[p], sb)) return 0;           /* 99f: 가는 부분이 멀리 가는 바뀜 — 캐시 사이 그림(칼이 이어짐)으로 */
       rq->on = 1; rq->kind = 0; rq->pr = pr; rq->t256 = t256; rq->sx4 = rq->sy4 = 0;
       rq->ax = id_ax[p]; rq->ay = id_ay[p];
       rq->gx = pr->ox; rq->gy = pr->oy; rq->gw = pr->w; rq->gh = pr->h; rq->depth = pr->depth; rq->first = pr->first;
