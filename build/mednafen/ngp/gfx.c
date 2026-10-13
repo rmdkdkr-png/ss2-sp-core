@@ -816,6 +816,34 @@ static void ss2fg_note_write(ngpgfx_t *gfx, uint32 address)
    else if (address >= 0x8200 && address <= 0x83ff) ss2fg_capture_write(SS2FG_DIRTY_PAL);
 }
 
+/* 앱이 정하는 팔레트 바꿔 쓰기(가상 리그 컬러 고르기) — 게임이 팔레트 램 칸 idx(16비트 칸 0~255, 스프라이트 팔레트 k 의
+   색 j = k*4+j)에 from 색을 다 쓰는 순간(윗바이트 쓰기) to 로 바꿔 넣는다. 게임은 팔레트를 롬에서 자주 다시 쓰므로(대전 중
+   1초에 한 번꼴) 프레임 뒤에 고쳐 쓰면 원래 색이 한 프레임씩 보인다 — 여기서 바꾸면 런어헤드·프레임 생성 프레임까지 같다.
+   칸마다 둘(검질 고르기처럼 두 색이 번갈아 올 때). 상태 저장에는 안 들어간다(앱이 매 프레임 다시 정함). */
+static uint16 pr_from[256][2], pr_to[256][2];
+static uint8 pr_on[256];
+void retro_ngp_palremap(int idx, int slot, int from, int to)
+{
+   if (idx < 0) { memset(pr_on, 0, sizeof pr_on); return; }
+   if (idx > 255 || slot < 0 || slot > 1) return;
+   if (from < 0) { pr_on[idx] &= (uint8)~(1 << slot); return; }
+   pr_from[idx][slot] = (uint16)(from & 0x0FFF); pr_to[idx][slot] = (uint16)(to & 0x0FFF);
+   pr_on[idx] |= (uint8)(1 << slot);
+}
+static void pal_remap(ngpgfx_t *gfx, uint32 off)
+{
+   uint32 idx = off >> 1;
+   uint16 v;
+   if (!pr_on[idx]) return;
+   v = (uint16)((gfx->ColorPaletteRAM[idx * 2] | (gfx->ColorPaletteRAM[idx * 2 + 1] << 8)) & 0x0FFF);
+   for (int k = 0; k < 2; k++)
+      if ((pr_on[idx] & (1 << k)) && v == pr_from[idx][k]) {
+         gfx->ColorPaletteRAM[idx * 2] = (uint8)pr_to[idx][k];
+         gfx->ColorPaletteRAM[idx * 2 + 1] = (uint8)(pr_to[idx][k] >> 8);
+         return;
+      }
+}
+
 void ngpgfx_write8(ngpgfx_t *gfx, uint32 address, uint8 data)
 {
    ss2fg_note_write(gfx, address);
@@ -828,7 +856,10 @@ void ngpgfx_write8(ngpgfx_t *gfx, uint32 address, uint8 data)
    else if(address >= 0x8c00 && address <= 0x8c3f)
       gfx->SpriteVRAMColor[address - 0x8c00] = data & 0x0f;
    else if(address >= 0x8200 && address <= 0x83ff)
+   {
       gfx->ColorPaletteRAM[address - 0x8200] = data;
+      if (address & 1) pal_remap(gfx, address - 0x8200);   /* 16비트 쓰기는 아랫바이트 → 윗바이트 순 */
+   }
    else switch(address)
    {
       case 0x8000:
