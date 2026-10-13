@@ -816,10 +816,11 @@ static void ss2fg_note_write(ngpgfx_t *gfx, uint32 address)
    else if (address >= 0x8200 && address <= 0x83ff) ss2fg_capture_write(SS2FG_DIRTY_PAL);
 }
 
-/* 앱이 정하는 팔레트 바꿔 쓰기(가상 리그 컬러 고르기) — 게임이 팔레트 램 칸 idx(16비트 칸 0~255, 스프라이트 팔레트 k 의
-   색 j = k*4+j)에 from 색을 다 쓰는 순간(윗바이트 쓰기) to 로 바꿔 넣는다. 게임은 팔레트를 롬에서 자주 다시 쓰므로(대전 중
+/* 앱이 정하는 팔레트 바꿔 쓰기(가상 리그 컬러 고르기) — 한 팔레트(4색)의 색 1~3 이 모두 자리 slot 의 from 색이 되는 순간
+   (게임이 그 팔레트를 쓰는 중 마지막 칸 윗바이트) 셋 다 to 로 바꿔 넣는다. 게임은 몸 팔레트를 롬에서 자주 다시 쓰므로(대전 중
    1초에 한 번꼴) 프레임 뒤에 고쳐 쓰면 원래 색이 한 프레임씩 보인다 — 여기서 바꾸면 런어헤드·프레임 생성 프레임까지 같다.
-   칸마다 둘(검질 고르기처럼 두 색이 번갈아 올 때). 상태 저장에는 안 들어간다(앱이 매 프레임 다시 정함). */
+   세 칸을 함께 보므로 맞을 때 번쩍임처럼 한 칸만 같은 다른 팔레트는 안 건드린다. 칸 idx(16비트 칸 0~255, 팔레트 k 의 색 j = k*4+j)
+   마다 자리 둘(검질 고르기처럼 두 팔레트가 번갈아 올 때) — 한 자리는 세 칸(j = 1~3)을 모두 정해야 쓴다. 상태 저장엔 안 들어간다. */
 static uint16 pr_from[256][2], pr_to[256][2];
 static uint8 pr_on[256];
 void retro_ngp_palremap(int idx, int slot, int from, int to)
@@ -830,18 +831,22 @@ void retro_ngp_palremap(int idx, int slot, int from, int to)
    pr_from[idx][slot] = (uint16)(from & 0x0FFF); pr_to[idx][slot] = (uint16)(to & 0x0FFF);
    pr_on[idx] |= (uint8)(1 << slot);
 }
+static uint16 pal_rd16(ngpgfx_t *gfx, uint32 idx) { return (uint16)((gfx->ColorPaletteRAM[idx * 2] | (gfx->ColorPaletteRAM[idx * 2 + 1] << 8)) & 0x0FFF); }
 static void pal_remap(ngpgfx_t *gfx, uint32 off)
 {
-   uint32 idx = off >> 1;
-   uint16 v;
-   if (!pr_on[idx]) return;
-   v = (uint16)((gfx->ColorPaletteRAM[idx * 2] | (gfx->ColorPaletteRAM[idx * 2 + 1] << 8)) & 0x0FFF);
-   for (int k = 0; k < 2; k++)
-      if ((pr_on[idx] & (1 << k)) && v == pr_from[idx][k]) {
-         gfx->ColorPaletteRAM[idx * 2] = (uint8)pr_to[idx][k];
-         gfx->ColorPaletteRAM[idx * 2 + 1] = (uint8)(pr_to[idx][k] >> 8);
-         return;
+   uint32 b = (off >> 1) & ~3u;                    /* 이 팔레트의 색 0 칸 */
+   if ((off >> 1) == b || !(pr_on[b + 1] | pr_on[b + 2] | pr_on[b + 3])) return;
+   for (int k = 0; k < 2; k++) {
+      int j;
+      for (j = 1; j <= 3; j++)
+         if (!(pr_on[b + j] & (1 << k)) || pal_rd16(gfx, b + j) != pr_from[b + j][k]) break;
+      if (j <= 3) continue;
+      for (j = 1; j <= 3; j++) {
+         gfx->ColorPaletteRAM[(b + j) * 2] = (uint8)pr_to[b + j][k];
+         gfx->ColorPaletteRAM[(b + j) * 2 + 1] = (uint8)(pr_to[b + j][k] >> 8);
       }
+      return;
+   }
 }
 
 void ngpgfx_write8(ngpgfx_t *gfx, uint32 address, uint8 data)
