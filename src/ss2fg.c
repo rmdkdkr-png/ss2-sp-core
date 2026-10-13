@@ -1421,6 +1421,8 @@ static id_learn_t id_lt[2][ID_LEARN];
 static unsigned   id_clock = 0;
 static uint64_t   id_cur[2], id_prev[2];     /* 지금 포즈, 그 앞 포즈(제자리에서 바뀐 때만 — 왕복 동작의 다음 포즈 고르기) */
 static unsigned   id_start[2];
+static unsigned   id_sp_at[2];    /* 99h: 이 머묾(id_start+1)에 뒤 포즈를 모른 채(K=0) 고르게 편 사이 그림(배운 바뀜·캐시)을 그렸나 */
+static uint64_t   id_sp_b[2];     /* 99h: 그때 향한 뒤 포즈 — 실제로 온 뒤 포즈가 다르면(예측이 빗나감) 편 적 없는 것으로 */
 static int        id_ax[2], id_ay[2], id_still[2];
 static id_req_t   id_rq[2][2];               /* [출력 칸: 0 = τD, 1 = τD+½][몸] */
 static id_patch_t id_pt[2][2];
@@ -1436,6 +1438,8 @@ void ss2fg_set_idle(int on)
       memset(id_cur, 0, sizeof id_cur);
       memset(id_prev, 0, sizeof id_prev);
       memset(id_rq, 0, sizeof id_rq);
+      memset(id_sp_at, 0, sizeof id_sp_at);
+      memset(id_sp_b, 0, sizeof id_sp_b);
       id_pt[0][0].on = id_pt[0][1].on = id_pt[1][0].on = id_pt[1][1].on = 0;
    }
    id_on = on ? 1 : 0;
@@ -2164,13 +2168,19 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          if (cb && cb == nb && hold >= 3) h2 = hold;   /* (main) 여기서 잰 길이가 있으면 그것 — 표의 길이는 같은 걷기도 14·18 (실제 6) */
          if (cb && h2 >= 3 && h2 <= 60 && (!K || sb == cb) && cb != id_prev[p]) { nb = cb; hold = h2; loop = 1; }
       }
-      if (loop && (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : 2 * (int)(realn - id_start[p]) + h + 6 > 2 * (int)hold + 4))
+      if (loop && (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : 2 * (int)(realn - id_start[p]) + 6 > 2 * (int)hold + 4))
       {  /* 99e: 배운 길이보다 오래 머묾 — 순환이 아니라 붙잡은 자세. 바뀌기 직전 2 프레임만(아래).
             (main) 미리 본 프레임에 바뀜이 보이면 실제 길이(지난 + K)로 판단 — 99e 식은 길이가 배운 것과 똑같아도 마지막 반 프레임에
-            걸려 «2 프레임» 쪽으로 넘어가며 ¾ 에서 ¼ 로 되돌아가기도 했다 */
+            걸려 «2 프레임» 쪽으로 넘어가며 ¾ 에서 ¼ 로 되돌아가기도 했다.
+            99h: 모르면 가장 짧은 길이(D+2 까진 안 바뀜 — 3 프레임 더)로 — 출력 반 칸(h)은 더 치지 않는다 */
          loop = 0;
          if (!K) mc_loopstop++;        /* (main 계기) 확인 안 된 순환 예측을 그만둔 수 */
       }
+      /* 99h: 뒤 포즈를 아직 한 번도 못 봐(기억에 없음) 앞 포즈가 보이는 동안 고르게 펴지 못했으면, 뒤 포즈가 미리 돌린 D+1·D+2 에
+         보일 때 t 가 이미 끝 쪽이라 ¾ 한 장만 4 칸 내내 나왔다(¼·½ 없이 툭 — 유저 2026-10-13 「수라·나찰 고르기 화면·판 시작 전 «いざ尋常に»
+         에서 120 이 제대로 안 되는 듯」: 미리보기·소개는 처음 보는 포즈가 많다). 그럴 땐 순환이 아닌 바뀜처럼 바뀌기 직전 2 프레임에 ¼·½·¾ */
+      if (loop && K && (id_sp_at[p] != id_start[p] + 1u || id_sp_b[p] != sb))
+         loop = 0;
       if (!K && !loop) return 0;
       if (loop)
       {
@@ -2220,6 +2230,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
       rq->gx = ax0 + e->cx; rq->gy = ay0 + e->cy;
       rq->sx4 = (ti + 1) * dx; rq->sy4 = (ti + 1) * dy;   /* t = (ti+1)/4 → 4배 화소로 t·차·4 */
    }
+   if (!K) { id_sp_at[p] = id_start[p] + 1u; id_sp_b[p] = sb; }   /* 99h: K 를 모르는데 그린다 = 순환으로 고르게 펴는 중 */
    rq->on = 1; rq->kind = 1; rq->pr = 0; rq->t256 = 64 * (ti + 1);
    rq->e = e; rq->ti = ti; rq->A = A; rq->B = B;
    rq->ax = f0->ob_x[p]; rq->ay = f0->ob_y[p];              /* 몸 자리는 보여 줄 D 의 것 — 움직이는 몸은 그리기에서 몸 조각의 옮김만큼 더 민다(패치 98) */
@@ -2330,7 +2341,11 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
       /* 99e: 배운 길이보다 2 프레임 넘게 머물면 붙잡은 자세(앉아 방어·서서 막기 등) — 예전엔 «적어도 3 프레임 남음»으로 길이를 늘려
          t 가 1 쪽으로 다가가, 자세를 쥐고 있는 내내 다음 포즈 쪽으로 ¾ 쯤 바뀐 그림이 나왔다(유저 2026-10-12 「앉아 방어 자세에서 글리치」).
          그동안은 그리지 않고, 실제로 바뀔 때는(미리 돌린 D+1·D+2 에 보이면) 바뀌기 직전 2 프레임에만 */
-      if (doubt || (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : e2 + 6 > 2 * (int)hold + 4))
+      /* 99h: ① 모르면 가장 짧은 길이(3 프레임 더)로 — 출력 반 칸(h)은 더 치지 않는다(제 길이로 머문 서기도 마지막 칸이 뒤로 갔다).
+         ② 뒤 포즈를 기억에서 잃어(포즈 기억이 차서 밀림) 앞 포즈가 보이는 동안 고르게 펴지 못했으면, 끝쪽 t(0.9 쯤)부터 나오지 말고
+         바뀌기 직전 2 프레임에 ¼·½·¾ — 캐시(mc_plan)와 같은 표시(id_sp_at)를 같이 본다 */
+      if (doubt || (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : 2 * (int)(realn - id_start[p]) + 6 > 2 * (int)hold + 4)
+          || (K && (id_sp_at[p] != id_start[p] + 1u || id_sp_b[p] != sb)))
       {  /* (main) 바뀜이 보이면 실제 길이로 — 99e 식은 길이가 배운 것과 같아도 마지막 반 프레임에 걸려 t 가 0.94 → 0.75 로 되돌아갔다 */
          if (!K) return 0;
          tot2 = 2 * (int)(realn + K - id_start[p]);
@@ -2349,6 +2364,7 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
          바뀜이면 그 자세가 끝나는 때가 앞당겨 보인다 */
       if (!pr->small && !id_loop(p, id_cur[p], sb)) return 0;
       if (pr->bigp && mc_has(id_cur[p], sb)) return 0;           /* 99f: 가는 부분이 멀리 가는 바뀜 — 캐시 사이 그림(칼이 이어짐)으로 */
+      if (!K) { id_sp_at[p] = id_start[p] + 1u; id_sp_b[p] = sb; }   /* 99h: 뒤 포즈를 모른 채 고르게 펴는 중 */
       rq->on = 1; rq->kind = 0; rq->pr = pr; rq->t256 = t256; rq->sx4 = rq->sy4 = 0;
       rq->ax = id_ax[p]; rq->ay = id_ay[p];
       rq->gx = pr->ox; rq->gy = pr->oy; rq->gw = pr->w; rq->gh = pr->h; rq->depth = pr->depth; rq->first = pr->first;
