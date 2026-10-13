@@ -182,6 +182,21 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       "off"
    },
    {
+      "ngp_flash_reduce",
+      "번쩍임 줄이기",
+      NULL,
+      "큰 타격 때 화면 전체가 1 프레임 하얗게(또는 까맣게) 번쩍이는 것(창을 접어 칠함)을 바로 앞 화면 위에 그 색을 조금만 얹어 보여 줌. 약하게 = 절반 · 거의 없게 = 살짝 · 끔 = 원래대로. 사무쇼2 예측 4배·60Hz 사이 그림에서.",
+      NULL,
+      "video",
+      {
+         { "off",    "끔" },
+         { "half",   "약하게" },
+         { "strong", "거의 없게" },
+         { NULL, NULL },
+      },
+      "off"
+   },
+   {
       "ngp_framegen_motion",
       "프레임 생성 — 동작 사이 그림(캐시)",
       NULL,
@@ -318,6 +333,18 @@ struct retro_core_option_definition option_defs_us[] = {
       {
          { "off",  "끔" },
          { "draw", "그리기(¼픽셀)" },
+         { NULL, NULL},
+      },
+      "off",
+   },
+   {
+      "ngp_flash_reduce",
+      "번쩍임 줄이기",
+      "큰 타격 때 화면 전체가 1 프레임 번쩍이는 것을 앞 화면 위에 그 색을 조금만 얹어 보여 줌. 약하게 = 절반 · 거의 없게 = 살짝 · 끔 = 원래대로.",
+      {
+         { "off",    "끔" },
+         { "half",   "약하게" },
+         { "strong", "거의 없게" },
          { NULL, NULL},
       },
       "off",

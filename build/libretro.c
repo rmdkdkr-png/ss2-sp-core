@@ -682,12 +682,45 @@ static int body_pos_differs(const ss2fg_frame *a, const ss2fg_frame *b, int p)
 static int fg_no_next = 0;                       /* 60Hz 사이 그림 — τ=D 만 그리고 τ=D+½(fg_next)는 건너뛴다 */
 /* 서기 사이 그림(코어 패치 100) — 켜면 화면을 4배(640×608)로 내보낸다. idle_out_slot = 이번 출력의 사이 그림 칸(0 τD · 1 τD+½ · -1 없음) */
 static int idle_opt = 0, idle_out_slot = -1;
+/* 99l: 번쩍임 줄이기 — 사무쇼2 는 큰 타격 때 창을 접어 화면 전체를 1 프레임 하얗게(또는 까맣게) 칠한다. 그 프레임은 바로 앞 화면 위에
+   그 색을 조금만 얹어 보여 준다(약하게 50% · 거의 없게 15%). 미리 돌린 D+1·D+2 로 1~2 프레임짜리만 고른다 — 길게 접힌 화면
+   (장면 사이 검은 화면)은 그대로. 다른 게임의 «빛 줄이기»(마블 vs 캡콤 컬렉션 Light Reduction, 닌텐도 VC 의 장면별 어둡게·섞기)처럼
+   원인 연출만 골라 약하게 — 캐릭터·배경은 그대로. 유저 2026-10-14 「배경은 … 번쩍도 함」·「번쩍 필터 기능 타 게임에 있거든」 */
+static int fl_opt = 0;                           /* 0 끔 · 1 약하게 · 2 거의 없게 */
+static int fl_cur = 0, fl_soon = 0, fl_have = 0, fl_w = 0, fl_h = 0;
+static uint16_t fl_col = 0;
+static uint16_t fl_prev[(FB_WIDTH * 4) * (FB_HEIGHT * 4)];
+static void fl_apply(uint16_t *buf, int w, int h, int pitch)
+{
+   int x, y;
+   if (!fl_opt || w <= 0 || h <= 0 || w * h > (int)(sizeof fl_prev / sizeof fl_prev[0])) { fl_have = 0; return; }
+   if (fl_cur)
+   {
+      int a = fl_opt == 1 ? 128 : 38, cr = (fl_col >> 11) & 31, cg = (fl_col >> 5) & 63, cb = fl_col & 31;
+      if (!fl_have || fl_w != w || fl_h != h) return;
+      for (y = 0; y < h; y++)
+      {
+         uint16_t *d = buf + (size_t)y * pitch;
+         const uint16_t *s = fl_prev + (size_t)y * w;
+         for (x = 0; x < w; x++)
+         {
+            int v = s[x], r = (v >> 11) & 31, g = (v >> 5) & 63, b = v & 31;
+            r += ((cr - r) * a) / 256; g += ((cg - g) * a) / 256; b += ((cb - b) * a) / 256;
+            d[x] = (uint16_t)((r << 11) | (g << 5) | b);
+         }
+      }
+      return;
+   }
+   if (!fl_soon) { fl_have = 0; return; }
+   for (y = 0; y < h; y++) memcpy(fl_prev + (size_t)y * w, buf + (size_t)y * pitch, (size_t)w * sizeof(uint16_t));   /* 곧 번쩍 — 지금 화면을 남김 */
+   fl_w = w; fl_h = h; fl_have = 1;
+}
 static uint16_t idle_out4[(FB_WIDTH * 4) * (FB_HEIGHT * 4)];
 static int fg_predict4(int ra)
 {
    int k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel, extra = 0, p;
    int ts0, ts1, tb0, tb1;
-   int ov[2] = { 0, 0 }, ovx0[2], ovy0[2], ovx1[2], ovy1[2], id0 = 0, id1 = 0;
+   int ov[2] = { 0, 0 }, ovx0[2], ovy0[2], ovx1[2], ovy1[2], id0 = 0, id1 = 0, spm = 0;
    const ss2fg_frame *f0, *f1, *f2, *fp, *tos, *tob, *fk[5];
 
    if (!ss2fg_hist(0)) return 0;
@@ -708,6 +741,15 @@ static int fg_predict4(int ra)
       ss2fg_idle_observe(f0, fg_realn);
       id0 = ss2fg_idle_plan(f0, f1, f2, fg_realn, 0, 0);
       id1 = fg_no_next ? 0 : ss2fg_idle_plan(f0, f1, f2, fg_realn, 1, 1);
+      spm = ss2fg_scroll_plan(fp, f0, f1, f2, fg_realn);  /* 99j: 배경 스크롤을 플레인·줄마다 제 박자로 ¼ px */
+   }
+   if (fl_opt && ss2comm_rom_is_ss2())
+   {  /* 99l: 이 D 가 1~2 프레임짜리 화면 전체 번쩍인가 / 곧 번쩍인가 */
+      uint16_t c12 = 0;
+      int a0 = ss2fg_flash_frame(f0, &c12), a1 = ss2fg_flash_frame(f1, 0), a2 = ss2fg_flash_frame(f2, 0);
+      fl_cur = a0 && (!a1 || !a2);
+      fl_soon = !a0 && (a1 || a2);
+      if (fl_cur) fl_col = (uint16_t)NGPGfx->ColorMap[c12 & 4095];
    }
 
    /* 스프라이트: 다음 바뀌는 프레임 K(D 기준 +1/+2), 지난번 바뀐 때 L(≤0, K-2 이상) */
@@ -753,12 +795,12 @@ static int fg_predict4(int ra)
    /* τ=D — 둘 다 0 이면 실제 D 그대로 (fg_real = D 의 그림) */
    for (p = 0; p < 2; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx0[p], ovy0[p]);
    ss2fg_idle_slot(idle_opt ? 0 : -1);                 /* 99i: 사이 그림이 없어도 — 움직이는 몸을 ¼ px 자리로 그리는 조각 */
-   if (!(ts0 || tb0 || ov[0] || ov[1] || id0) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
+   if (!(ts0 || tb0 || ov[0] || ov[1] || id0 || (spm & 1)) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(surf->pixels, fg_real, sizeof fg_real);
    /* τ=D+½ */
    for (p = 0; p < 2 && !fg_no_next; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx1[p], ovy1[p]);
    ss2fg_idle_slot(idle_opt ? 1 : -1);
-   if (!fg_no_next && (!(ts1 || tb1 || ov[0] || ov[1] || id1) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap)))
+   if (!fg_no_next && (!(ts1 || tb1 || ov[0] || ov[1] || id1 || (spm & 2)) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap)))
       memcpy(fg_next, fg_real, sizeof fg_real);
    ss2fg_idle_slot(-1);
    ss2fg_body_override(0, 0, 0, 0); ss2fg_body_override(1, 0, 0, 0);
@@ -1067,6 +1109,12 @@ static void check_variables(void)
          ss2fg_set_idle(idle_opt);
          if (cv_booted && was != idle_opt) ss2_set_geometry();
       }
+      var.key   = "ngp_flash_reduce";                     /* 99l — 번쩍임 줄이기 */
+      var.value = NULL;
+      fl_opt = 0;
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+         fl_opt = !strcmp(var.value, "half") ? 1 : !strcmp(var.value, "strong") ? 2 : 0;
+      if (!fl_opt) fl_have = 0;
       var.key   = "ngp_framegen_motion";                  /* 코어 패치 97 — 모든 포즈 바뀜 사이 그림(모션 캐시, 서기 그리기가 켜졌을 때) */
       var.value = NULL;
       ss2fg_set_motion(environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "cache"));
@@ -1532,6 +1580,7 @@ void retro_run(void)
 
       {
          int ra = hidden ? 0 : ra_frames();                     /* 런어헤드: 보여 줄 그림을 ra 프레임 앞 것으로 */
+         if (!hidden) fl_cur = fl_soon = 0;                     /* 99l: 예측 4배(fg_predict4)가 다시 정한다 */
          if (fg_active)
          {
             memcpy(fg_real, surf->pixels, sizeof fg_real);        /* 후처리 전 원본 — 합성 실패·보간 모드용 */
@@ -1624,6 +1673,7 @@ void retro_run(void)
          게임 그림을 가운데로 옮겨 넓은 캔버스(288px)로 내보낸다 */
       const uint16_t *fbuf = (const uint16_t *)surf->pixels;
       unsigned y;
+      if (!ss2_paused && !hidden) fl_apply((uint16_t *)surf->pixels, (int)width, (int)height, FB_WIDTH);   /* 99l */
       for (y = 0; y < height; y++)
          memcpy(ss2_wide + y * SS2_WIDE_W + SS2_SIDE_W, fbuf + y * FB_WIDTH,
                 width * sizeof(uint16_t));
@@ -1640,10 +1690,14 @@ void retro_run(void)
       if (idle_opt && ss2comm_rom_is_ss2() && !hidden && width == FB_WIDTH && height == FB_HEIGHT)
       {  /* 서기 사이 그림 — 4배로 늘리고 이번 출력의 조각을 붙여 640×608 로 */
          ss2fg_idle_compose(idle_out4, FB_WIDTH * 4, surf->pixels, FB_WIDTH, (int)width, (int)height, 2, NGPGfx->ColorMap, idle_out_slot);
+         if (!ss2_paused) fl_apply(idle_out4, (int)width * 4, (int)height * 4, FB_WIDTH * 4);   /* 99l */
          video_cb(idle_out4, width * 4, height * 4, FB_WIDTH * 4 * 2);
       }
       else
+      {
+         if (!ss2_paused && !hidden) fl_apply((uint16_t *)surf->pixels, (int)width, (int)height, FB_WIDTH);   /* 99l */
          video_cb(surf->pixels, width, height, FB_WIDTH * 2);
+      }
    }
 
    /* 소리 — 2배 출력 중엔 실제 프레임의 샘플을 반씩 두 호출에 나눈다 */

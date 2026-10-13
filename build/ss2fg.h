@@ -112,6 +112,11 @@ void ss2fg_idle_slot(int s);
 void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn);
 int  ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn, int h, int slot);
 void ss2fg_idle_compose(void *dst, int dpitch_px, const void *src, int spitch_px, int w, int h, int bpp, const uint32_t *colormap, int slot);
+/* 99j: 배경 스크롤 ¼ px — 실제 프레임마다 한 번(D-1·D·D+1·D+2). 반환 비트0·1 = τD·τD+½ 에 옮길 줄이 있음 */
+int  ss2fg_scroll_plan(const ss2fg_frame *fp, const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn);
+void ss2fg_scroll_stats(int *out4);  /* 시험용 계기 */
+/* 99l: 화면 전체 번쩍 — 창이 접혀(거의 모든 줄이 창 밖) 화면이 창 밖 색 한 가지인 프레임. c12 = 그 색(12비트, 반전 반영) */
+int  ss2fg_flash_frame(const ss2fg_frame *f, uint16_t *c12);
 void ss2fg_idle_stats(int *out6);   /* 시험용 계기: 배운 바뀜 / 계획 / 조각 / 미리 본 다른 포즈 / 이동표 / 그림 */
 /* 모션 캐시(패치 97) — 시스템 폴더 ss2_motion.bin. open 반환 = 바뀜 수 또는 -1 */
 int  ss2fg_motion_open(const char *path);

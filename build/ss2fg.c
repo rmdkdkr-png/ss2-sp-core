@@ -219,6 +219,10 @@ static const uint8_t *rl_skip = 0;
 static uint8_t *rl_zout = 0;
 static int16_t *rl_slot = 0;
 static int rl_cur_slot = -1;
+/* 99j: 스프라이트만의 맨 앞(플레인에 가린 것도) — 깊이(0 = 없음)·색(12비트, 반전 반영)·슬롯 */
+static uint8_t  *rl_sprz = 0;
+static uint16_t *rl_sprc = 0;
+static int16_t  *rl_sprs = 0;
 
 static void draw_pattern(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *scan, uint8_t *zbuf,
                          int x, unsigned tile, unsigned tiley, int mirror,
@@ -244,7 +248,15 @@ static void draw_pattern(const ss2fg_frame *f, const ss2fg_regs *r, uint16_t *sc
    for (xx = right; xx >= left; --xx, index >>= 2)
    {
       uint16_t c;
-      if (depth <= zbuf[xx] || (index & 3) == 0) continue;
+      if ((index & 3) == 0) continue;
+      if (rl_sprz && !(depth & 1) && depth > rl_sprz[xx])
+      {  /* 99j: 스프라이트(깊이 2·4·6)만 따로 */
+         uint16_t cs = ld16(palette + ((index & 3) << 1));
+         if (r->neg) cs = (uint16_t)~cs;
+         rl_sprz[xx] = depth; rl_sprc[xx] = (uint16_t)(cs & 0x0FFF);
+         if (rl_sprs) rl_sprs[xx] = (int16_t)rl_cur_slot;
+      }
+      if (depth <= zbuf[xx]) continue;
       zbuf[xx] = depth;
       if (rl_slot) rl_slot[xx] = (int16_t)rl_cur_slot;
       c = ld16(palette + ((index & 3) << 1));
@@ -1252,6 +1264,7 @@ static void render_line(const ss2fg_frame *base, const ss2fg_frame *to, const in
    memset(zbuf, 0, sizeof zbuf);
    rl_cur_slot = -1;
    if (rl_slot) { int i; for (i = 0; i < 256; i++) rl_slot[i] = -1; }
+   if (rl_sprz) memset(rl_sprz, 0, SS2FG_W);
 
    /* 창 밖 색 */
    c = ld16(base->pal + 0x01F0 + (rb->oowc << 1));
@@ -1427,6 +1440,11 @@ static uint64_t   id_cur[2], id_prev[2];     /* 지금 포즈, 그 앞 포즈(�
 static unsigned   id_start[2];
 static unsigned   id_sp_at[2];    /* 99h: 이 머묾(id_start+1)에 뒤 포즈를 모른 채(K=0) 고르게 편 사이 그림(배운 바뀜·캐시)을 그렸나 */
 static uint64_t   id_sp_b[2];     /* 99h: 그때 향한 뒤 포즈 — 실제로 온 뒤 포즈가 다르면(예측이 빗나감) 편 적 없는 것으로 */
+static unsigned   id_hold_prev[2];  /* 99k: 바로 앞 포즈가 머문 프레임 수 */
+static uint8_t    id_prev_link[2];  /* 99k: 앞 포즈 → 지금 포즈가 되풀이 동작(캐시 순환 표·배운 순환)의 한 걸음이었나 */
+static uint8_t    id_prev_moved[2]; /* 99k: 앞 포즈 동안 몸이 움직였나(걷기) — 서기 순환은 장마다 길이가 달라(18·8·8…) 앞 걸음 길이를 안 쓴다 */
+static int8_t     id_ti_last[2];    /* 99k: 이 머묾에서 마지막으로 낸 캐시 사이 그림 칸(-1 = 아직 없음, 0·1·2 = ¼·½·¾) */
+static uint64_t   id_ti_sb[2];      /* 99k: 그때 향한 뒤 포즈 */
 static int        id_ax[2], id_ay[2], id_still[2];
 static id_req_t   id_rq[2][2];               /* [출력 칸: 0 = τD, 1 = τD+½][몸] */
 static id_patch_t id_pt[2][2];
@@ -1444,6 +1462,8 @@ void ss2fg_set_idle(int on)
       memset(id_rq, 0, sizeof id_rq);
       memset(id_sp_at, 0, sizeof id_sp_at);
       memset(id_sp_b, 0, sizeof id_sp_b);
+      memset(id_hold_prev, 0, sizeof id_hold_prev); memset(id_prev_link, 0, sizeof id_prev_link); memset(id_prev_moved, 0, sizeof id_prev_moved);
+      id_ti_last[0] = id_ti_last[1] = -1;
       id_pt[0][0].on = id_pt[0][1].on = id_pt[1][0].on = id_pt[1][1].on = 0;
    }
    id_on = on ? 1 : 0;
@@ -2172,7 +2192,13 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          if (cb && cb == nb && hold >= 3) h2 = hold;   /* (main) 여기서 잰 길이가 있으면 그것 — 표의 길이는 같은 걷기도 14·18 (실제 6) */
          if (cb && h2 >= 3 && h2 <= 60 && (!K || sb == cb) && cb != id_prev[p]) { nb = cb; hold = h2; loop = 1; }
       }
-      if (loop && (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : 2 * (int)(realn - id_start[p]) + 6 > 2 * (int)hold + 4))
+      /* 99k: 걸음 길이는 바로 앞 걸음 것으로 — 캐시 순환 표·배운 길이는 모아 둔 판의 대표값이라 지금 걷는 빠르기와 다를 수 있다
+         (갈포드 앞으로 걷기: 표 14 프레임, 실제 6 — 걸음은 장마다 길이가 같다). 길게 잡으면 다리가 ¼ 에서 멈춰 있다가, 바뀔 때가 보이면(미리 돌린 D+1·D+2)
+         ¾ 로 툭 건너뛰었다 — 몸은 ¼ px 로 매끄럽게 가니(99i) 더 눈에 띔(유저 2026-10-14 「걷는 거 또 찐빠 난 거 같은데」).
+         (main) 위의 «여기서 잰 길이»(같은 바뀜을 배운 길이)보다도 앞 걸음 길이가 먼저. measured(마지막 8 프레임 창)는 그대로 둔다 */
+      if (loop && id_prev_link[p] && id_prev_moved[p] && id_hold_prev[p] >= 3 && id_hold_prev[p] <= 60) hold = id_hold_prev[p];
+      if (loop && (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : 2 * (int)(realn - id_start[p]) + 6 > 2 * (int)hold + 4)
+          && !(K && id_ti_last[p] >= 0 && id_ti_sb[p] == sb))   /* 99k: 같은 뒤 포즈로 펴던 중 바뀜이 보이면 이어서(¼ 로 되돌아가지 않게) */
       {  /* 99e: 배운 길이보다 오래 머묾 — 순환이 아니라 붙잡은 자세. 바뀌기 직전 2 프레임만(아래).
             (main) 미리 본 프레임에 바뀜이 보이면 실제 길이(지난 + K)로 판단 — 99e 식은 길이가 배운 것과 똑같아도 마지막 반 프레임에
             걸려 «2 프레임» 쪽으로 넘어가며 ¾ 에서 ¼ 로 되돌아가기도 했다.
@@ -2195,11 +2221,16 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          if (tot2 <= 0 || e2 < 0) return 0;
          if (tot2 > 2 * MC_WIN && (K || measured || tot2 >= 2 * MC_LONG)) { e2 -= tot2 - 2 * MC_WIN; tot2 = 2 * MC_WIN; if (e2 <= 0) return 0; }
          ti = (8 * e2 + tot2) / (2 * tot2) - 1;                                   /* round(4t) − 1 */
-         if (ti < 0) return 0;
          if (ti > 2) ti = 2;
          if (!K && ti > 1) ti = 1;   /* (main) 아직 미리 본 프레임으로 확인 못 한 예측은 ½ 까지만 — 틀리면(다른 갈래로 감) 반쯤 간 자세에서 돌아온다
                                         (검수 s024~s026: 오지 않을 포즈로 ¾ 까지 갔다가 한 번에 되돌아와 팔이 내려-올라-내려). 걷기(한 걸음 6 프레임)는
-                                        확인 전 구간이 원래 ½ 를 안 넘어 그대로 */
+                                        확인 전 구간이 원래 ½ 를 안 넘어 그대로. 99k 도 같은 규칙(바뀜이 보이기 전엔 ½ 까지)을 넣었다 */
+         if (id_ti_last[p] >= 0)
+         {  /* 99k: 한 걸음 안에서는 뒤로 가지 않고 한 칸씩만 — 길이 추정이 빗나가도 ¼ → ½ → ¾ 를 건너뛰지 않는다 */
+            if (ti < id_ti_last[p]) ti = id_ti_last[p];
+            if (ti > id_ti_last[p] + 1) ti = id_ti_last[p] + 1;
+         }
+         if (ti < 0) return 0;
       }
       else
       {
@@ -2235,6 +2266,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
       rq->sx4 = (ti + 1) * dx; rq->sy4 = (ti + 1) * dy;   /* t = (ti+1)/4 → 4배 화소로 t·차·4 */
    }
    if (!K) { id_sp_at[p] = id_start[p] + 1u; id_sp_b[p] = sb; }   /* 99h: K 를 모르는데 그린다 = 순환으로 고르게 펴는 중 */
+   id_ti_last[p] = (int8_t)ti; id_ti_sb[p] = sb;                   /* 99k */
    rq->on = 1; rq->kind = 1; rq->pr = 0; rq->t256 = 64 * (ti + 1);
    rq->e = e; rq->ti = ti; rq->A = A; rq->B = B;
    rq->ax = f0->ob_x[p]; rq->ay = f0->ob_y[p];              /* 몸 자리는 보여 줄 D 의 것 — 움직이는 몸은 그리기에서 몸 조각의 옮김만큼 더 민다(패치 98) */
@@ -2285,11 +2317,16 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
       if (sg == id_cur[p]) { if (ax != id_ax[p] || ay != id_ay[p]) id_still[p] = 0; continue; }
       if (id_cur[p])
       {  /* 움직이는 바뀜도 배운다(패치 99) — 걷기 순환을 알아야 사이 그림을 한 걸음 내내 펼 수 있다. 서기 그리기(±3)는 여전히 제자리만 */
-         unsigned hold = realn - id_start[p];
+         unsigned hold = realn - id_start[p], h3 = 0;
+         uint64_t ln = mc_ln ? mc_loop_next(id_cur[p], &h3) : 0;
+         id_prev_link[p] = (uint8_t)(ln == sg || (id_next(p, id_cur[p], id_prev[p], 0) == sg && id_loop(p, id_cur[p], sg)));
+         id_hold_prev[p] = hold;
+         id_prev_moved[p] = (uint8_t)(!id_still[p] || ax != id_ax[p] || ay != id_ay[p]);
          if (hold >= 3 && hold <= 60) id_learn_add(p, id_cur[p], sg, hold);
          id_prev[p] = id_cur[p];
       }
-      else id_prev[p] = 0;
+      else { id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; }
+      id_ti_last[p] = -1; id_ti_sb[p] = 0;
       id_cur[p] = sg; id_start[p] = realn; id_ax[p] = ax; id_ay[p] = ay; id_still[p] = 1;
    }
 }
@@ -2377,6 +2414,150 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
    }
 }
 
+/* 99j: 배경 스크롤도 ¼ px — 카메라는 2 프레임에 1 px 씩만 움직인다(대전 실측 92%). 사이 칸의 스크롤을 1배 정수로 반올림하면
+   120Hz 네 칸 중 한 칸만 움직여 배경이 30Hz 계단이었다(몸이 ¼ px 로 부드러워지자(99i) 더 눈에 띔).
+   스크롤 «바뀜» 박자는 화면 전체 하나(fg_predict4 의 Kb)로 정했는데, 어느 줄이든 값이 바뀌면 바뀜으로 쳐서
+   (실측: 한 줄의 플레인1 세로값이 2 프레임마다 0↔120 — 카메라와 엇박자) 늘 «매 프레임 바뀜»이 되어 ½ px 두 번에 그쳤다.
+   → 플레인·줄·축(값 4개)마다 따로 «지난 바뀜 L · 다음 바뀜 K»를 찾아 τ 의 정확한 자리(4배 화소)를 낸다.
+   1배 그림을 그릴 때 그 자리가 1배 그림의 정수 자리와 다른 줄은 ① 스프라이트만의 맨 앞(깊이·색) ② 플레인 줄(그 자리의
+   정수 스크롤로, 화면 한 칸 더 넓게, 세로 ¼ 이 걸치면 다음 행도)을 남기고, 4배로 늘릴 때(내보내기·몸 조각) 4배 화소마다
+   «스프라이트 · ¼ px 옮긴 앞 플레인 · 뒤 플레인 · 배경색» 중 앞의 것을 고른다 */
+typedef struct {
+   int on;
+   uint8_t  sz[SS2FG_H][SS2FG_W];                      /* 스프라이트만의 맨 앞 깊이(0 = 없음) */
+   uint16_t sc[SS2FG_H][SS2FG_W];                      /* 그 색 */
+   uint8_t  sz2[SS2FG_H][SS2FG_W];                     /* 포즈 섞기 줄: 둘째 판(다음 포즈)의 스프라이트만 */
+   uint16_t sc2[SS2FG_H][SS2FG_W];
+   uint8_t  pp[SS2FG_H];                               /* 포즈 섞기 줄 — 두 판을 각각 고른 뒤 섞는다 */
+   int      ppa;                                      /* 섞는 비율(t_spr) */
+   uint16_t pf[2][SS2FG_H][SS2FG_W + 1];               /* 앞 플레인: [0] 그 줄의 행, [1] 다음 행(세로 ¼ 이 걸칠 때만) — 0xFFFF = 빈 */
+   uint16_t pb[2][SS2FG_H][SS2FG_W + 1];               /* 뒤 플레인 */
+   int8_t   rfx[SS2FG_H], rfy[SS2FG_H], rbx[SS2FG_H], rby[SS2FG_H];   /* 정수 스크롤 다음의 ¼ px(0..3) */
+   uint8_t  wx0[SS2FG_H], wx1[SS2FG_H], any[SS2FG_H];
+   uint16_t back[SS2FG_H];                             /* 배경색(12비트, 반전 반영) */
+} fg_sp_t;
+static fg_sp_t fg_sp[2];
+static unsigned sp_lastc[SS2FG_H][4];                  /* 값마다 지난 바뀜(실제 프레임 번호) */
+static int8_t   sp_lastd[SS2FG_H][4];                  /* 그 바뀜의 방향(-1·+1) */
+static int16_t  sp_E[2][SS2FG_H][4];                   /* τD·τD+½ 의 정확한 옮김(4배 화소, D 값 기준) */
+static uint8_t  sp_planned[2];
+static int      sp_stats[4];                           /* 시험용: 계획한 칸·옮긴 줄·포즈 섞기 칸·끔(이펙트 섞기) */
+static inline uint8_t sp_v(const ss2fg_regs *r, int v) { return v == 0 ? r->s1x : v == 1 ? r->s1y : v == 2 ? r->s2x : r->s2y; }
+int ss2fg_scroll_plan(const ss2fg_frame *fp, const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn)
+{
+   int y, v, h, m = 0;
+   fg_sp[0].on = fg_sp[1].on = 0;
+   sp_planned[0] = sp_planned[1] = 0;
+   if (!f0 || !f0->valid || f0->mono) return 0;
+   if (fp && !fp->valid) fp = 0;
+   if (f1 && !f1->valid) f1 = 0;
+   if (f2 && !f2->valid) f2 = 0;
+   for (y = 0; y < SS2FG_H; y++)
+      for (v = 0; v < 4; v++)
+      {
+         uint8_t a0 = sp_v(&f0->line[y], v);
+         int K = 0, d = 0, rel, L;
+         if (fp && sp_v(&fp->line[y], v) != a0)
+         {
+            sp_lastc[y][v] = realn;
+            sp_lastd[y][v] = (int8_t)((int8_t)(uint8_t)(a0 - sp_v(&fp->line[y], v)) > 0 ? 1 : -1);
+         }
+         sp_E[0][y][v] = sp_E[1][y][v] = 0;
+         if (f1 && sp_v(&f1->line[y], v) != a0) { K = 1; d = (int8_t)(uint8_t)(sp_v(&f1->line[y], v) - a0); }
+         else if (f2 && sp_v(&f2->line[y], v) != a0) { K = 2; d = (int8_t)(uint8_t)(sp_v(&f2->line[y], v) - a0); }
+         if (!K || d > SS2FG_SCROLL_MAX_STEP || d < -SS2FG_SCROLL_MAX_STEP) continue;   /* 안 바뀜 · 장면 전환 */
+         rel = (int)(sp_lastc[y][v] - realn);
+         if (rel > 0 || rel < -64) rel = -64;
+         /* 흔들림은 옮기지 않는다 — 큰 한 걸음(3 px 이상)이나 막(4 프레임 안) 반대로 간 것. 대전 실측: 세로 값의 바뀜은 거의 다
+            맞을 때의 화면 흔들림(7→6→…→1 px 로 줄며 2 프레임마다 오감), 가로 카메라는 1 px. 흔들림을 사이 칸으로 이으면
+            배경이 출렁여(흔들림 대신 물결) 원래처럼 두 프레임씩 끊어 보인다 */
+         if (d >= 3 || d <= -3 || (rel >= -4 && sp_lastd[y][v] && (d > 0) != (sp_lastd[y][v] > 0))) continue;
+         L = rel > K - 2 ? rel : K - 2;                                                 /* 전체 박자와 같은 규칙(K-2 이상) */
+         for (h = 0; h < 2; h++)
+         {
+            int t = (256 * (h - 2 * L)) / (2 * (K - L)), e = d * t;
+            e = e >= 0 ? (e + 32) >> 6 : -((-e + 32) >> 6);
+            sp_E[h][y][v] = (int16_t)e;
+            if (e) m |= 1 << h;
+         }
+      }
+   sp_planned[0] = sp_planned[1] = 1;
+   return m;
+}
+/* 플레인 한 행(화면 0..W, 한 칸 더) — draw_scroll·draw_pattern 과 같은 화소, 창은 안 자른다(4배로 고를 때 자른다) */
+static void sp_row(const ss2fg_frame *f, const ss2fg_regs *r, int plane, uint8_t sx, uint8_t line, uint16_t *out)
+{
+   const uint8_t *map = f->scroll + (plane == 2 ? 0x0800 : 0) + (((unsigned)(line >> 3) << 5) << 1);
+   const uint8_t *pal = f->pal + (plane == 2 ? 0x0100 : 0x0080);
+   unsigned row = line & 7;
+   int X = 0;
+   while (X <= SS2FG_W)
+   {
+      unsigned px = (unsigned)(X + sx) & 0xFF, j = px & 7;
+      uint16_t d = ld16(map + ((px >> 3) << 1));
+      unsigned tiley = (d & 0x4000) ? 7 - row : row;
+      int index = ld16(f->chr + ((d & 0x01FF) * 16) + (tiley * 2));
+      const uint8_t *pp = pal + (((d & 0x1E00) >> 9) << 3);
+      if (d & 0x8000) index = mirrored[(index & 0xff00) >> 8] | (mirrored[index & 0xff] << 8);
+      for (; j < 8 && X <= SS2FG_W; j++, X++)
+      {
+         unsigned ci = (index >> ((7 - j) * 2)) & 3;
+         if (!ci) out[X] = 0xFFFF;
+         else
+         {
+            uint16_t c = ld16(pp + (ci << 1));
+            if (r->neg) c = (uint16_t)~c;
+            out[X] = (uint16_t)(c & 0x0FFF);
+         }
+      }
+   }
+}
+/* 스프라이트만 맨 앞(zs 깊이·sc 색, 0 = 없음) · 앞 플레인 f · 뒤 플레인 b(0xFFFF = 빈) · 배경색 중 앞 */
+static inline unsigned sp_pick(int zs, unsigned sc, unsigned f, unsigned b, unsigned back)
+{
+   if (zs > ZD_FG_SCROLL) return sc;
+   if (f != 0xFFFF) return f;
+   if (zs > ZD_BG_SCROLL) return sc;
+   if (b != 0xFFFF) return b;
+   return zs > 0 ? sc : back;
+}
+/* 4배 화소 (X, 4y+sy) 의 색(12비트) — zs·sc = 그 1배 화소의 스프라이트만 맨 앞(깊이 0 = 없음). *zw = 이긴 깊이(0 = 배경색) */
+static unsigned sp_px(const fg_sp_t *sp, int y, int sy, int X, int zs, unsigned sc, int *zw)
+{
+   int best = zs;
+   unsigned c = sc;
+   uint16_t v;
+   v = sp->pf[sy + sp->rfy[y] >= 4][y][(X + sp->rfx[y]) >> 2];
+   if (v != 0xFFFF && ZD_FG_SCROLL > best) { best = ZD_FG_SCROLL; c = v; }
+   v = sp->pb[sy + sp->rby[y] >= 4][y][(X + sp->rbx[y]) >> 2];
+   if (v != 0xFFFF && ZD_BG_SCROLL > best) { best = ZD_BG_SCROLL; c = v; }
+   if (best <= 0) c = sp->back[y];
+   if (zw) *zw = best;
+   return c;
+}
+void ss2fg_scroll_stats(int *out4) { int i; for (i = 0; i < 4; i++) out4[i] = sp_stats[i]; }
+/* 99l: 사무쇼2 는 큰 타격 때 창(window) 폭을 0 으로 접어 화면 전체를 창 밖 색(흰 fff·검은 000)으로 1 프레임 칠한다
+   (실측: 반전 NEG 는 한 번도 안 씀). 줄의 9할 넘게 창 밖이면 그런 프레임 */
+int ss2fg_flash_frame(const ss2fg_frame *f, uint16_t *c12)
+{
+   int y, n = 0;
+   if (!f || !f->valid || f->mono) return 0;
+   for (y = 0; y < SS2FG_H; y++)
+   {
+      const ss2fg_regs *r = &f->line[y];
+      if (!(y >= r->winy && y < r->winy + r->winh && r->winw > 0 && r->winx < SS2FG_W)) n++;
+   }
+   if (n * 10 < SS2FG_H * 9) return 0;
+   if (c12)
+   {
+      const ss2fg_regs *r = &f->line[SS2FG_H / 2];
+      uint16_t c = ld16(f->pal + 0x01F0 + ((r->oowc & 7) << 1));
+      if (r->neg) c = (uint16_t)~c;
+      *c12 = (uint16_t)(c & 0x0FFF);
+   }
+   return 1;
+}
+
 /* 99i: 지금 포즈 그대로 4배로(사이 그림 없이 ¼ px 자리만 옮길 때) */
 static void id_draw_self(const id_pose *P, uint16_t *out)
 {
@@ -2401,9 +2582,9 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
    static uint16_t id_tc2[(ID_W * ID_S) * (ID_H * ID_S)];
    struct { int on, kind, W4, gh, ux0, uy0, sh4x, sh4y, x0, y0, x1, y1, depth, first, cur; const uint16_t *img; uint8_t m[64], minv[64]; } dr[2];
    id_req_t self[2];
-   uint8_t skip[64], zrow[256], bz[256];
-   int16_t srow[256], brow[2][256];
-   uint16_t scan[256], bscan[256];
+   uint8_t skip[64], zrow[256], bz[256], szr[256];
+   int16_t srow[256], brow[2][256], ssr[256];
+   uint16_t scan[256], bscan[256], scr[256];
    int s = id_slot, p, q, k;
    if (s < 0 || s > 1 || !id_on) return;
    memset(dr, 0, sizeof dr);
@@ -2484,6 +2665,7 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
          int in_win = (y >= rb->winy) && (y < rb->winy + rb->winh);
          int wx0 = rb->winx, wx1 = imin(rb->winx + rb->winw, SS2FG_W);
          int hb[2];
+         int spl = fg_sp[s].on && fg_sp[s].any[y];             /* 99j: 배경을 ¼ px 옮긴 줄 */
          for (q = 0; q < 2; q++)
          {  /* (main) 캐시 그림은 지금 프레임(D)에서 그 화소를 칠한 그 몸 조각의 슬롯으로 겹친다 — 그 몸 조각만 그린 줄(brow, 없으면 −1) */
             hb[q] = dr[q].on && dr[q].kind == 1 && y >= dr[q].y0 && y < dr[q].y1;
@@ -2492,7 +2674,9 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
             render_line(base, to_scr, offx, offy, t_scr, y, bscan);
          }
          rl_skip = skip; rl_zout = zrow; rl_slot = srow;
+         if (spl) { rl_sprz = szr; rl_sprc = scr; rl_sprs = ssr; }   /* 99j: 몸 뺀 줄의 스프라이트만 맨 앞(몸 조각만 그린 brow 줄에는 안 씀) */
          render_line(base, to_scr, offx, offy, t_scr, y, scan);
+         rl_sprz = 0; rl_sprc = 0; rl_sprs = 0;
          for (sy = 0; sy < ID_S; sy++)
          {
             uint16_t *dst = pt->px + ((y - y0) * ID_S + sy) * ((x1 - x0) * ID_S);
@@ -2507,6 +2691,12 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
                {
                   uint16_t c = scan[x];
                   int z = zrow[x], sl = srow[x], win = -1, wbv = 0;
+                  if (spl && in_win && x >= wx0 && x < wx1)
+                  {  /* 99j: 몸 뺀 줄의 스프라이트 · ¼ px 옮긴 플레인 · 배경색 중 앞 */
+                     int zw;
+                     c = (uint16_t)sp_px(&fg_sp[s], y, sy, x * ID_S + sx, szr[x], scr[x], &zw);
+                     z = zw; sl = (zw > 0 && !(zw & 1)) ? ssr[x] : -1;
+                  }
                   if (in_win && x >= wx0 && x < wx1)
                      for (q = 0; q < 2; q++)                     /* 두 몸 — 앞뒤는 우선순위, 같으면 앞 슬롯 */
                      {
@@ -2540,7 +2730,9 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
 }
 
 /* 내보내기 — 원래 그림(화면 형식 그대로, bpp 2 또는 4)을 4배로 늘리고 출력 칸 slot 의 조각을 색표를 거쳐 붙인다.
-   dpitch·spitch 는 화소 단위. 코어판은 16비트, 앱은 화면에 따라 16/32비트라 둘 다 받는다 */
+   dpitch·spitch 는 화소 단위. 코어판은 16비트, 앱은 화면에 따라 16/32비트라 둘 다 받는다.
+   99j: 배경을 ¼ px 옮긴 줄(fg_sp)은 창 안을 4배 화소마다 «스프라이트 · ¼ px 옮긴 앞 플레인 · 뒤 플레인 · 배경색» 중 앞으로
+   다시 고른다(12비트 → colormap). 세로 ¼ 이 안 걸친 아래 칸은 같은 줄이라 베끼고, 1배 칸마다 앞·뒤 플레인 두 칸만 본다 */
 #define ID_COMPOSE(T)                                                                                     \
    {                                                                                                      \
       T *dst = (T *)dstv; const T *src = (const T *)srcv;                                                 \
@@ -2548,6 +2740,44 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
       {                                                                                                   \
          T *row = dst + (size_t)(y * ID_S) * dpitch;                                                      \
          const T *s = src + (size_t)y * spitch;                                                           \
+         if (sp && sp->any[y])                                                                            \
+         {  /* 99j: 창 안은 다시 고르고 창 밖은 그대로 */                                                 \
+            const uint8_t *SZ = sp->sz[y], *SZ2 = sp->sz2[y];                                             \
+            const uint16_t *SC = sp->sc[y], *SC2 = sp->sc2[y];                                            \
+            int wx0 = sp->wx0[y], wx1 = sp->wx1[y], rfx = sp->rfx[y], rbx = sp->rbx[y], pk = -1, pp = sp->pp[y]; \
+            unsigned back = sp->back[y];                                                                  \
+            for (sy = 0; sy < ID_S; sy++)                                                                 \
+            {                                                                                             \
+               T *r = row + (size_t)sy * dpitch;                                                          \
+               int ff = sy + sp->rfy[y] >= ID_S, fb = sy + sp->rby[y] >= ID_S, key = ff | (fb << 1);      \
+               const uint16_t *F = sp->pf[ff][y], *Bk = sp->pb[fb][y];                                    \
+               if (key == pk) { memcpy(r, r - dpitch, (size_t)w * ID_S * sizeof(T)); continue; }          \
+               pk = key;                                                                                  \
+               for (x = 0; x < w; x++)                                                                    \
+               {                                                                                          \
+                  T *o = r + x * ID_S, lo = 0;                                                            \
+                  unsigned lf = 0x10000, lb = 0x10000;                                                    \
+                  int i;                                                                                  \
+                  if (x < wx0 || x >= wx1) { o[0] = o[1] = o[2] = o[3] = s[x]; continue; }                \
+                  for (i = 0; i < ID_S; i++)                                                              \
+                  {                                                                                       \
+                     unsigned f = F[x + ((i + rfx) >> 2)], b = Bk[x + ((i + rbx) >> 2)];                  \
+                     if (f != lf || b != lb)                                                              \
+                     {                                                                                    \
+                        unsigned c = sp_pick(SZ[x], SC[x], f, b, back);                                   \
+                        if (pp)                                                                           \
+                        {  /* 포즈 섞기 — 1배 그림처럼 두 판이 다른 곳만 섞는다 */                       \
+                           unsigned c2 = sp_pick(SZ2[x], SC2[x], f, b, back);                             \
+                           if (c2 != c) c = mix12((uint16_t)c, (uint16_t)c2, sp->ppa);                    \
+                        }                                                                                 \
+                        lo = (T)colormap[c & 4095]; lf = f; lb = b;                                       \
+                     }                                                                                    \
+                     o[i] = lo;                                                                           \
+                  }                                                                                       \
+               }                                                                                          \
+            }                                                                                             \
+            continue;                                                                                     \
+         }                                                                                                \
          for (x = 0; x < w; x++)                                                                          \
          {                                                                                                \
             T v = s[x];                                                                                   \
@@ -2572,6 +2802,7 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
 void ss2fg_idle_compose(void *dstv, int dpitch, const void *srcv, int spitch, int w, int h, int bpp, const uint32_t *colormap, int slot)
 {
    int y, x, sy, p;
+   const fg_sp_t *sp = (slot == 0 || slot == 1) && fg_sp[slot].on && colormap && w == SS2FG_W && h == SS2FG_H ? &fg_sp[slot] : 0;   /* 99j */
    if (bpp == 4) ID_COMPOSE(uint32_t)
    else          ID_COMPOSE(uint16_t)
 }
@@ -2713,9 +2944,71 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
       pp_ymin = ymin; pp_ymax = ymax;
    }
 
+   {  /* 99j: 이 칸(4배 내보내기)의 배경 스크롤 ¼ px — 줄마다 계획한 자리가 1배 그림의 정수 자리와 다르면 다시 고를 줄 */
+      fg_sp_t *sp = (id_slot == 0 || id_slot == 1) ? &fg_sp[id_slot] : 0;   /* (main) 16·32비트 모두 — 조각처럼 12비트로 두고 compose 가 색표로 */
+      if (sp)
+      {
+         int hh = id_slot;
+         sp->on = 0;
+         if (sp_planned[hh] && pp_on) sp_stats[2]++;              /* 포즈 섞기 칸(켬 — 두 판 따로 고름) */
+         if (sp_planned[hh] && fx_fade_on) sp_stats[3]++;
+         sp->ppa = t_spr;
+         if (sp_planned[hh] && !fx_fade_on)
+         {
+            sp_stats[0]++;
+            for (y = 0; y < SS2FG_H; y++)
+            {
+               const ss2fg_regs *rb = &base->line[y];
+               int v, need = 0, I[4], R[4], fv, bv, fpl, bpl;
+               sp->any[y] = 0; sp->pp[y] = 0;
+               if (!(y >= rb->winy && y < rb->winy + rb->winh)) continue;
+               fpl = rb->swap ? 2 : 1; bpl = rb->swap ? 1 : 2;
+               fv = fpl == 1 ? 0 : 2; bv = bpl == 1 ? 0 : 2;
+               for (v = 0; v < 4; v++)
+               {
+                  int E = sp_E[hh][y][v], G = 0, on = (v >> 1) == (fv >> 1) ? (base->layers & 2) : (base->layers & 1);
+                  I[v] = R[v] = 0;
+                  if (!on) continue;
+                  if (to_scr) G = (int8_t)(uint8_t)(lerp_wrap8(sp_v(rb, v), sp_v(&to_scr->line[y], v), t_scr) - sp_v(rb, v));
+                  I[v] = E >= 0 ? E >> 2 : -((-E + 3) >> 2);
+                  R[v] = E - 4 * I[v];
+                  if (E != 4 * G) need = 1;
+               }
+               if (!need) continue;
+               {
+                  uint16_t bc = ld16(base->pal + 0x01E0 + ((rb->bgc & 7) << 1));
+                  uint8_t fsx = (uint8_t)(sp_v(rb, fv) + I[fv]), fsy = (uint8_t)(sp_v(rb, fv + 1) + I[fv + 1]);
+                  uint8_t bsx = (uint8_t)(sp_v(rb, bv) + I[bv]), bsy = (uint8_t)(sp_v(rb, bv + 1) + I[bv + 1]);
+                  sp->back[y] = (uint16_t)((rb->neg ? (uint16_t)~bc : bc) & 0x0FFF);
+                  sp->wx0[y] = rb->winx; sp->wx1[y] = (uint8_t)imin(rb->winx + rb->winw, SS2FG_W);
+                  sp->rfx[y] = (int8_t)R[fv]; sp->rfy[y] = (int8_t)R[fv + 1];
+                  sp->rbx[y] = (int8_t)R[bv]; sp->rby[y] = (int8_t)R[bv + 1];
+                  if (base->layers & 2)
+                  {
+                     sp_row(base, rb, fpl, fsx, (uint8_t)(y + fsy), sp->pf[0][y]);
+                     if (R[fv + 1]) sp_row(base, rb, fpl, fsx, (uint8_t)(y + fsy + 1), sp->pf[1][y]);
+                  }
+                  else { for (x = 0; x <= SS2FG_W; x++) sp->pf[0][y][x] = sp->pf[1][y][x] = 0xFFFF; }
+                  if (base->layers & 1)
+                  {
+                     sp_row(base, rb, bpl, bsx, (uint8_t)(y + bsy), sp->pb[0][y]);
+                     if (R[bv + 1]) sp_row(base, rb, bpl, bsx, (uint8_t)(y + bsy + 1), sp->pb[1][y]);
+                  }
+                  else { for (x = 0; x <= SS2FG_W; x++) sp->pb[0][y][x] = sp->pb[1][y][x] = 0xFFFF; }
+               }
+               sp->any[y] = 1; sp->on = 1; sp_stats[1]++;
+            }
+         }
+         sp_planned[hh] = 0;
+      }
+   }
    for (y = 0; y < SS2FG_H; y++)
    {
+      fg_sp_t *sp = ((id_slot == 0 || id_slot == 1) && fg_sp[id_slot].on && fg_sp[id_slot].any[y]) ? &fg_sp[id_slot] : 0;
+      if (sp) { rl_sprz = sp->sz[y]; rl_sprc = sp->sc[y]; }
       render_line(base, to_scr, have_off ? offx : 0, offy, t_scr, y, scan);
+      rl_sprz = 0; rl_sprc = 0;
+      if (sp && pp_on && y >= pp_ymin && y <= pp_ymax) { sp->pp[y] = 1; rl_sprz = sp->sz2[y]; rl_sprc = sp->sc2[y]; }
       if (pp_on && y >= pp_ymin && y <= pp_ymax)
       {
          uint16_t scan2[256];
@@ -2726,6 +3019,7 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
          for (x = 0; x < SS2FG_W; x++)
             if (scan2[x] != scan[x]) scan[x] = mix12(scan[x], scan2[x], a);
       }
+      rl_sprz = 0; rl_sprc = 0;
       if (bpp == 4)
       {
          uint32_t *row = (uint32_t *)dst + (size_t)y * pitch_px;
