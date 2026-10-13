@@ -111,12 +111,18 @@ int  ss2fg_idle_on(void);
 void ss2fg_idle_slot(int s);
 void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn);
 int  ss2fg_idle_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn, int h, int slot);
+/* 99o: 제자리에서 3~5 프레임씩 포즈를 넘기는 줄기 중이라 2 프레임 더(D+3·D+4) 미리 보고 싶은가(관찰 뒤, 계획 전에) · 그 두 프레임을 계획에 준다(없으면 0) */
+int  ss2fg_idle_want_far(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn);
+void ss2fg_idle_far(const ss2fg_frame *f3, const ss2fg_frame *f4);
 void ss2fg_idle_compose(void *dst, int dpitch_px, const void *src, int spitch_px, int w, int h, int bpp, const uint32_t *colormap, int slot);
 /* 99j: 배경 스크롤 ¼ px — 실제 프레임마다 한 번(D-1·D·D+1·D+2). 반환 비트0·1 = τD·τD+½ 에 옮길 줄이 있음 */
 int  ss2fg_scroll_plan(const ss2fg_frame *fp, const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn);
 void ss2fg_scroll_stats(int *out4);  /* 시험용 계기 */
 /* 99l: 화면 전체 번쩍 — 창이 접혀(거의 모든 줄이 창 밖) 화면이 창 밖 색 한 가지인 프레임. c12 = 그 색(12비트, 반전 반영) */
 int  ss2fg_flash_frame(const ss2fg_frame *f, uint16_t *c12);
+/* 99n: 플레인 깜빡임 — 줄마다 플레인 스크롤을 1~2 프레임 간격으로 멀리 옮겼다 되돌리는(이펙트를 켰다 껐다) 박자를 찾아, 그 줄을
+   다른 위상(지난 프레임)의 그 플레인으로 다시 고른 1배 색(oc, 12비트)·바뀐 칸(om=1)·줄 표시(oline). h[0..6] = D-4..D+2. 반환 = 바뀐 칸 수 */
+int  ss2fg_flicker_plan(const ss2fg_frame *const *h, uint16_t *oc, uint8_t *om, uint8_t *oline);
 void ss2fg_idle_stats(int *out6);   /* 시험용 계기: 배운 바뀜 / 계획 / 조각 / 미리 본 다른 포즈 / 이동표 / 그림 */
 /* 모션 캐시(패치 97) — 시스템 폴더 ss2_motion.bin. open 반환 = 바뀜 수 또는 -1 */
 int  ss2fg_motion_open(const char *path);

@@ -715,13 +715,48 @@ static void fl_apply(uint16_t *buf, int w, int h, int pitch)
    for (y = 0; y < h; y++) memcpy(fl_prev + (size_t)y * w, buf + (size_t)y * pitch, (size_t)w * sizeof(uint16_t));   /* 곧 번쩍 — 지금 화면을 남김 */
    fl_w = w; fl_h = h; fl_have = 1;
 }
+/* 99n: 플레인 깜빡임 섞기 — 실제 프레임마다 ss2fg_flicker_plan 이 낸 «다른 위상» 1배 색(565 로 바꿔 둠)을 바뀐 칸에만 섞는다.
+   약하게 25%(켜짐·꺼짐 차이 절반) · 거의 없게 50%(두 위상이 같아져 안 깜빡임). 필살기 빛기둥(2 프레임 켜짐·꺼짐, 화면 ⅕~¼)이
+   반투명 기둥으로 보인다. scale 1 = 1배 출력, 4 = 4배(640×608). y0 = 게임 그림 첫 줄(위 띠) */
+static uint16_t pf_oc[FB_WIDTH * FB_HEIGHT];
+static uint8_t  pf_om[FB_WIDTH * FB_HEIGHT], pf_line[FB_HEIGHT];
+static int      pf_n = 0;
+static void pf_apply(uint16_t *buf, int scale, int pitch, int y0)
+{
+   int a, y, x, sy, sx;
+   if (!fl_opt || !pf_n) return;
+   a = fl_opt == 1 ? 64 : 128;
+   for (y = 0; y < FB_HEIGHT; y++)
+   {
+      const uint8_t *m = pf_om + y * FB_WIDTH;
+      const uint16_t *o = pf_oc + y * FB_WIDTH;
+      if (!pf_line[y]) continue;
+      for (sy = 0; sy < scale; sy++)
+      {
+         uint16_t *row = buf + (size_t)(y0 + y * scale + sy) * pitch;
+         for (x = 0; x < FB_WIDTH; x++)
+         {
+            int orr, og, ob;
+            if (!m[x]) continue;
+            orr = (o[x] >> 11) & 31; og = (o[x] >> 5) & 63; ob = o[x] & 31;
+            for (sx = 0; sx < scale; sx++)
+            {
+               uint16_t *p = row + x * scale + sx;
+               int r = (*p >> 11) & 31, g = (*p >> 5) & 63, b = *p & 31;
+               r += ((orr - r) * a) / 256; g += ((og - g) * a) / 256; b += ((ob - b) * a) / 256;
+               *p = (uint16_t)((r << 11) | (g << 5) | b);
+            }
+         }
+      }
+   }
+}
 static uint16_t idle_out4[(FB_WIDTH * 4) * (FB_HEIGHT * 4)];
 static int fg_predict4(int ra)
 {
    int k, mp0, m01, m12, Ks, Ls, Kb, Lb, rel, extra = 0, p;
    int ts0, ts1, tb0, tb1;
    int ov[2] = { 0, 0 }, ovx0[2], ovy0[2], ovx1[2], ovy1[2], id0 = 0, id1 = 0, spm = 0;
-   const ss2fg_frame *f0, *f1, *f2, *fp, *tos, *tob, *fk[5];
+   const ss2fg_frame *f0, *f1, *f2, *fp, *tos, *tob, *fk[5], *fx3 = 0, *fx4 = 0;
 
    if (!ss2fg_hist(0)) return 0;
    if (!fg_snap_save()) return 0;
@@ -739,6 +774,13 @@ static int fg_predict4(int ra)
    if (idle_opt && ss2comm_rom_is_ss2())
    {  /* 서기 사이 그림 — 보여 줄 D 를 관찰하고, τD·τD+½ 의 사이 그림을 계획(미리 돌린 D+1·D+2 로 확인) */
       ss2fg_idle_observe(f0, fg_realn);
+      if (ss2fg_idle_want_far(f0, f1, f2, fg_realn))
+      {  /* 99o: 제자리에서 3~5 프레임씩 포즈를 넘기는 줄기(승리 포즈·필살기 등) — 2 프레임 더 미리 돌려 뒤 포즈를 일찍 본다 */
+         fg_hidden(2, 0);
+         extra = 2;
+         fx4 = ss2fg_hist(0); fx3 = ss2fg_hist(1);
+      }
+      ss2fg_idle_far(fx3, fx4);
       id0 = ss2fg_idle_plan(f0, f1, f2, fg_realn, 0, 0);
       id1 = fg_no_next ? 0 : ss2fg_idle_plan(f0, f1, f2, fg_realn, 1, 1);
       spm = ss2fg_scroll_plan(fp, f0, f1, f2, fg_realn);  /* 99j: 배경 스크롤을 플레인·줄마다 제 박자로 ¼ px */
@@ -750,6 +792,17 @@ static int fg_predict4(int ra)
       fl_cur = a0 && (!a1 || !a2);
       fl_soon = !a0 && (a1 || a2);
       if (fl_cur) fl_col = (uint16_t)NGPGfx->ColorMap[c12 & 4095];
+   }
+   pf_n = 0;
+   if (fl_opt && ss2comm_rom_is_ss2())
+   {  /* 99n: 플레인 깜빡임(필살기 빛기둥 등) — 다른 위상과 섞을 칸 */
+      const ss2fg_frame *hh[7];
+      int i;
+      for (i = 0; i < 7; i++) hh[i] = ss2fg_hist(6 - i + extra); /* D-4 .. D+2 (99o: 2 프레임 더 돌렸으면 그만큼 밀림) */
+      pf_n = ss2fg_flicker_plan(hh, pf_oc, pf_om, pf_line);
+      if (pf_n)
+         for (i = 0; i < FB_WIDTH * FB_HEIGHT; i++)
+            if (pf_line[i / FB_WIDTH] && pf_om[i]) pf_oc[i] = (uint16_t)NGPGfx->ColorMap[pf_oc[i] & 4095];
    }
 
    /* 스프라이트: 다음 바뀌는 프레임 K(D 기준 +1/+2), 지난번 바뀐 때 L(≤0, K-2 이상) */
@@ -767,7 +820,7 @@ static int fg_predict4(int ra)
    tb0 = fg_tpos(Kb, Lb, 0); tb1 = fg_tpos(Kb, Lb, 1);
 
    /* 몸 따로 박자 */
-   fk[0] = f0; fk[1] = f1; fk[2] = f2; fk[3] = fk[4] = 0;
+   fk[0] = f0; fk[1] = f1; fk[2] = f2; fk[3] = fx3; fk[4] = fx4;   /* 99o: 이미 2 프레임 더 돌렸으면 그것 */
    for (p = 0; p < 2 && f0 && f0->body_ok; p++)
    {
       int Kp = 0, Lp, lrel = (int)fg_last_body[p] - (int)fg_realn, dx, dy;
@@ -1580,7 +1633,7 @@ void retro_run(void)
 
       {
          int ra = hidden ? 0 : ra_frames();                     /* 런어헤드: 보여 줄 그림을 ra 프레임 앞 것으로 */
-         if (!hidden) fl_cur = fl_soon = 0;                     /* 99l: 예측 4배(fg_predict4)가 다시 정한다 */
+         if (!hidden) { fl_cur = fl_soon = 0; pf_n = 0; }       /* 99l·99n: 예측 4배(fg_predict4)가 다시 정한다 */
          if (fg_active)
          {
             memcpy(fg_real, surf->pixels, sizeof fg_real);        /* 후처리 전 원본 — 합성 실패·보간 모드용 */
@@ -1673,6 +1726,7 @@ void retro_run(void)
          게임 그림을 가운데로 옮겨 넓은 캔버스(288px)로 내보낸다 */
       const uint16_t *fbuf = (const uint16_t *)surf->pixels;
       unsigned y;
+      if (!ss2_paused && !hidden) pf_apply((uint16_t *)surf->pixels, 1, FB_WIDTH, ss2comm_band_top() ? ss2comm_band_h() : 0);   /* 99n */
       if (!ss2_paused && !hidden) fl_apply((uint16_t *)surf->pixels, (int)width, (int)height, FB_WIDTH);   /* 99l */
       for (y = 0; y < height; y++)
          memcpy(ss2_wide + y * SS2_WIDE_W + SS2_SIDE_W, fbuf + y * FB_WIDTH,
@@ -1690,11 +1744,13 @@ void retro_run(void)
       if (idle_opt && ss2comm_rom_is_ss2() && !hidden && width == FB_WIDTH && height == FB_HEIGHT)
       {  /* 서기 사이 그림 — 4배로 늘리고 이번 출력의 조각을 붙여 640×608 로 */
          ss2fg_idle_compose(idle_out4, FB_WIDTH * 4, surf->pixels, FB_WIDTH, (int)width, (int)height, 2, NGPGfx->ColorMap, idle_out_slot);
+         if (!ss2_paused) pf_apply(idle_out4, 4, FB_WIDTH * 4, 0);   /* 99n */
          if (!ss2_paused) fl_apply(idle_out4, (int)width * 4, (int)height * 4, FB_WIDTH * 4);   /* 99l */
          video_cb(idle_out4, width * 4, height * 4, FB_WIDTH * 4 * 2);
       }
       else
       {
+         if (!ss2_paused && !hidden) pf_apply((uint16_t *)surf->pixels, 1, FB_WIDTH, ss2comm_band_top() ? ss2comm_band_h() : 0);   /* 99n */
          if (!ss2_paused && !hidden) fl_apply((uint16_t *)surf->pixels, (int)width, (int)height, FB_WIDTH);   /* 99l */
          video_cb(surf->pixels, width, height, FB_WIDTH * 2);
       }

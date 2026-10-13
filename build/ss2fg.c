@@ -1445,6 +1445,12 @@ static uint8_t    id_prev_link[2];  /* 99k: 앞 포즈 → 지금 포즈가 되�
 static uint8_t    id_prev_moved[2]; /* 99k: 앞 포즈 동안 몸이 움직였나(걷기) — 서기 순환은 장마다 길이가 달라(18·8·8…) 앞 걸음 길이를 안 쓴다 */
 static int8_t     id_ti_last[2];    /* 99k: 이 머묾에서 마지막으로 낸 캐시 사이 그림 칸(-1 = 아직 없음, 0·1·2 = ¼·½·¾) */
 static uint64_t   id_ti_sb[2];      /* 99k: 그때 향한 뒤 포즈 */
+static unsigned   id_hold_prev2[2];  /* 99o: 그 앞 포즈가 머문 프레임 수 */
+static uint8_t    id_prev_moved2[2]; /* 99o: 그 앞 포즈 동안 몸이 움직였나 */
+static uint8_t    id_far_want[2];    /* 99o: 이번 D 에 D+3·D+4 로 뒤 포즈를 찾을 몸 */
+static const ss2fg_frame *id_far[2]; /* 99o: 미리 더 돌린 D+3·D+4 (없으면 0) */
+static uint64_t   id_far_sb[2];      /* 99o: D+3·D+4 로 찾아 펴기 시작한 뒤 포즈 */
+static unsigned   id_far_st[2];      /* 99o: 그때 앞 포즈의 시작 프레임 */
 static int        id_ax[2], id_ay[2], id_still[2];
 static id_req_t   id_rq[2][2];               /* [출력 칸: 0 = τD, 1 = τD+½][몸] */
 static id_patch_t id_pt[2][2];
@@ -1463,6 +1469,8 @@ void ss2fg_set_idle(int on)
       memset(id_sp_at, 0, sizeof id_sp_at);
       memset(id_sp_b, 0, sizeof id_sp_b);
       memset(id_hold_prev, 0, sizeof id_hold_prev); memset(id_prev_link, 0, sizeof id_prev_link); memset(id_prev_moved, 0, sizeof id_prev_moved);
+      memset(id_hold_prev2, 0, sizeof id_hold_prev2); memset(id_prev_moved2, 0, sizeof id_prev_moved2); memset(id_far_want, 0, sizeof id_far_want);
+      id_far[0] = id_far[1] = 0; memset(id_far_sb, 0, sizeof id_far_sb); memset(id_far_st, 0, sizeof id_far_st);
       id_ti_last[0] = id_ti_last[1] = -1;
       id_pt[0][0].on = id_pt[0][1].on = id_pt[1][0].on = id_pt[1][1].on = 0;
    }
@@ -2160,7 +2168,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
 {
    uint8_t mm[64];
    uint64_t sb = 0;
-   int k, K = 0, L, num, ti;
+   int k, K = 0, L, num, ti, seen34 = 0;
    const ss2fg_frame *fk = 0;
    mc_ent *e;
    id_pose *A, *B;
@@ -2173,6 +2181,18 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
       if (!g || !g->valid || g->mono || !g->body_ok || !body_mask(g, p, mm)) return 0;
       sg = body_sig(g, mm);
       if (sg != id_cur[p]) { sb = sg; K = k; fk = g; break; }
+   }
+   if (!K && id_far_want[p] && id_far[0])
+   {  /* 99o: 2 프레임 더 미리 돌린 D+3·D+4 — 제자리 그대로 다른 포즈가 보이면 그때까지 고르게 편다 */
+      for (k = 3; k <= 4; k++)
+      {
+         const ss2fg_frame *g = id_far[k - 3];
+         uint64_t sg;
+         if (!g || !g->valid || g->mono || !g->body_ok || !body_mask(g, p, mm)) break;
+         if (g->ob_x[p] != id_ax[p] || g->ob_y[p] != id_ay[p]) break;      /* 움직이기 시작 — 아님 */
+         sg = body_sig(g, mm);
+         if (sg != id_cur[p]) { sb = sg; K = k; fk = g; seen34 = 1; break; }
+      }
    }
    /* 되풀이 동작(배운 순환 — 걷기 등): 다음 포즈를 미리 알면 사이 그림을 한 걸음 내내 고르게 편다(패치 99).
       바뀌기 직전 2 프레임에만 몰면, 걷기는 몸은 120Hz 로 매끄럽게 가는데 다리는 6 프레임 멈춰 미끄러지듯 보였다
@@ -2197,6 +2217,11 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          ¾ 로 툭 건너뛰었다 — 몸은 ¼ px 로 매끄럽게 가니(99i) 더 눈에 띔(유저 2026-10-14 「걷는 거 또 찐빠 난 거 같은데」).
          (main) 위의 «여기서 잰 길이»(같은 바뀜을 배운 길이)보다도 앞 걸음 길이가 먼저. measured(마지막 8 프레임 창)는 그대로 둔다 */
       if (loop && id_prev_link[p] && id_prev_moved[p] && id_hold_prev[p] >= 3 && id_hold_prev[p] <= 60) hold = id_hold_prev[p];
+      /* 99o: D+3·D+4 로 뒤 포즈를 봤으면(또는 그렇게 펴던 뒤 포즈가 이제 D+1·D+2 에 보이면) 바뀔 때까지의 실제 길이로 고르게.
+         (main) K 가 늘 0 이 아니라 measured·MC_WIN(머묾 ≤ 6 프레임 < 8)·id_back_doubt·캐시 표 갈래와는 안 엇갈린다 */
+      if (seen34) { nb = sb; hold = realn + (unsigned)K - id_start[p]; loop = 1; }
+      else if (K && id_far_sb[p] == sb && id_far_st[p] == id_start[p] && id_ti_last[p] >= 0 && id_ti_sb[p] == sb)
+      { nb = sb; hold = realn + (unsigned)K - id_start[p]; loop = 1; seen34 = 1; }
       if (loop && (K ? (int)(realn + (unsigned)K - id_start[p]) > (int)hold + 2 : 2 * (int)(realn - id_start[p]) + 6 > 2 * (int)hold + 4)
           && !(K && id_ti_last[p] >= 0 && id_ti_sb[p] == sb))   /* 99k: 같은 뒤 포즈로 펴던 중 바뀜이 보이면 이어서(¼ 로 되돌아가지 않게) */
       {  /* 99e: 배운 길이보다 오래 머묾 — 순환이 아니라 붙잡은 자세. 바뀌기 직전 2 프레임만(아래).
@@ -2209,7 +2234,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
       /* 99h: 뒤 포즈를 아직 한 번도 못 봐(기억에 없음) 앞 포즈가 보이는 동안 고르게 펴지 못했으면, 뒤 포즈가 미리 돌린 D+1·D+2 에
          보일 때 t 가 이미 끝 쪽이라 ¾ 한 장만 4 칸 내내 나왔다(¼·½ 없이 툭 — 유저 2026-10-13 「수라·나찰 고르기 화면·판 시작 전 «いざ尋常に»
          에서 120 이 제대로 안 되는 듯」: 미리보기·소개는 처음 보는 포즈가 많다). 그럴 땐 순환이 아닌 바뀜처럼 바뀌기 직전 2 프레임에 ¼·½·¾ */
-      if (loop && K && (id_sp_at[p] != id_start[p] + 1u || id_sp_b[p] != sb))
+      if (loop && K && !seen34 && (id_sp_at[p] != id_start[p] + 1u || id_sp_b[p] != sb))
          loop = 0;
       if (!K && !loop) return 0;
       if (loop)
@@ -2267,6 +2292,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
    }
    if (!K) { id_sp_at[p] = id_start[p] + 1u; id_sp_b[p] = sb; }   /* 99h: K 를 모르는데 그린다 = 순환으로 고르게 펴는 중 */
    id_ti_last[p] = (int8_t)ti; id_ti_sb[p] = sb;                   /* 99k */
+   if (seen34) { id_far_sb[p] = sb; id_far_st[p] = id_start[p]; }    /* 99o */
    rq->on = 1; rq->kind = 1; rq->pr = 0; rq->t256 = 64 * (ti + 1);
    rq->e = e; rq->ti = ti; rq->A = A; rq->B = B;
    rq->ax = f0->ob_x[p]; rq->ay = f0->ob_y[p];              /* 몸 자리는 보여 줄 D 의 것 — 움직이는 몸은 그리기에서 몸 조각의 옮김만큼 더 민다(패치 98) */
@@ -2274,6 +2300,37 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
    rq->depth = A->depth; rq->first = A->first < B->first ? A->first : B->first;
    return 1;
 }
+
+/* 99o: 판 끝 승리 포즈(10장 안팎)·필살기(12장)·등장 연출은 제자리에서 포즈를 4 프레임씩 넘긴다. 뒤 포즈는 미리 돌린 D+2 에야
+   보여 바뀌기 직전 2 프레임에만 ¼·½·¾ 를 몰았다(120Hz 여덟 칸 중 «-----¼½¾» — 유저 2026-10-14 「게임 끝나고도 적용 안 되는 거 같고」).
+   앞 두 포즈가 제자리에서 3~5(그 앞은 6까지) 프레임씩 바뀌었고 지금 포즈도 제자리에서 막(2 프레임 안) 시작했는데 D+1·D+2 에
+   아직 안 바뀌면 2 프레임 더(D+3·D+4) 미리 돌려 뒤 포즈를 일찍 본다 → 머묾 내내 «-¼¼½½¾¾¾». 그동안만 숨은 프레임 6 장(몸 박자의
+   «2 프레임 더»와 같은 길). 맞고 멈춤(히트스톱)처럼 길게 붙잡는 자세는 D+4 안에 안 바뀌어 안 건드린다 */
+int ss2fg_idle_want_far(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_frame *f2, unsigned realn)
+{
+   int p, want = 0;
+   id_far_want[0] = id_far_want[1] = 0;
+   if (!id_on || !mc_on || !mc_f || !f0 || !f0->valid || f0->mono || !f0->body_ok) return 0;
+   for (p = 0; p < 2; p++)
+   {
+      uint8_t mm[64];
+      int k, same = 1;
+      if (!id_cur[p] || !id_still[p] || realn - id_start[p] > 2) continue;
+      if (id_hold_prev[p] < 3 || id_hold_prev[p] > 5 || id_prev_moved[p]) continue;
+      if (id_hold_prev2[p] < 3 || id_hold_prev2[p] > 6 || id_prev_moved2[p]) continue;
+      if (f0->ob_x[p] != id_ax[p] || f0->ob_y[p] != id_ay[p]) continue;
+      for (k = 1; k <= 2 && same; k++)
+      {
+         const ss2fg_frame *g = k == 1 ? f1 : f2;
+         if (!g || !g->valid || g->mono || !g->body_ok || !body_mask(g, p, mm)) { same = 0; break; }
+         if (g->ob_x[p] != id_ax[p] || g->ob_y[p] != id_ay[p] || body_sig(g, mm) != id_cur[p]) same = 0;
+      }
+      if (!same) continue;
+      id_far_want[p] = 1; want = 1;
+   }
+   return want;
+}
+void ss2fg_idle_far(const ss2fg_frame *f3, const ss2fg_frame *f4) { id_far[0] = f3; id_far[1] = f4; }
 
 /* 실제 프레임마다(보여 줄 D) — 포즈 그림 기억 + 제자리 바뀜 배우기 */
 /* 포즈 맞춤(패치 99e) — 같은 포즈(지문)라도 장면·동작마다 물체 자리(RAM X·Y)와 그림 사이(왼쪽 위)와 스프라이트 우선순위가 다르다
@@ -2320,12 +2377,13 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
          unsigned hold = realn - id_start[p], h3 = 0;
          uint64_t ln = mc_ln ? mc_loop_next(id_cur[p], &h3) : 0;
          id_prev_link[p] = (uint8_t)(ln == sg || (id_next(p, id_cur[p], id_prev[p], 0) == sg && id_loop(p, id_cur[p], sg)));
+         id_hold_prev2[p] = id_hold_prev[p]; id_prev_moved2[p] = id_prev_moved[p];   /* 99o */
          id_hold_prev[p] = hold;
          id_prev_moved[p] = (uint8_t)(!id_still[p] || ax != id_ax[p] || ay != id_ay[p]);
          if (hold >= 3 && hold <= 60) id_learn_add(p, id_cur[p], sg, hold);
          id_prev[p] = id_cur[p];
       }
-      else { id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; }
+      else { id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; id_hold_prev2[p] = 0; id_prev_moved2[p] = 0; }
       id_ti_last[p] = -1; id_ti_sb[p] = 0;
       id_cur[p] = sg; id_start[p] = realn; id_ax[p] = ax; id_ay[p] = ay; id_still[p] = 1;
    }
@@ -2536,6 +2594,105 @@ static unsigned sp_px(const fg_sp_t *sp, int y, int sy, int X, int zs, unsigned 
    return c;
 }
 void ss2fg_scroll_stats(int *out4) { int i; for (i = 0; i < 4; i++) out4[i] = sp_stats[i]; }
+/* 99n: 플레인 깜빡임 섞기 — 사무쇼2 는 대전 내내 앞 플레인(플레인 1)의 스크롤을 2 프레임마다 (0,0) ↔ (x,120) 으로 옮겨 두 자리를
+   번갈아 보인다(10판 실측: 대전 처음부터 끝까지). 평소엔 둘 다 비어 안 보이지만 필살기의 빛기둥(흰·노랑, 화면 ⅕~¼)은 한쪽 자리에만
+   그려져 2 프레임 켜짐·2 프레임 꺼짐(15Hz)으로 번쩍인다 — 옛 기계의 느린 액정에서는 반투명처럼 보였을 연출.
+   줄마다 플레인 스크롤이 지금만 멀고(16px 넘게) 1~2 프레임 앞·뒤는 서로 같은(8px 안) «켰다 끄기» 박자이고, 4 프레임 앞(1·1 박자면
+   2 프레임 앞)도 지금과 같은 자리여야(되풀이) 깜빡임으로 친다. 그런 줄은 그 플레인만 다른 위상(지난 프레임)의 것으로 바꿔 다시 고른다
+   (스프라이트·다른 플레인·배경색·창은 지금 것) — 바뀐 칸만 om=1, 색은 oc(12비트). 출력에서 이 색을 섞는다(libretro.c pf_apply) */
+static int fk_d8(uint8_t a, uint8_t b) { int d = (uint8_t)(a - b); return d > 128 ? 256 - d : d; }
+static int fk_dist(const ss2fg_regs *a, const ss2fg_regs *b, int p)
+{
+   int dx = p == 1 ? fk_d8(a->s1x, b->s1x) : fk_d8(a->s2x, b->s2x);
+   int dy = p == 1 ? fk_d8(a->s1y, b->s1y) : fk_d8(a->s2y, b->s2y);
+   return dx > dy ? dx : dy;
+}
+#define FK_FAR  16
+#define FK_NEAR 8
+/* 줄 y 의 플레인 p 가 D(h[4])에서 깜빡이는 박자면 다른 위상의 지난 프레임, 아니면 0 */
+static const ss2fg_frame *fk_other(const ss2fg_frame *const *h, int y, int p)
+{
+   const ss2fg_regs *r0 = &h[4]->line[y];
+   int dk[7], k;
+   for (k = 0; k < 7; k++) dk[k] = (h[k] && h[k]->valid && !h[k]->mono) ? fk_dist(r0, &h[k]->line[y], p) : -1;
+#define FK_F(k)    (dk[k] >= FK_FAR)
+#define FK_S(k)    (dk[k] >= 0 && dk[k] <= FK_NEAR)
+#define FK_N(a, b) (fk_dist(&h[a]->line[y], &h[b]->line[y], p) <= FK_NEAR)
+   if (FK_F(3) && FK_F(6) && FK_S(5) && FK_S(0) && FK_N(3, 6)) return h[3];   /* 2·2 박자, D 가 첫 칸 — 다른 위상 D-1 */
+   if (FK_F(2) && FK_F(5) && FK_S(3) && FK_S(0) && FK_N(2, 5)) return h[2];   /* 2·2 박자, D 가 둘째 칸 — D-2 */
+   if (FK_F(3) && FK_F(5) && FK_S(2) && FK_N(3, 5)) return h[3];              /* 1·1 박자 — D-1 */
+#undef FK_F
+#undef FK_S
+#undef FK_N
+   return 0;
+}
+static void fk_row(const ss2fg_frame *f, int y, int p, int on, uint16_t *out)
+{
+   const ss2fg_regs *r = &f->line[y];
+   int X;
+   if (!on) { for (X = 0; X <= SS2FG_W; X++) out[X] = 0xFFFF; return; }
+   if (p == 1) sp_row(f, r, 1, r->s1x, (uint8_t)(y + r->s1y), out);
+   else        sp_row(f, r, 2, r->s2x, (uint8_t)(y + r->s2y), out);
+}
+int ss2fg_flicker_plan(const ss2fg_frame *const *h, uint16_t *oc, uint8_t *om, uint8_t *oline)
+{
+   static uint16_t rFD[SS2FG_W + 1], rFO[SS2FG_W + 1], rBD[SS2FG_W + 1], rBO[SS2FG_W + 1], scan[SS2FG_W], sc[SS2FG_W];
+   static uint8_t zs[SS2FG_W];
+   const ss2fg_frame *f0 = h[4];
+   int y, n = 0;
+   memset(oline, 0, SS2FG_H);
+   if (!f0 || !f0->valid || f0->mono) return 0;
+   for (y = 0; y < SS2FG_H; y++)
+   {
+      const ss2fg_regs *r0 = &f0->line[y];
+      const ss2fg_frame *o1, *o2, *oF, *oB;
+      int pF = r0->swap ? 2 : 1, x, x0, x1, any = 0, nl = 0;
+      unsigned bc;
+      if (!(y >= r0->winy && y < r0->winy + r0->winh)) continue;
+      x0 = r0->winx; x1 = imin(r0->winx + r0->winw, SS2FG_W);
+      if (x0 >= x1) continue;
+      o1 = fk_other(h, y, 1); o2 = fk_other(h, y, 2);
+      if (!o1 && !o2) continue;
+      oF = pF == 1 ? o1 : o2; oB = pF == 1 ? o2 : o1;
+      if (oF)
+      {
+         fk_row(f0, y, pF, f0->layers & 2, rFD);
+         fk_row(oF, y, pF, oF->layers & 2, rFO);
+         for (x = x0; x < x1 && !any; x++) any = rFD[x] != rFO[x];
+      }
+      if (oB)
+      {
+         fk_row(f0, y, 3 - pF, f0->layers & 1, rBD);
+         fk_row(oB, y, 3 - pF, oB->layers & 1, rBO);
+         for (x = x0; x < x1 && !any; x++) any = rBD[x] != rBO[x];
+      }
+      if (!any) continue;                               /* 두 위상 모두 비었다(평소 대전 — 줄마다 두 행만 보고 끝) */
+      if (!oF) { fk_row(f0, y, pF, f0->layers & 2, rFD); memcpy(rFO, rFD, sizeof rFO); }
+      if (!oB) { fk_row(f0, y, 3 - pF, f0->layers & 1, rBD); memcpy(rBO, rBD, sizeof rBO); }
+      {  /* 지금 프레임의 스프라이트만 맨 앞(깊이·색) — 다른 단계의 설정은 잠시 끈다 */
+         const uint8_t *sk = rl_skip; uint8_t *zo = rl_zout; int16_t *sl = rl_slot; int ppo = pp_on, ffo = fx_fade_on;
+         rl_skip = 0; rl_zout = 0; rl_slot = 0; pp_on = 0; fx_fade_on = 0;
+         rl_sprz = zs; rl_sprc = sc; rl_sprs = 0;
+         render_line(f0, 0, 0, 0, 0, y, scan);
+         rl_sprz = 0; rl_sprc = 0;
+         rl_skip = sk; rl_zout = zo; rl_slot = sl; pp_on = ppo; fx_fade_on = ffo;
+      }
+      {
+         uint16_t c = ld16(f0->pal + 0x01E0 + ((r0->bgc & 7) << 1));
+         if (r0->neg) c = (uint16_t)~c;
+         bc = c & 0x0FFF;
+      }
+      memset(om + y * SS2FG_W, 0, SS2FG_W);
+      for (x = x0; x < x1; x++)
+      {
+         unsigned d = sp_pick(zs[x], sc[x], rFD[x], rBD[x], bc), o = sp_pick(zs[x], sc[x], rFO[x], rBO[x], bc);
+         if (o == d) continue;
+         om[y * SS2FG_W + x] = 1; oc[y * SS2FG_W + x] = (uint16_t)o; nl++;
+      }
+      if (nl) { oline[y] = 1; n += nl; }
+   }
+   return n;
+}
 /* 99l: 사무쇼2 는 큰 타격 때 창(window) 폭을 0 으로 접어 화면 전체를 창 밖 색(흰 fff·검은 000)으로 1 프레임 칠한다
    (실측: 반전 NEG 는 한 번도 안 씀). 줄의 9할 넘게 창 밖이면 그런 프레임 */
 int ss2fg_flash_frame(const ss2fg_frame *f, uint16_t *c12)
