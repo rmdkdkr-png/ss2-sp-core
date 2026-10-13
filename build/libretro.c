@@ -690,13 +690,13 @@ static int fl_opt = 0;                           /* 0 끔 · 1 약하게 · 2 �
 static int fl_cur = 0, fl_soon = 0, fl_have = 0, fl_w = 0, fl_h = 0;
 static uint16_t fl_col = 0;
 static uint16_t fl_prev[(FB_WIDTH * 4) * (FB_HEIGHT * 4)];
-static void fl_apply(uint16_t *buf, int w, int h, int pitch)
+static void fl_apply0(uint16_t *buf, int w, int h, int pitch)
 {
    int x, y;
    if (!fl_opt || w <= 0 || h <= 0 || w * h > (int)(sizeof fl_prev / sizeof fl_prev[0])) { fl_have = 0; return; }
    if (fl_cur)
    {
-      int a = fl_opt == 1 ? 128 : 38, cr = (fl_col >> 11) & 31, cg = (fl_col >> 5) & 63, cb = fl_col & 31;
+      int a = fl_opt == 1 ? 64 : 20, cr = (fl_col >> 11) & 31, cg = (fl_col >> 5) & 63, cb = fl_col & 31;   /* 99p: 약하게 25% · 거의 없게 8% (125~126 은 50·15%) */
       if (!fl_have || fl_w != w || fl_h != h) return;
       for (y = 0; y < h; y++)
       {
@@ -715,6 +715,64 @@ static void fl_apply(uint16_t *buf, int w, int h, int pitch)
    for (y = 0; y < h; y++) memcpy(fl_prev + (size_t)y * w, buf + (size_t)y * pitch, (size_t)w * sizeof(uint16_t));   /* 곧 번쩍 — 지금 화면을 남김 */
    fl_w = w; fl_h = h; fl_have = 1;
 }
+/* 99p: 거의 없게 — 화면 전체 밝기가 한 출력에 크게 바뀌면(출력 전체 평균 밝기 0~255 에서 25 넘게 — 놀이 칸으론 35 쯤) 바로 앞 출력에서 25 만큼만 다가가게 섞는다.
+   창 접기가 아닌 번쩍 — 판 시작 «いざ尋常に» 흰 번쩍 뒤 검은 바탕 불꽃 3 프레임(밝기 134→34→150), 필살기 컷인 앞 어두운 2 프레임과
+   흰 바탕(150→28→238) — 이 계단이 몇 출력(120Hz 한 칸 8ms)에 나뉜다. 장면이 바뀔 때도 2~5 칸에 걸쳐 바뀐다(눈부심 막기 — WCAG·FFmpeg
+   photosensitivity 처럼 밝기 차를 줄임). 유저 2026-10-14 「번쩍 화면 전체 효과 말하는 거임」 */
+#define FL_STEP 25
+static uint16_t fl_last[(FB_WIDTH * 4) * (FB_HEIGHT * 4)];
+static int fl_last_w = 0, fl_last_h = 0, fl_last_lum = -1;
+static int fl_lum(const uint16_t *buf, int w, int h, int pitch)
+{
+   long sum = 0, cnt = 0;
+   int x, y, st = w > FB_WIDTH ? 4 : 1;
+   for (y = 0; y < h; y += st)
+   {
+      const uint16_t *r = buf + (size_t)y * pitch;
+      for (x = 0; x < w; x += st)
+      {
+         uint16_t v = r[x];
+         sum += (((v >> 11) & 31) * 8 * 54 + ((v >> 5) & 63) * 4 * 183 + (v & 31) * 8 * 19) >> 8;
+         cnt++;
+      }
+   }
+   return cnt ? (int)(sum / cnt) : 0;
+}
+static void fl_limit(uint16_t *buf, int w, int h, int pitch)
+{
+   int lum, x, y;
+   if (w <= 0 || h <= 0 || w * h > (int)(sizeof fl_last / sizeof fl_last[0])) { fl_last_lum = -1; return; }
+   lum = fl_lum(buf, w, h, pitch);
+   if (fl_last_lum >= 0 && fl_last_w == w && fl_last_h == h)
+   {
+      int d = lum - fl_last_lum, ad = d < 0 ? -d : d;
+      if (ad > FL_STEP)
+      {
+         int t = (FL_STEP * 256) / ad;
+         for (y = 0; y < h; y++)
+         {
+            uint16_t *o = buf + (size_t)y * pitch;
+            const uint16_t *s = fl_last + (size_t)y * w;
+            for (x = 0; x < w; x++)
+            {
+               int v = s[x], c = o[x];
+               int r = (v >> 11) & 31, g = (v >> 5) & 63, b = v & 31;
+               r += ((((c >> 11) & 31) - r) * t) / 256; g += ((((c >> 5) & 63) - g) * t) / 256; b += (((c & 31) - b) * t) / 256;
+               o[x] = (uint16_t)((r << 11) | (g << 5) | b);
+            }
+         }
+         lum = fl_last_lum + (d > 0 ? FL_STEP : -FL_STEP);
+      }
+   }
+   for (y = 0; y < h; y++) memcpy(fl_last + (size_t)y * w, buf + (size_t)y * pitch, (size_t)w * sizeof(uint16_t));
+   fl_last_w = w; fl_last_h = h; fl_last_lum = lum;
+}
+static void fl_apply(uint16_t *buf, int w, int h, int pitch)
+{
+   fl_apply0(buf, w, h, pitch);
+   if (fl_opt == 2) fl_limit(buf, w, h, pitch);
+   else fl_last_lum = -1;
+}
 /* 99n: 플레인 깜빡임 섞기 — 실제 프레임마다 ss2fg_flicker_plan 이 낸 «다른 위상» 1배 색(565 로 바꿔 둠)을 바뀐 칸에만 섞는다.
    약하게 25%(켜짐·꺼짐 차이 절반) · 거의 없게 50%(두 위상이 같아져 안 깜빡임). 필살기 빛기둥(2 프레임 켜짐·꺼짐, 화면 ⅕~¼)이
    반투명 기둥으로 보인다. scale 1 = 1배 출력, 4 = 4배(640×608). y0 = 게임 그림 첫 줄(위 띠) */
@@ -724,8 +782,8 @@ static int      pf_n = 0;
 static void pf_apply(uint16_t *buf, int scale, int pitch, int y0)
 {
    int a, y, x, sy, sx;
-   if (!fl_opt || !pf_n) return;
-   a = fl_opt == 1 ? 64 : 128;
+   if (fl_opt != 2 || !pf_n) return;   /* 99p: 거의 없게에만(약하게는 화면 전체 번쩍만) */
+   a = 128;
    for (y = 0; y < FB_HEIGHT; y++)
    {
       const uint8_t *m = pf_om + y * FB_WIDTH;
@@ -794,7 +852,7 @@ static int fg_predict4(int ra)
       if (fl_cur) fl_col = (uint16_t)NGPGfx->ColorMap[c12 & 4095];
    }
    pf_n = 0;
-   if (fl_opt && ss2comm_rom_is_ss2())
+   if (fl_opt == 2 && ss2comm_rom_is_ss2())   /* 99p: 거의 없게에만 */
    {  /* 99n: 플레인 깜빡임(필살기 빛기둥 등) — 다른 위상과 섞을 칸 */
       const ss2fg_frame *hh[7];
       int i;
@@ -1232,6 +1290,7 @@ void retro_init(void)
 void retro_reset(void)
 {
    fg_phase = 0; fg_audio_tail_n = 0; fg_streak = 0; fg_next_ok = 0;   /* 프레임 생성 위상도 처음부터 */
+   fl_last_lum = -1; fl_have = 0;   /* 99p */
    ss2sp_reset();
    svcsp_reset();
    ss2comm_set_ram(&CPUExRAM[0]);
@@ -1956,6 +2015,7 @@ bool retro_unserialize(const void *data, size_t size)
    svcsp_reset();   /* 세이브스테이트 로드 시 매크로 잔여 상태 제거 */
    ss2fg_reset();   /* 이전 프레임 캡처도 버린다 — 불러온 상태와 보간하지 않게 */
    fg_audio_tail_n = 0;
+   fl_last_lum = -1; fl_have = 0;   /* 99p: 불러온 화면을 앞 출력과 섞지 않게 */
    StateMem st;
 
    st.data           = (uint8_t*)data;
