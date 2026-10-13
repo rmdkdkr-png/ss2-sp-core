@@ -1283,12 +1283,11 @@ bool retro_load_game(const struct retro_game_info *info)
       }
       else
          ss2voice_init(NULL);   /* SS2VOICE_DIR 환경변수는 init 안에서 우선 적용 */
-      if (ss2voice_on())
-      {  /* 어느 팩이 실렸는지 육안 확인 — 클립 수가 곧 팩 버전이다 */
+      if (ss2voice_on() && log_cb)
+      {  /* 코어 패치 99g — 팩이 실리면 화면에 띄우던 «VOICE 클립 수» 토스트를 뺐다(유저 2026-10-13 「처음에 보이스 번호 뜨는 거 안 뜨게」).
+            해설·음성은 09-07 에 폐기돼 게임을 켤 때마다 뜨는 글자일 뿐이었다. 어느 팩이 실렸는지는 로그로만 남긴다. */
          extern int ss2voice_count(void);
-         static char vt[32];
-         snprintf(vt, sizeof vt, "VOICE %d", ss2voice_count());
-         ss2comm_toast(vt, 150);
+         log_cb(RETRO_LOG_INFO, "[ss2voice] pack clips %d\n", ss2voice_count());
       }
    }
 
