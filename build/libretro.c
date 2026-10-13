@@ -752,12 +752,12 @@ static int fg_predict4(int ra)
 
    /* τ=D — 둘 다 0 이면 실제 D 그대로 (fg_real = D 의 그림) */
    for (p = 0; p < 2; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx0[p], ovy0[p]);
-   ss2fg_idle_slot(id0 ? 0 : -1);
+   ss2fg_idle_slot(idle_opt ? 0 : -1);                 /* 99i: 사이 그림이 없어도 — 움직이는 몸을 ¼ px 자리로 그리는 조각 */
    if (!(ts0 || tb0 || ov[0] || ov[1] || id0) || !f0 || !ss2fg_render2(f0, tos, ts0, tob, tb0, surf->pixels, FB_WIDTH, 2, NGPGfx->ColorMap))
       memcpy(surf->pixels, fg_real, sizeof fg_real);
    /* τ=D+½ */
    for (p = 0; p < 2 && !fg_no_next; p++) if (ov[p]) ss2fg_body_override(p, 1, ovx1[p], ovy1[p]);
-   ss2fg_idle_slot(id1 ? 1 : -1);
+   ss2fg_idle_slot(idle_opt ? 1 : -1);
    if (!fg_no_next && (!(ts1 || tb1 || ov[0] || ov[1] || id1) || !f0 || !ss2fg_render2(f0, tos, ts1, tob, tb1, fg_next, FB_WIDTH, 2, NGPGfx->ColorMap)))
       memcpy(fg_next, fg_real, sizeof fg_real);
    ss2fg_idle_slot(-1);

@@ -419,6 +419,10 @@ static int8_t fg_body_of[64];                                 /* 조각 → 몸 
    사이로 따로 보간한 자리(1/256 px)를 libretro.c(앱은 Main.cc)가 넣어 준다. 켜진 몸의 조각은 무리 판정 이동량 대신 이 값으로 옮긴다.
    한 번 그리기용 — render2 가 그리고 나면 끈다. */
 static int fg_ov_on[2], fg_ov_x[2], fg_ov_y[2];
+/* 99i: 몸마다 이 출력 칸의 정확한 옮김(1/256 px) — render2 가 정하고 id_build 가 4배 격자(¼ px)로 그린다.
+   1배 그림은 몸 조각을 정수 픽셀만큼만 옮길 수 있어, 느리게 움직이는 몸(KO 슬로모션으로 날아감·점프 꼭대기·걷기)은
+   120Hz 네 칸 중 두세 칸이 같은 자리였다(봇 판 측정: 움직이는 동안 땅 33%·공중 19% 칸이 반올림에 묻힘) */
+static int fg_ex_on[2], fg_ex_x[2], fg_ex_y[2];
 void ss2fg_body_override(int p, int on, int x256, int y256)
 {
    if (p < 0 || p > 1) return;
@@ -2373,86 +2377,158 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
    }
 }
 
+/* 99i: 지금 포즈 그대로 4배로(사이 그림 없이 ¼ px 자리만 옮길 때) */
+static void id_draw_self(const id_pose *P, uint16_t *out)
+{
+   int W4 = P->w * ID_S, x, y, a, b;
+   for (y = 0; y < P->h; y++)
+      for (x = 0; x < P->w; x++)
+      {
+         uint16_t v = P->c[y * P->w + x];
+         for (b = 0; b < ID_S; b++) for (a = 0; a < ID_S; a++) out[(y * ID_S + b) * W4 + x * ID_S + a] = v;
+      }
+}
+static int id_round4(int v256) { return v256 >= 0 ? (v256 + 32) >> 6 : -((-v256 + 31) >> 6); }   /* 1/256 px → 4배 화소 */
+
 /* ss2fg_render2 끝에서 — 이 출력 칸의 몸마다 «몸 뺀 줄 + 사이 그림» 4배 조각 */
 static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_scr,
                      const int16_t *offx, const int16_t *offy)
 {
-   int s = id_slot, p;
+   /* 99i: 두 단계 — ① 몸마다 그릴 것(사이 그림 또는 지금 포즈를 ¼ px 자리에)을 정해 4배 그림으로 만들고
+      ② 조각마다 «그릴 몸 둘 다 뺀 줄» 위에 두 몸을 앞뒤(우선순위·슬롯) 순서대로 얹는다.
+      예전엔 조각마다 자기 몸만 빼고 다른 몸은 1배 그림(사이 그림 없는 자리) 그대로 둬서, 두 몸이 겹치면
+      뒤에 붙인 조각이 앞 몸의 사이 그림을 덮어 그 부분만 사이 그림이 빠졌다(¼ px 몸 조각을 늘 그리면 자주 생김) */
+   static uint16_t id_tc2[(ID_W * ID_S) * (ID_H * ID_S)];
+   struct { int on, kind, W4, gh, ux0, uy0, sh4x, sh4y, x0, y0, x1, y1, depth, first, cur; const uint16_t *img; uint8_t m[64], minv[64]; } dr[2];
+   id_req_t self[2];
+   uint8_t skip[64], zrow[256], bz[256];
+   int16_t srow[256], brow[2][256];
+   uint16_t scan[256], bscan[256];
+   int s = id_slot, p, q, k;
    if (s < 0 || s > 1 || !id_on) return;
+   memset(dr, 0, sizeof dr);
+   for (p = 0; p < 2; p++) id_pt[s][p].on = 0;
+   if (pp_on || fx_fade_on) return;                            /* 포즈·이펙트 섞기 중엔 몸 뺀 줄을 같게 못 만든다 */
    for (p = 0; p < 2; p++)
    {
-      id_req_t *rq = &id_rq[s][p];
-      id_patch_t *pt = &id_pt[s][p];
-      uint8_t m[64], zrow[256];
-      int16_t srow[256], brow[256];
-      uint16_t scan[256], bscan[256];
-      uint8_t minv[64], bz[256];
-      int k, ux0, uy0, x0, y0, x1, y1, y, x, sx, sy, W4, mvx, mvy, sh4x = 0, sh4y = 0;
-      pt->on = 0;
-      if (!rq->on || pp_on || fx_fade_on) continue;           /* 포즈·이펙트 섞기 중엔 몸 뺀 줄을 같게 못 만든다 */
-      if (!body_mask(base, p, m)) continue;
+      const id_req_t *rq = &id_rq[s][p];
+      uint16_t *img = p ? id_tc2 : id_tc;
+      int mvx = 0, mvy = 0, r4x = 0, r4y = 0;
+      if (!rq->on && !fg_ex_on[p]) continue;
+      if (!body_mask(base, p, dr[p].m)) continue;
       {  /* 몸 조각이 옮겨 그려지는 만큼(보간 자리) — 모두 같아야. 서기(배운 바뀜)는 제자리만, 캐시는 움직이는 몸도(걷기·점프 등, 패치 98) */
          int seen = 0, same = 1;
-         mvx = mvy = 0;
          for (k = 0; k < 64; k++)
-            if (m[k])
+            if (dr[p].m[k])
             {
                int dx = offx ? offx[k] : 0, dy = offy ? offy[k] : 0;
                if (!seen) { mvx = dx; mvy = dy; seen = 1; }
                else if (dx != mvx || dy != mvy) { same = 0; break; }
             }
-         if (!same || (rq->kind == 0 && (mvx || mvy))) continue;
+         if (!same) continue;
+      }
+      if (fg_ex_on[p])
+      {  /* 99i: 정확한 옮김과 1배 정수 옮김의 차(4배 화소, ±2) */
+         r4x = id_round4(fg_ex_x[p]) - mvx * ID_S; r4y = id_round4(fg_ex_y[p]) - mvy * ID_S;
+         if (r4x < -3 || r4x > 3 || r4y < -3 || r4y > 3) r4x = r4y = 0;
+      }
+      if (!rq->on || (rq->kind == 0 && (mvx || mvy)))
+      {  /* 99i: 사이 그림이 없거나(서기 사이 그림은 제자리 몸만) — 움직이는 몸을 지금 포즈 그대로 ¼ px 자리에 */
+         id_pose *P;
+         int tlx, tly;
+         if (!r4x && !r4y) continue;
+         P = id_find_pose(p, body_sig(base, dr[p].m));
+         if (!P || !mc_top_left(base, p, &tlx, &tly) || tlx != P->ox || tly != P->oy) continue;
+         memset(&self[p], 0, sizeof self[p]);
+         self[p].on = 1; self[p].kind = 2; self[p].A = P;
+         self[p].ax = base->ob_x[p]; self[p].ay = base->ob_y[p];
+         self[p].gx = P->ox; self[p].gy = P->oy; self[p].gw = P->w; self[p].gh = P->h;
+         self[p].depth = P->depth;
+         for (k = 0; k < 64 && !dr[p].m[k]; k++) ;
+         self[p].first = k;
+         rq = &self[p];
       }
       if (rq->gw * ID_S * rq->gh * ID_S > (int)(sizeof id_tc / sizeof id_tc[0])) continue;
-      if (rq->kind == 1) { mc_draw(rq->e, rq->ti, rq->A, rq->B, id_tc); mc_stats[2]++; mc_speck += mc_despeckle(id_tc, rq->gw, rq->gh, rq->A, rq->B); }
-      else id_draw(rq->pr, rq->t256, id_tc);
-      W4 = rq->gw * ID_S;
-      ux0 = rq->ax + rq->gx + mvx; uy0 = rq->ay + rq->gy + mvy;
-      {  /* 캐시 사이 그림의 4배 밀기(패치 99c) — 틀이 그만큼 한두 픽셀 넓어진다. 조각 버퍼를 넘으면 밀지 않는다 */
-         int s4x = rq->sx4, s4y = rq->sy4;
+      if (rq->kind == 1) { mc_draw(rq->e, rq->ti, rq->A, rq->B, img); mc_stats[2]++; mc_speck += mc_despeckle(img, rq->gw, rq->gh, rq->A, rq->B); }
+      else if (rq->kind == 2) id_draw_self(rq->A, img);
+      else id_draw(rq->pr, rq->t256, img);
+      dr[p].kind = rq->kind; dr[p].W4 = rq->gw * ID_S; dr[p].gh = rq->gh; dr[p].img = img;
+      dr[p].ux0 = rq->ax + rq->gx + mvx; dr[p].uy0 = rq->ay + rq->gy + mvy;
+      dr[p].depth = rq->depth; dr[p].first = rq->first;
+      for (k = 0; k < 64 && !dr[p].m[k]; k++) ;
+      dr[p].cur = k;                                          /* 지금 프레임의 가장 앞 슬롯 — 두 몸끼리 앞뒤는 이것으로(화소마다 슬롯을 모를 때) */
+      {  /* 캐시 사이 그림의 4배 밀기(패치 99c) + ¼ px 자리(99i) — 틀이 그만큼 한두 픽셀 넓어진다. 조각 버퍼를 넘으면 밀지 않는다 */
+         int s4x = rq->sx4 + r4x, s4y = rq->sy4 + r4y, ux0 = dr[p].ux0, uy0 = dr[p].uy0;
          int ex0 = s4x < 0 ? -((-s4x + ID_S - 1) / ID_S) : 0, ex1 = s4x > 0 ? (s4x + ID_S - 1) / ID_S : 0;
          int ey0 = s4y < 0 ? -((-s4y + ID_S - 1) / ID_S) : 0, ey1 = s4y > 0 ? (s4y + ID_S - 1) / ID_S : 0;
          if ((rq->gw + ex1 - ex0) * (rq->gh + ey1 - ey0) > ID_W * ID_H) { s4x = s4y = 0; ex0 = ex1 = ey0 = ey1 = 0; }
-         sh4x = s4x; sh4y = s4y;
-         x0 = ux0 + ex0 < 0 ? 0 : ux0 + ex0; y0 = uy0 + ey0 < 0 ? 0 : uy0 + ey0;
-         x1 = ux0 + rq->gw + ex1 > SS2FG_W ? SS2FG_W : ux0 + rq->gw + ex1;
-         y1 = uy0 + rq->gh + ey1 > SS2FG_H ? SS2FG_H : uy0 + rq->gh + ey1;
+         dr[p].sh4x = s4x; dr[p].sh4y = s4y;
+         dr[p].x0 = ux0 + ex0 < 0 ? 0 : ux0 + ex0; dr[p].y0 = uy0 + ey0 < 0 ? 0 : uy0 + ey0;
+         dr[p].x1 = ux0 + rq->gw + ex1 > SS2FG_W ? SS2FG_W : ux0 + rq->gw + ex1;
+         dr[p].y1 = uy0 + rq->gh + ey1 > SS2FG_H ? SS2FG_H : uy0 + rq->gh + ey1;
       }
-      if (x1 <= x0 || y1 <= y0) continue;
-      for (k = 0; k < 64; k++) minv[k] = (uint8_t)!m[k];
+      if (dr[p].x1 <= dr[p].x0 || dr[p].y1 <= dr[p].y0) continue;
+      for (k = 0; k < 64; k++) dr[p].minv[k] = (uint8_t)!dr[p].m[k];
+      dr[p].on = 1;
+   }
+   memset(skip, 0, sizeof skip);
+   for (p = 0; p < 2; p++) if (dr[p].on) for (k = 0; k < 64; k++) if (dr[p].m[k]) skip[k] = 1;
+   for (p = 0; p < 2; p++)
+   {
+      id_patch_t *pt = &id_pt[s][p];
+      int x0 = dr[p].x0, y0 = dr[p].y0, x1 = dr[p].x1, y1 = dr[p].y1, y, x, sx, sy;
+      if (!dr[p].on) continue;
       for (y = y0; y < y1; y++)
       {
          const ss2fg_regs *rb = &base->line[y];
          int in_win = (y >= rb->winy) && (y < rb->winy + rb->winh);
          int wx0 = rb->winx, wx1 = imin(rb->winx + rb->winw, SS2FG_W);
-         if (rq->kind == 1)
-         {  /* (main) 지금 프레임(D)에서 몸 조각만 그린 줄 — 화소마다 그 자리를 칠한 몸 조각의 슬롯(brow, 없으면 −1) */
-            rl_skip = minv; rl_zout = bz; rl_slot = brow;
+         int hb[2];
+         for (q = 0; q < 2; q++)
+         {  /* (main) 캐시 그림은 지금 프레임(D)에서 그 화소를 칠한 그 몸 조각의 슬롯으로 겹친다 — 그 몸 조각만 그린 줄(brow, 없으면 −1) */
+            hb[q] = dr[q].on && dr[q].kind == 1 && y >= dr[q].y0 && y < dr[q].y1;
+            if (!hb[q]) continue;
+            rl_skip = dr[q].minv; rl_zout = bz; rl_slot = brow[q];
             render_line(base, to_scr, offx, offy, t_scr, y, bscan);
          }
-         rl_skip = m; rl_zout = zrow; rl_slot = srow;
+         rl_skip = skip; rl_zout = zrow; rl_slot = srow;
          render_line(base, to_scr, offx, offy, t_scr, y, scan);
          for (sy = 0; sy < ID_S; sy++)
          {
             uint16_t *dst = pt->px + ((y - y0) * ID_S + sy) * ((x1 - x0) * ID_S);
-            int ty = (y - uy0) * ID_S + sy - sh4y;
-            const uint16_t *tw = (ty >= 0 && ty < rq->gh * ID_S) ? id_tc + ty * W4 : 0;
+            const uint16_t *tw[2];
+            for (q = 0; q < 2; q++)
+            {
+               int ty = (y - dr[q].uy0) * ID_S + sy - dr[q].sh4y;
+               tw[q] = (dr[q].on && ty >= 0 && ty < dr[q].gh * ID_S) ? dr[q].img + ty * dr[q].W4 : 0;
+            }
             for (x = x0; x < x1; x++)
                for (sx = 0; sx < ID_S; sx++)
                {
-                  int tx = (x - ux0) * ID_S + sx - sh4x;
-                  uint16_t c = scan[x], v = (tw && tx >= 0 && tx < W4) ? tw[tx] : ID_NONE;
-                  /* (main) 캐시 그림은 지금 프레임(D)에서 그 화소를 칠한 몸 조각의 슬롯으로 겹친다 — 몸 단위 first(가장 앞 슬롯)로 보면 그보다
-                     뒤지만 그 자리 몸 조각보다는 앞인 상대 발·창·타격 불꽃을 덮었다(검수 s055·s105·s108). D 의 몸이 없는 자리(B 에서 새로 생긴
-                     부분)는 예전대로 first. 포즈를 잡은 옛 프레임의 슬롯은 쓰지 않는다 — 슬롯 순서가 프레임마다 달라 발바닥이 그림자 뒤로 가는 등
-                     오히려 틀렸다(2차 검수 22곳). 서기 그림(kind 0)은 예전대로 first */
-                  int vs = (rq->kind == 1 && brow[x] >= 0) ? brow[x] : rq->first;
-                  if (v != ID_NONE && in_win && x >= wx0 && x < wx1
-                      && (rq->depth > zrow[x] || (rq->depth == zrow[x] && srow[x] > vs)))
-                  {
-                     uint16_t col = ld16(base->pal + ((v >> 2) << 3) + ((v & 3) << 1)) & 0x0FFF;   /* 번호 → 그 프레임 팔레트(패치 96) */
-                     c = rb->neg ? (uint16_t)~col : col;
-                  }
+                  uint16_t c = scan[x];
+                  int z = zrow[x], sl = srow[x], win = -1, wbv = 0;
+                  if (in_win && x >= wx0 && x < wx1)
+                     for (q = 0; q < 2; q++)                     /* 두 몸 — 앞뒤는 우선순위, 같으면 앞 슬롯 */
+                     {
+                        int tx, vs, bv;
+                        uint16_t v;
+                        if (!tw[q]) continue;
+                        tx = (x - dr[q].ux0) * ID_S + sx - dr[q].sh4x;
+                        if (tx < 0 || tx >= dr[q].W4) continue;
+                        v = tw[q][tx];
+                        if (v == ID_NONE) continue;
+                        /* (main) 캐시 그림은 D 에서 그 화소를 칠한 몸 조각의 슬롯으로 — 몸 단위 first 로 보면 그보다 뒤지만 그 자리 몸 조각보다는
+                           앞인 상대 발·창·타격 불꽃을 덮었다(검수 s055·s105·s108). D 의 몸이 없는 자리는 first, 서기·¼ px 그림은 first */
+                        vs = (hb[q] && brow[q][x] >= 0) ? brow[q][x] : dr[q].first;
+                        bv = (hb[q] && brow[q][x] >= 0) ? brow[q][x] : dr[q].cur;
+                        if (win < 0 ? (dr[q].depth > z || (dr[q].depth == z && sl > vs))
+                                    : (dr[q].depth > dr[win].depth || (dr[q].depth == dr[win].depth && bv < wbv)))
+                        {
+                           uint16_t col = ld16(base->pal + ((v >> 2) << 3) + ((v & 3) << 1)) & 0x0FFF;   /* 번호 → 그 프레임 팔레트(패치 96) */
+                           c = rb->neg ? (uint16_t)~col : col;
+                           z = dr[q].depth; sl = vs; win = q; wbv = bv;
+                        }
+                     }
                   *dst++ = (uint16_t)(c & 4095);                   /* 12비트 그대로 — compose 가 화면 형식(16/32비트)의 색표로 바꾼다 */
                }
          }
@@ -2548,6 +2624,18 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
             offy[k2] = (int16_t)lerp_i(0, mv[k2].dy, t_spr);
             have_off = 1;
          }
+      }
+   }
+   {  /* 99i: 몸마다 정확한 옮김(1/256 px) — 몸 따로 박자면 그 값, 아니면 몸 조각의 이동량 × t */
+      int p3, k3;
+      for (p3 = 0; p3 < 2; p3++)
+      {
+         fg_ex_on[p3] = 0;
+         if (fg_ov_on[p3]) { fg_ex_x[p3] = fg_ov_x[p3]; fg_ex_y[p3] = fg_ov_y[p3]; fg_ex_on[p3] = 1; continue; }
+         if (!to_spr) continue;
+         for (k3 = 0; k3 < 64; k3++)
+            if (fg_body_of[k3] == p3 && mv[k3].has && (ld16(base->spr + k3 * 4) & 0x1800))
+            { fg_ex_x[p3] = mv[k3].dx * t_spr; fg_ex_y[p3] = mv[k3].dy * t_spr; fg_ex_on[p3] = 1; break; }
       }
    }
    if (to_spr && fx_mode == 2)
