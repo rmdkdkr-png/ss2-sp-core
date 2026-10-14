@@ -58,6 +58,7 @@ typedef struct ss2fg_frame {
    uint8_t ob_x[SS2FG_OBJS], ob_y[SS2FG_OBJS], ob_t[SS2FG_OBJS];              /* 이 프레임 화면의 위치·종류(하위 바이트) */
    uint8_t ob_now_act, ob_act;     /* 쓰는 칸 비트(종류 0xFFFF = 빈 칸) */
    uint8_t now_ok, body_ok;        /* 대전 중이라 값이 유효함 */
+   uint8_t fight, pad2;            /* 99r: 대전 모드(241) — 고르기 화면·판 시작 전(240)과 가른다 */
 } ss2fg_frame;
 
 /* ── 캡처 ── */

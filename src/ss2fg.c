@@ -84,6 +84,7 @@ static void capture_body(ss2fg_frame *f)
    const ss2fg_frame *pv = fg_hist[0] >= 0 ? &fg_slot[fg_hist[0]] : 0;   /* 직전 캡처 */
    int k, sel = 0;
    f->now_ok = (uint8_t)(fg_ram && fg_ram[FG_RAM_MODE] == FG_RAM_FIGHT);
+   f->fight = f->now_ok;   /* 99r */
    /* 대전 밖(모드 240) — 고르기 화면 미리보기(물체 0 = 가운데 80,76, 유저 「여기서는 안 되는 거?」, 패치 96) +
       판 시작 전 소개(«いざ尋常に»·«一本目» 동안 두 캐릭터가 대전 자리에 서 있다 — 모드가 240 이라 사이 그림이 대전부터만 나왔다,
       유저 「대전 시작 전에도 좀 되게」, 패치 99). 서기 그리기가 켜졌을 때만, 몸(물체 0·1)만 — 그림자·이펙트 물체는 안 본다.
@@ -434,6 +435,7 @@ static int fg_ov_on[2], fg_ov_x[2], fg_ov_y[2];
 /* 99i: 몸마다 이 출력 칸의 정확한 옮김(1/256 px) — render2 가 정하고 id_build 가 4배 격자(¼ px)로 그린다.
    1배 그림은 몸 조각을 정수 픽셀만큼만 옮길 수 있어, 느리게 움직이는 몸(KO 슬로모션으로 날아감·점프 꼭대기·걷기)은
    120Hz 네 칸 중 두세 칸이 같은 자리였다(봇 판 측정: 움직이는 동안 땅 33%·공중 19% 칸이 반올림에 묻힘) */
+static int fg_spe_x[64], fg_spe_y[64];   /* 99r: 조각마다 이 칸의 정확한 옮김(1/256 px) — 몸과 같이 움직이는 «붙은» 조각 찾기 */
 static int fg_ex_on[2], fg_ex_x[2], fg_ex_y[2];
 void ss2fg_body_override(int p, int on, int x256, int y256)
 {
@@ -2737,9 +2739,13 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
       예전엔 조각마다 자기 몸만 빼고 다른 몸은 1배 그림(사이 그림 없는 자리) 그대로 둬서, 두 몸이 겹치면
       뒤에 붙인 조각이 앞 몸의 사이 그림을 덮어 그 부분만 사이 그림이 빠졌다(¼ px 몸 조각을 늘 그리면 자주 생김) */
    static uint16_t id_tc2[(ID_W * ID_S) * (ID_H * ID_S)];
-   struct { int on, kind, W4, gh, ux0, uy0, sh4x, sh4y, x0, y0, x1, y1, depth, first, cur; const uint16_t *img; uint8_t m[64], minv[64]; } dr[2];
+   struct { int on, kind, W4, gh, ux0, uy0, sh4x, sh4y, x0, y0, x1, y1, depth, first, cur, r4x, r4y, an, ax0, ay0, ax1, ay1; const uint16_t *img; uint8_t m[64], minv[64]; } dr[2];
    id_req_t self[2];
-   uint8_t skip[64], zrow[256], bz[256], szr[256];
+   uint8_t skip[64], zrow[256], bz[256], szr[256], bm[2][64], am[2][64];
+   static uint16_t al_c[2][ID_W * ID_H];                      /* 99r: 붙은 조각만 그린 1배 그림(색·깊이·슬롯) */
+   static uint8_t  al_z[2][ID_W * ID_H];
+   static int8_t   al_s[2][ID_W * ID_H];
+   int an_any = 0;
    int16_t srow[256], brow[2][256], ssr[256];
    uint16_t scan[256], bscan[256], scr[256];
    int s = id_slot, p, q, k;
@@ -2747,6 +2753,8 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
    memset(dr, 0, sizeof dr);
    for (p = 0; p < 2; p++) id_pt[s][p].on = 0;
    if (pp_on || fx_fade_on) return;                            /* 포즈·이펙트 섞기 중엔 몸 뺀 줄을 같게 못 만든다 */
+   memset(am, 0, sizeof am);
+   for (p = 0; p < 2; p++) body_mask(base, p, bm[p]);         /* 99r: 두 몸 조각(붙은 조각에서 뺀다) */
    for (p = 0; p < 2; p++)
    {
       const id_req_t *rq = &id_rq[s][p];
@@ -2786,6 +2794,59 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
          self[p].first = k;
          rq = &self[p];
       }
+      if (rq->kind == 0) r4x = r4y = 0;   /* 99r ②: 서기 사이 그림(제자리 몸)은 ¼ px 로 안 옮긴다 — 99h 처럼. 몸 따로 박자가 조금 움직이라 해도
+                                              사이 그림만 ¾ px 밀려 나머지와 어긋났다(붙잡기 → 머리 펼치기 같은 빠른 바뀜에서 몸이 섞여 흔들림) */
+      if ((r4x || r4y) && !base->fight)
+      {  /* 99r ③: 대전 밖(고르기 화면·판 시작 전)에서 몸 조각이 화면·창 가장자리에 걸치면 안 옮긴다 — 들어오는 미리보기는 가장자리 밖 조각을
+            게임이 안 그려 옮긴 만큼 들어오는 쪽 끝이 비었다. 대전에서는 구석에 몰린 몸도 조각이 화면 밖까지 있어(봇 판 측정) 그대로 옮긴다 */
+         int bx0 = 9999, bx1 = -9999, by0 = 9999, by1 = -9999, cy;
+         for (k = 0; k < 64; k++)
+            if (bm[p][k])
+            {
+               int sx = wrapx(base->ax[k] + base->line[0].spx) + mvx, sy = wrapc(base->ay[k] + base->line[0].spy) + mvy;
+               if (sx < bx0) bx0 = sx;
+               if (sx + 8 > bx1) bx1 = sx + 8;
+               if (sy < by0) by0 = sy;
+               if (sy + 8 > by1) by1 = sy + 8;
+            }
+         cy = (by0 + by1) / 2;
+         if (cy < 0) cy = 0;
+         if (cy >= SS2FG_H) cy = SS2FG_H - 1;
+         if (bx0 <= imax(0, base->line[cy].winx) || bx1 >= imin(SS2FG_W, base->line[cy].winx + base->line[cy].winw)
+             || by0 <= 0 || by1 >= SS2FG_H)
+            r4x = r4y = 0;
+      }
+      if (rq->kind == 2 && !r4x && !r4y) continue;                /* 지금 포즈를 그대로 다시 그릴 까닭이 없어짐 */
+      dr[p].r4x = r4x; dr[p].r4y = r4y; dr[p].an = 0;
+      if ((r4x || r4y) && (base->layers & 4))
+      {  /* 99r ①: 몸과 같이 움직이는 «붙은» 조각 — 몸 팔레트가 아니라 몸 조각에 안 드는 무기·베기 효과·그림자 등. 몸만 ¼ px 옮기면 1배 자리에 남아
+            가장자리로 몸이 1~2 px 비쳤다(창 찌르기의 베기 효과 — 커스텀 apk 방 검수). 몸 틀에 닿고, 이 칸의 정확한 옮김이 몸과 똑같고(같은 이동량 × t),
+            1배 정수 옮김도 같은 조각을 몸과 같은 ¼ px 로 같이 옮긴다 */
+         int fx0 = rq->ax + rq->gx + mvx - 2, fy0 = rq->ay + rq->gy + mvy - 2, fx1 = rq->ax + rq->gx + mvx + rq->gw + 2, fy1 = rq->ay + rq->gy + mvy + rq->gh + 2;
+         int ax0 = 9999, ay0 = 9999, ax1 = -9999, ay1 = -9999, na = 0;
+         for (k = 0; k < 64; k++)
+         {
+            uint16_t w = ld16(base->spr + k * 4);
+            int sx, sy;
+            if (!(w & 0x1800) || bm[0][k] || bm[1][k] || (p == 1 && am[0][k])) continue;
+            if (fg_spe_x[k] != fg_ex_x[p] || fg_spe_y[k] != fg_ex_y[p]) continue;   /* 같은 이동량(무리 벡터) — 몸 따로 박자(덮어쓴 자리)면 안 붙음 */
+            if ((offx ? offx[k] : 0) != mvx || (offy ? offy[k] : 0) != mvy) continue;
+            sx = wrapx(base->ax[k] + base->line[0].spx) + mvx; sy = wrapc(base->ay[k] + base->line[0].spy) + mvy;
+            if (sx + 8 <= fx0 || sx >= fx1 || sy + 8 <= fy0 || sy >= fy1) continue;
+            am[p][k] = 1; na++;
+            if (sx < ax0) ax0 = sx;
+            if (sx + 8 > ax1) ax1 = sx + 8;
+            if (sy < ay0) ay0 = sy;
+            if (sy + 8 > ay1) ay1 = sy + 8;
+         }
+         if (ax0 < 0) ax0 = 0;
+         if (ay0 < 0) ay0 = 0;
+         if (ax1 > SS2FG_W) ax1 = SS2FG_W;
+         if (ay1 > SS2FG_H) ay1 = SS2FG_H;
+         if (na && ax1 > ax0 && ay1 > ay0 && (ax1 - ax0) * (ay1 - ay0) <= ID_W * ID_H)
+         { dr[p].an = na; dr[p].ax0 = ax0; dr[p].ay0 = ay0; dr[p].ax1 = ax1; dr[p].ay1 = ay1; }
+         else memset(am[p], 0, sizeof am[p]);
+      }
       if (rq->gw * ID_S * rq->gh * ID_S > (int)(sizeof id_tc / sizeof id_tc[0])) continue;
       if (rq->kind == 1) { mc_draw(rq->e, rq->ti, rq->A, rq->B, img); mc_stats[2]++; mc_speck += mc_despeckle(img, rq->gw, rq->gh, rq->A, rq->B); }
       else if (rq->kind == 2) id_draw_self(rq->A, img);
@@ -2805,12 +2866,68 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
          dr[p].x1 = ux0 + rq->gw + ex1 > SS2FG_W ? SS2FG_W : ux0 + rq->gw + ex1;
          dr[p].y1 = uy0 + rq->gh + ey1 > SS2FG_H ? SS2FG_H : uy0 + rq->gh + ey1;
       }
-      if (dr[p].x1 <= dr[p].x0 || dr[p].y1 <= dr[p].y0) continue;
+      if (dr[p].an)
+      {  /* 99r: 틀을 붙은 조각까지(옮긴 만큼 한 칸 더) — 조각 버퍼를 넘으면 붙은 조각은 예전처럼 1배 자리에 */
+         int nx0 = imin(dr[p].x0, dr[p].ax0 - 1), ny0 = imin(dr[p].y0, dr[p].ay0 - 1);
+         int nx1 = imax(dr[p].x1, dr[p].ax1 + 1), ny1 = imax(dr[p].y1, dr[p].ay1 + 1);
+         if (nx0 < 0) nx0 = 0;
+         if (ny0 < 0) ny0 = 0;
+         if (nx1 > SS2FG_W) nx1 = SS2FG_W;
+         if (ny1 > SS2FG_H) ny1 = SS2FG_H;
+         if ((nx1 - nx0) * (ny1 - ny0) <= ID_W * ID_H) { dr[p].x0 = nx0; dr[p].y0 = ny0; dr[p].x1 = nx1; dr[p].y1 = ny1; }
+         else { dr[p].an = 0; memset(am[p], 0, sizeof am[p]); }
+      }
+      if (dr[p].x1 <= dr[p].x0 || dr[p].y1 <= dr[p].y0) { dr[p].an = 0; memset(am[p], 0, sizeof am[p]); continue; }
       for (k = 0; k < 64; k++) dr[p].minv[k] = (uint8_t)!dr[p].m[k];
       dr[p].on = 1;
    }
    memset(skip, 0, sizeof skip);
    for (p = 0; p < 2; p++) if (dr[p].on) for (k = 0; k < 64; k++) if (dr[p].m[k]) skip[k] = 1;
+   for (q = 0; q < 2; q++)
+   {  /* 99r: 붙은 조각 — 몸 뺀 줄에서도 빼고, 따로 1배 그림(창·슬롯 규칙은 render_line 과 같게)을 만들어 4배로 고를 때 몸과 같은 ¼ px 로 */
+      int yy, aw;
+      if (!dr[q].on || !dr[q].an) continue;
+      an_any = 1;
+      for (k = 0; k < 64; k++) if (am[q][k]) skip[k] = 1;
+      aw = dr[q].ax1 - dr[q].ax0;
+      for (yy = dr[q].ay0; yy < dr[q].ay1; yy++)
+      {
+         const ss2fg_regs *rb = &base->line[yy];
+         uint16_t esc[256];
+         uint8_t ezb[256];
+         int16_t esl[256];
+         int xx;
+         memset(ezb, 0, sizeof ezb);
+         if (yy >= rb->winy && yy < rb->winy + rb->winh)
+         {
+            int16_t *sv_slot = rl_slot;
+            uint8_t *sv_sprz = rl_sprz;
+            int sv_cur = rl_cur_slot;
+            rl_slot = esl; rl_sprz = 0;
+            for (k = 0; k < 64; k++)
+            {
+               uint16_t d;
+               int sxx, syy;
+               if (!am[q][k]) continue;
+               d = ld16(base->spr + k * 4);
+               sxx = wrapx(base->ax[k] + rb->spx) + (offx ? offx[k] : 0);
+               syy = wrapc(base->ay[k] + rb->spy) + (offy ? offy[k] : 0);
+               if (yy < syy || yy > syy + 7) continue;
+               rl_cur_slot = k;
+               draw_pattern(base, rb, esc, ezb, sxx, d & 0x01FF, (d & 0x4000) ? 7 - ((unsigned)(yy - syy) & 7) : ((unsigned)(yy - syy) & 7),
+                            d & 0x8000, base->pal, base->sprcol[k] & 0xF, (uint8_t)(((d & 0x1800) >> 11) << 1));
+            }
+            rl_slot = sv_slot; rl_sprz = sv_sprz; rl_cur_slot = sv_cur;
+         }
+         for (xx = dr[q].ax0; xx < dr[q].ax1; xx++)
+         {
+            int o = (yy - dr[q].ay0) * aw + (xx - dr[q].ax0);
+            al_z[q][o] = ezb[xx];
+            al_c[q][o] = ezb[xx] ? esc[xx] : 0;
+            al_s[q][o] = (int8_t)(ezb[xx] ? esl[xx] : -1);
+         }
+      }
+   }
    for (p = 0; p < 2; p++)
    {
       id_patch_t *pt = &id_pt[s][p];
@@ -2875,6 +2992,23 @@ static void id_build(const ss2fg_frame *base, const ss2fg_frame *to_scr, int t_s
                            c = rb->neg ? (uint16_t)~col : col;
                            z = dr[q].depth; sl = vs; win = q; wbv = bv;
                         }
+                     }
+                  if (an_any && in_win && x >= wx0 && x < wx1)
+                     for (q = 0; q < 2; q++)                     /* 99r: 붙은 조각 — 몸과 같은 ¼ px 자리에서 */
+                     {
+                        int X4, Y4, xs, ys, o, ez, es, wz, ws;
+                        if (!dr[q].on || !dr[q].an) continue;
+                        X4 = x * ID_S + sx - dr[q].r4x; Y4 = y * ID_S + sy - dr[q].r4y;
+                        xs = X4 >= 0 ? X4 / ID_S : -((-X4 + ID_S - 1) / ID_S);
+                        ys = Y4 >= 0 ? Y4 / ID_S : -((-Y4 + ID_S - 1) / ID_S);
+                        if (xs < dr[q].ax0 || xs >= dr[q].ax1 || ys < dr[q].ay0 || ys >= dr[q].ay1) continue;
+                        o = (ys - dr[q].ay0) * (dr[q].ax1 - dr[q].ax0) + (xs - dr[q].ax0);
+                        ez = al_z[q][o];
+                        if (!ez) continue;
+                        es = al_s[q][o];
+                        if (win == 0 || win == 1) { wz = dr[win].depth; ws = wbv; }   /* (main) 몸끼리처럼 그 화소를 칠한 몸 조각의 슬롯(캐시 그림) */
+                        else { wz = z; ws = sl; }
+                        if (ez > wz || (ez == wz && es < ws)) { c = al_c[q][o]; z = ez; sl = es; win = 2 + q; }
                      }
                   *dst++ = (uint16_t)(c & 4095);                   /* 12비트 그대로 — compose 가 화면 형식(16/32비트)의 색표로 바꾼다 */
                }
@@ -3016,6 +3150,11 @@ int ss2fg_render2(const ss2fg_frame *base, const ss2fg_frame *to_spr, int t_spr,
    }
    {  /* 99i: 몸마다 정확한 옮김(1/256 px) — 몸 따로 박자면 그 값, 아니면 몸 조각의 이동량 × t */
       int p3, k3;
+      for (k3 = 0; k3 < 64; k3++)
+      {  /* 99r */
+         fg_spe_x[k3] = (to_spr && mv[k3].has) ? mv[k3].dx * t_spr : 0;
+         fg_spe_y[k3] = (to_spr && mv[k3].has) ? mv[k3].dy * t_spr : 0;
+      }
       for (p3 = 0; p3 < 2; p3++)
       {
          fg_ex_on[p3] = 0;
