@@ -2273,6 +2273,8 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          if (tot2 <= 0 || e2 < 0) return 0;
          if (tot2 > 2 * MC_WIN && (K || measured || tot2 >= 2 * MC_LONG)) { e2 -= tot2 - 2 * MC_WIN; tot2 = 2 * MC_WIN; if (e2 <= 0) return 0; }
          ti = (8 * e2 + tot2) / (2 * tot2) - 1;                                   /* round(4t) − 1 */
+         if (!K && tot2 >= 20) ti = 3 * e2 / (tot2 - 4) - 1;                      /* 99u: 긴 머묾 — 바뀜이 보이기 전 시간을 셋으로(앞·¼·½).
+                                                                                     (main) 위 MC_WIN 창이 걸리면 tot2 = 16 이라 안 걸림 — 창 밖(캐시 표 길이만·24 프레임 미만)일 때만 */
          if (ti > 2) ti = 2;
          if (!K && ti > 1) ti = 1;   /* (main) 아직 미리 본 프레임으로 확인 못 한 예측은 ½ 까지만 — 틀리면(다른 갈래로 감) 반쯤 간 자세에서 돌아온다
                                         (검수 s024~s026: 오지 않을 포즈로 ¾ 까지 갔다가 한 번에 되돌아와 팔이 내려-올라-내려). 걷기(한 걸음 6 프레임)는
