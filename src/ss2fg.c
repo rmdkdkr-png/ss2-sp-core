@@ -1460,6 +1460,10 @@ static const ss2fg_frame *id_far[2]; /* 99o: 미리 더 돌린 D+3·D+4 (없으�
 static uint64_t   id_far_sb[2];      /* 99o: D+3·D+4 로 찾아 펴기 시작한 뒤 포즈 */
 static unsigned   id_far_st[2];      /* 99o: 그때 앞 포즈의 시작 프레임 */
 static uint8_t    id_chv[2];         /* 99s: 몸의 캐릭터 번호(마지막으로 본 값) */
+static uint64_t   id_prev2[2];       /* 99t: 그 앞 포즈(id_prev 의 앞) */
+#define ID_CHAINS 32
+static uint64_t   id_chs[2][ID_CHAINS];   /* 99t: 제자리 짧은 머묾 줄기에 든 포즈 — 다시 시작하면 D+3·D+4 를 본다 */
+static unsigned   id_chu[2][ID_CHAINS];
 static unsigned   id_cht[2];         /* 99s: 그 번호가 바뀐 프레임 */
 static int        id_ax[2], id_ay[2], id_still[2];
 static id_req_t   id_rq[2][2];               /* [출력 칸: 0 = τD, 1 = τD+½][몸] */
@@ -1481,6 +1485,7 @@ void ss2fg_set_idle(int on)
       memset(id_hold_prev, 0, sizeof id_hold_prev); memset(id_prev_link, 0, sizeof id_prev_link); memset(id_prev_moved, 0, sizeof id_prev_moved);
       memset(id_hold_prev2, 0, sizeof id_hold_prev2); memset(id_prev_moved2, 0, sizeof id_prev_moved2); memset(id_far_want, 0, sizeof id_far_want);
       id_far[0] = id_far[1] = 0; memset(id_far_sb, 0, sizeof id_far_sb); memset(id_far_st, 0, sizeof id_far_st);
+      memset(id_prev2, 0, sizeof id_prev2); memset(id_chs, 0, sizeof id_chs); memset(id_chu, 0, sizeof id_chu);   /* 99t */
       id_ti_last[0] = id_ti_last[1] = -1;
       id_pt[0][0].on = id_pt[0][1].on = id_pt[1][0].on = id_pt[1][1].on = 0;
    }
@@ -2323,6 +2328,31 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
    return 1;
 }
 
+/* 99t: 제자리 짧은 머묾 줄기 기억 */
+static void id_chain_mark(int p, uint64_t s)
+{
+   int i, lo = 0;
+   if (!s) return;
+   for (i = 0; i < ID_CHAINS; i++) if (id_chs[p][i] == s) { id_chu[p][i] = ++id_clock; return; }
+   for (i = 1; i < ID_CHAINS; i++) if (id_chu[p][i] < id_chu[p][lo]) lo = i;
+   id_chs[p][lo] = s; id_chu[p][lo] = ++id_clock;
+}
+static int id_chain_has(int p, uint64_t s)
+{
+   int i;
+   if (!s) return 0;
+   for (i = 0; i < ID_CHAINS; i++) if (id_chs[p][i] == s) return 1;
+   return 0;
+}
+static int id_is_loop(int p, uint64_t s)
+{
+   unsigned h = 0;
+   uint64_t n;
+   if (mc_ln && mc_loop_next(s, &h)) return 1;
+   n = id_next(p, s, 0, 0);
+   return n && id_loop(p, s, n);
+}
+
 /* 99o: 판 끝 승리 포즈(10장 안팎)·필살기(12장)·등장 연출은 제자리에서 포즈를 4 프레임씩 넘긴다. 뒤 포즈는 미리 돌린 D+2 에야
    보여 바뀌기 직전 2 프레임에만 ¼·½·¾ 를 몰았다(120Hz 여덟 칸 중 «-----¼½¾» — 유저 2026-10-14 「게임 끝나고도 적용 안 되는 거 같고」).
    앞 두 포즈가 제자리에서 3~5(그 앞은 6까지) 프레임씩 바뀌었고 지금 포즈도 제자리에서 막(2 프레임 안) 시작했는데 D+1·D+2 에
@@ -2338,8 +2368,11 @@ int ss2fg_idle_want_far(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2f
       uint8_t mm[64];
       int k, same = 1;
       if (!id_cur[p] || !id_still[p] || realn - id_start[p] > 2) continue;
-      if (id_hold_prev[p] < 3 || id_hold_prev[p] > 5 || id_prev_moved[p]) continue;
-      if (id_hold_prev2[p] < 3 || id_hold_prev2[p] > 6 || id_prev_moved2[p]) continue;
+      if (!id_chain_has(p, id_cur[p]))   /* 99t: 전에 제자리 짧은 머묾 줄기에서 본 포즈면 앞 두 포즈를 안 봐도(승리 포즈 첫 두 장) */
+      {
+         if (id_hold_prev[p] < 3 || id_hold_prev[p] > 5 || id_prev_moved[p]) continue;
+         if (id_hold_prev2[p] < 3 || id_hold_prev2[p] > 6 || id_prev_moved2[p]) continue;
+      }
       if (f0->ob_x[p] != id_ax[p] || f0->ob_y[p] != id_ay[p]) continue;
       for (k = 1; k <= 2 && same; k++)
       {
@@ -2405,7 +2438,7 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
          if (chg && f->pick && id_prev[p] && realn - id_start[p] <= 2u)
          {
             id_unlearn(p, id_prev[p], id_cur[p]);
-            id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; id_hold_prev2[p] = 0; id_prev_moved2[p] = 0;
+            id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; id_hold_prev2[p] = 0; id_prev_moved2[p] = 0; id_prev2[p] = 0;
          }
          if (ax != id_ax[p] || ay != id_ay[p]) id_still[p] = 0;
          continue;
@@ -2415,13 +2448,21 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
          unsigned hold = realn - id_start[p], h3 = 0;
          uint64_t ln = mc_ln ? mc_loop_next(id_cur[p], &h3) : 0;
          id_prev_link[p] = (uint8_t)(ln == sg || (id_next(p, id_cur[p], id_prev[p], 0) == sg && id_loop(p, id_cur[p], sg)));
+         if (hold >= 3 && hold <= 5 && id_still[p] && ax == id_ax[p] && ay == id_ay[p]
+             && id_prev[p] && id_hold_prev[p] >= 3 && id_hold_prev[p] <= 5 && !id_prev_moved[p]
+             && id_prev2[p] && id_hold_prev2[p] >= 3 && id_hold_prev2[p] <= 6 && !id_prev_moved2[p])
+         {  /* 99t: 셋 넘게 이어진 제자리 짧은 머묾 — 그 포즈들을 기억(첫 포즈는 서기 순환 포즈가 아닐 때만) */
+            id_chain_mark(p, id_cur[p]); id_chain_mark(p, id_prev[p]);
+            if (!id_is_loop(p, id_prev2[p])) id_chain_mark(p, id_prev2[p]);
+         }
          id_hold_prev2[p] = id_hold_prev[p]; id_prev_moved2[p] = id_prev_moved[p];   /* 99o */
          id_hold_prev[p] = hold;
          id_prev_moved[p] = (uint8_t)(!id_still[p] || ax != id_ax[p] || ay != id_ay[p]);
          if (hold >= 3 && hold <= 60) id_learn_add(p, id_cur[p], sg, hold);
+         id_prev2[p] = id_prev[p];   /* 99t */
          id_prev[p] = id_cur[p];
       }
-      else { id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; id_hold_prev2[p] = 0; id_prev_moved2[p] = 0; }
+      else { id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; id_hold_prev2[p] = 0; id_prev_moved2[p] = 0; id_prev2[p] = 0; }
       id_ti_last[p] = -1; id_ti_sb[p] = 0;
       if (sw) { id_sp_at[p] = 0; id_sp_b[p] = 0; id_far_sb[p] = 0; }   /* 99s: 다른 캐릭터 — 펴던 기록도 버린다 */
       id_cur[p] = sg; id_start[p] = realn; id_ax[p] = ax; id_ay[p] = ay; id_still[p] = 1;
