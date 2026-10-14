@@ -74,6 +74,7 @@ static void resolve_chain(ss2fg_frame *f)
 #define FG_RAM_FIGHT  241
 #define FG_RAM_SELECT 240         /* 대전 밖 — 캐릭터·유파 고르기 화면(물체 0 = 가운데 미리보기 몸 80,76), 판 시작 전 소개 */
 #define FG_RAM_CAMX   0x176D
+#define FG_RAM_SCR    0x01C0      /* 99s: 화면 번호 — 0 제목·2 캐릭터 고르기·4 검질 고르기·6 카드·8~ 판 시작 전 */
 #define FG_RAM_OBJ    0x0E00
 static const uint8_t *fg_ram = 0;
 void ss2fg_set_ram(const uint8_t *ram) { fg_ram = ram; }
@@ -113,6 +114,11 @@ static void capture_body(ss2fg_frame *f)
       f->ob_t[k] = f->body_ok ? pv->ob_now_t[k] : 0;
    }
    f->ob_act = f->body_ok ? pv->ob_now_act : 0;
+   /* 99s: 고르기 화면 표시·몸 캐릭터 번호 — 다른 값처럼 «이 프레임 화면 = 직전 캡처 순간의 RAM» */
+   f->pick_now = (uint8_t)(fg_ram && fg_ram[FG_RAM_MODE] == FG_RAM_SELECT && (fg_ram[FG_RAM_SCR] == 2 || fg_ram[FG_RAM_SCR] == 4) ? fg_ram[FG_RAM_SCR] : 0);
+   for (k = 0; k < 2; k++) f->ch_now[k] = fg_ram ? fg_ram[FG_RAM_OBJ + 0x40 * k + 0x3C] : 0;
+   f->pick = pv && pv->valid ? pv->pick_now : f->pick_now;
+   for (k = 0; k < 2; k++) f->ch[k] = pv && pv->valid ? pv->ch_now[k] : f->ch_now[k];
 }
 
 void ss2fg_capture_end(const uint8_t *scroll, const uint8_t *chr, const uint8_t *spr,
@@ -1453,6 +1459,8 @@ static uint8_t    id_far_want[2];    /* 99o: 이번 D 에 D+3·D+4 로 뒤 포�
 static const ss2fg_frame *id_far[2]; /* 99o: 미리 더 돌린 D+3·D+4 (없으면 0) */
 static uint64_t   id_far_sb[2];      /* 99o: D+3·D+4 로 찾아 펴기 시작한 뒤 포즈 */
 static unsigned   id_far_st[2];      /* 99o: 그때 앞 포즈의 시작 프레임 */
+static uint8_t    id_chv[2];         /* 99s: 몸의 캐릭터 번호(마지막으로 본 값) */
+static unsigned   id_cht[2];         /* 99s: 그 번호가 바뀐 프레임 */
 static int        id_ax[2], id_ay[2], id_still[2];
 static id_req_t   id_rq[2][2];               /* [출력 칸: 0 = τD, 1 = τD+½][몸] */
 static id_patch_t id_pt[2][2];
@@ -1604,6 +1612,17 @@ static void id_learn_add(int p, uint64_t sa, uint64_t sb, unsigned hold)
    id_lt[p][lo].sa = sa; id_lt[p][lo].sb = sb; id_lt[p][lo].hold = (uint16_t)hold; id_lt[p][lo].cnt = 1;
    id_lt[p][lo].seen = ++id_clock;
    id_stats[0]++;
+}
+/* 99s: 방금 배운 바뀜 하나를 무른다(고르기 화면에서 캐릭터 번호가 그림보다 늦게 바뀐 때) */
+static void id_unlearn(int p, uint64_t sa, uint64_t sb)
+{
+   int i;
+   for (i = 0; i < ID_LEARN; i++)
+      if (id_lt[p][i].sa == sa && id_lt[p][i].sb == sb && id_lt[p][i].cnt)
+      {
+         if (!--id_lt[p][i].cnt) id_lt[p][i].sa = id_lt[p][i].sb = 0;
+         return;
+      }
 }
 /* A 다음 포즈 — 같은 바뀜을 2번 이상 봤고 두 번째로 많은 것보다 두 배 이상일 때만. 그래도 못 정하면 방금 온 포즈(from)를 빼고
    다시 본다 — 왕복 동작의 가운데 포즈(우쿄 서기 57c3→f629→9621→f629→57c3: f629 다음은 온 쪽의 반대) */
@@ -2196,6 +2215,7 @@ static int mc_plan(const ss2fg_frame *f0, const ss2fg_frame *f1, const ss2fg_fra
          if (sg != id_cur[p]) { sb = sg; K = k; fk = g; seen34 = 1; break; }
       }
    }
+   if (f0->pick && (K ? (fk->ch[p] != f0->ch[p] || fk->ch_now[p] != f0->ch[p]) : f0->pick == 2)) return 0;   /* 99s: 고르기 화면 — 배운 바뀜(id_plan_learned)과 같다 */
    /* 되풀이 동작(배운 순환 — 걷기 등): 다음 포즈를 미리 알면 사이 그림을 한 걸음 내내 고르게 편다(패치 99).
       바뀌기 직전 2 프레임에만 몰면, 걷기는 몸은 120Hz 로 매끄럽게 가는데 다리는 6 프레임 멈춰 미끄러지듯 보였다
       (유저 「앞으로 올 때 슬라이딩하는 것처럼 보일 때가 있다」). t = 지난 시간/길이 → ¼·½·¾ 중 가까운 칸(⅛ 전엔 A 그대로).
@@ -2368,13 +2388,29 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
       uint8_t m[64];
       uint64_t sg;
       int ax, ay;
+      int sw, chg = 0;
       if (!body_mask(f, p, m)) { id_cur[p] = id_prev[p] = 0; continue; }
       sg = body_sig(f, m);
       ax = f->ob_x[p]; ay = f->ob_y[p];
       if (!id_find_pose(p, sg)) id_capture(f, p, m, sg);
       else id_realign(f, p, sg);
-      if (sg == id_cur[p]) { if (ax != id_ax[p] || ay != id_ay[p]) id_still[p] = 0; continue; }
-      if (id_cur[p])
+      /* 99s: 고르기 화면 — 미리보기 몸 하나(물체 0)가 커서 따라 다른 캐릭터로 바뀐다. 그건 포즈 바뀜이 아니라 다른 몸:
+         샬럿↔소게츠를 몇 번 오가면 «샬럿 포즈 → 소게츠 포즈»가 배운 왕복(순환)이 되어, 샬럿에 머무는 동안 소게츠 그림 쪽으로
+         사이 그림을 폈다(반 넘으면 소게츠 모양 — 팔레트는 지금 것이라 샬럿 색, 유저 2026-10-14 화면 녹화). 캐릭터 번호(물체 +0x3C)가
+         바뀐 앞뒤 2 프레임의 바뀜은 안 배우고 새 몸으로 친다. 번호가 그림보다 늦게 바뀌면 방금 배운 것을 무른다 */
+      if (!id_cur[p] || f->ch[p] != id_chv[p]) { if (id_cur[p]) chg = 1; id_chv[p] = f->ch[p]; id_cht[p] = realn; }
+      sw = f->pick && realn - id_cht[p] <= 2u;
+      if (sg == id_cur[p])
+      {
+         if (chg && f->pick && id_prev[p] && realn - id_start[p] <= 2u)
+         {
+            id_unlearn(p, id_prev[p], id_cur[p]);
+            id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; id_hold_prev2[p] = 0; id_prev_moved2[p] = 0;
+         }
+         if (ax != id_ax[p] || ay != id_ay[p]) id_still[p] = 0;
+         continue;
+      }
+      if (id_cur[p] && !sw)   /* 99s: 고르기 화면에서 캐릭터가 바뀐 때는 배우지 않는다 */
       {  /* 움직이는 바뀜도 배운다(패치 99) — 걷기 순환을 알아야 사이 그림을 한 걸음 내내 펼 수 있다. 서기 그리기(±3)는 여전히 제자리만 */
          unsigned hold = realn - id_start[p], h3 = 0;
          uint64_t ln = mc_ln ? mc_loop_next(id_cur[p], &h3) : 0;
@@ -2387,6 +2423,7 @@ void ss2fg_idle_observe(const ss2fg_frame *f, unsigned realn)
       }
       else { id_prev[p] = 0; id_prev_link[p] = 0; id_hold_prev[p] = 0; id_prev_moved[p] = 0; id_hold_prev2[p] = 0; id_prev_moved2[p] = 0; }
       id_ti_last[p] = -1; id_ti_sb[p] = 0;
+      if (sw) { id_sp_at[p] = 0; id_sp_b[p] = 0; id_far_sb[p] = 0; }   /* 99s: 다른 캐릭터 — 펴던 기록도 버린다 */
       id_cur[p] = sg; id_start[p] = realn; id_ax[p] = ax; id_ay[p] = ay; id_still[p] = 1;
    }
 }
@@ -2431,6 +2468,11 @@ static int id_plan_learned(const ss2fg_frame *f0, const ss2fg_frame *f1, const s
          if (s == sb) K = k; else bad = 1;
       }
       if (bad) { id_stats[3]++; return 0; }
+      if (f0->pick)
+      {  /* 99s: 고르기 화면 — 보이는 바뀜은 같은 캐릭터만. 캐릭터 고르기(2)의 미리보기는 커서를 둔 동안 멈춰 있어 바뀔 때를 모르고 펴면 늘 빗나간다 */
+         const ss2fg_frame *fk = K == 1 ? f1 : f2;
+         if (K ? (fk->ch[p] != f0->ch[p] || fk->ch_now[p] != f0->ch[p]) : f0->pick == 2) return 0;
+      }
       if (doubt && !K) return 0;                        /* (main) 온 쪽으로 되돌아감 예측 — 미리 본 프레임으로 확인될 때만(그때는 마지막 2 프레임) */
       if (K) id_realign(K == 1 ? f1 : f2, p, sb);      /* 뒤 포즈도 지금 장면 것으로(99e) */
       else

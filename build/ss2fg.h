@@ -59,6 +59,8 @@ typedef struct ss2fg_frame {
    uint8_t ob_now_act, ob_act;     /* 쓰는 칸 비트(종류 0xFFFF = 빈 칸) */
    uint8_t now_ok, body_ok;        /* 대전 중이라 값이 유효함 */
    uint8_t fight, pad2;            /* 99r: 대전 모드(241) — 고르기 화면·판 시작 전(240)과 가른다 */
+   uint8_t pick_now, pick;         /* 99s: 고르기 화면 번호(모드 240 의 2 캐릭터·4 검질, 아니면 0) — 미리보기 몸 하나가 커서 따라 캐릭터를 갈아입는다 */
+   uint8_t ch_now[2], ch[2];       /* 99s: 몸 0·1 의 캐릭터 번호(물체 +0x3C — 고르기 화면에선 커서 번호×4) */
 } ss2fg_frame;
 
 /* ── 캡처 ── */
