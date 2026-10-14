@@ -720,51 +720,77 @@ static void fl_apply0(uint16_t *buf, int w, int h, int pitch)
    흰 바탕(150→28→238) — 이 계단이 몇 출력(120Hz 한 칸 8ms)에 나뉜다. 장면이 바뀔 때도 2~5 칸에 걸쳐 바뀐다(눈부심 막기 — WCAG·FFmpeg
    photosensitivity 처럼 밝기 차를 줄임). 유저 2026-10-14 「번쩍 화면 전체 효과 말하는 거임」 */
 #define FL_STEP 25
-static uint16_t fl_last[(FB_WIDTH * 4) * (FB_HEIGHT * 4)];
+/* 99q: 앞 출력 «그림»과 섞으면 앞 그림이 겹쳐 남아 그동안 움직이는 것(이펙트·몸)이 멈춘 듯 보였다 — 앞 출력의 «평균 색»과 섞는다
+   (지금 그림은 늘 그대로 보이고 밝기 차만 줄어든다 — 색 막을 씌웠다 걷는 꼴). 줄 묶음(1배 줄)마다 앞 출력과 밝기가 그대로인 줄
+   (위·아래 띠: 체력·시간)은 안 건드리고, 바뀐 줄만 그 줄들의 앞 평균 색으로 섞는다 */
+#define FL_G 320
 static int fl_last_w = 0, fl_last_h = 0, fl_last_lum = -1;
-static int fl_lum(const uint16_t *buf, int w, int h, int pitch)
+static int fl_pl[FL_G], fl_pr[FL_G], fl_pg[FL_G], fl_pb[FL_G];   /* 앞 출력: 줄 묶음마다 평균 밝기(0~250)·색(5·6·5 칸 값 ×16) */
+static int fl_cl[FL_G], fl_cr[FL_G], fl_cg[FL_G], fl_cb[FL_G];   /* 지금 출력 */
+static int fl_l16(int r16, int g16, int b16) { return (r16 * 8 * 54 + g16 * 4 * 183 + b16 * 8 * 19) / 4096; }
+static int fl_scan(const uint16_t *buf, int w, int h, int pitch, int st, int ng)
 {
-   long sum = 0, cnt = 0;
-   int x, y, st = w > FB_WIDTH ? 4 : 1;
-   for (y = 0; y < h; y += st)
+   int g, x;
+   long tl = 0;
+   for (g = 0; g < ng; g++)
    {
-      const uint16_t *r = buf + (size_t)y * pitch;
-      for (x = 0; x < w; x += st)
-      {
-         uint16_t v = r[x];
-         sum += (((v >> 11) & 31) * 8 * 54 + ((v >> 5) & 63) * 4 * 183 + (v & 31) * 8 * 19) >> 8;
-         cnt++;
-      }
+      const uint16_t *r = buf + (size_t)(g * st) * pitch;
+      long sr = 0, sg = 0, sb = 0;
+      int cnt = 0;
+      for (x = 0; x < w; x += st) { uint16_t v = r[x]; sr += (v >> 11) & 31; sg += (v >> 5) & 63; sb += v & 31; cnt++; }
+      fl_cr[g] = cnt ? (int)(sr * 16 / cnt) : 0; fl_cg[g] = cnt ? (int)(sg * 16 / cnt) : 0; fl_cb[g] = cnt ? (int)(sb * 16 / cnt) : 0;
+      fl_cl[g] = fl_l16(fl_cr[g], fl_cg[g], fl_cb[g]);
+      tl += fl_cl[g];
    }
-   return cnt ? (int)(sum / cnt) : 0;
+   return ng ? (int)(tl / ng) : 0;
 }
 static void fl_limit(uint16_t *buf, int w, int h, int pitch)
 {
-   int lum, x, y;
-   if (w <= 0 || h <= 0 || w * h > (int)(sizeof fl_last / sizeof fl_last[0])) { fl_last_lum = -1; return; }
-   lum = fl_lum(buf, w, h, pitch);
+   int st = w > FB_WIDTH ? 4 : 1, ng, g, lum;
+   if (w <= 0 || h <= 0) { fl_last_lum = -1; return; }
+   ng = h / st;
+   if (ng > FL_G) ng = FL_G;
+   lum = fl_scan(buf, w, h, pitch, st, ng);
    if (fl_last_lum >= 0 && fl_last_w == w && fl_last_h == h)
    {
       int d = lum - fl_last_lum, ad = d < 0 ? -d : d;
       if (ad > FL_STEP)
       {
-         int t = (FL_STEP * 256) / ad;
-         for (y = 0; y < h; y++)
+         int t = (FL_STEP * 256) / ad, nc = 0;
+         long mr = 0, mg = 0, mb = 0;
+         for (g = 0; g < ng; g++)
+            if (abs(fl_cl[g] - fl_pl[g]) > 6) { mr += fl_pr[g]; mg += fl_pg[g]; mb += fl_pb[g]; nc++; }
+         if (nc)
          {
-            uint16_t *o = buf + (size_t)y * pitch;
-            const uint16_t *s = fl_last + (size_t)y * w;
-            for (x = 0; x < w; x++)
+            int r0 = (int)(mr / nc), g0 = (int)(mg / nc), b0 = (int)(mb / nc), x, y;
+            long tl = 0;
+            for (g = 0; g < ng; g++)
             {
-               int v = s[x], c = o[x];
-               int r = (v >> 11) & 31, g = (v >> 5) & 63, b = v & 31;
-               r += ((((c >> 11) & 31) - r) * t) / 256; g += ((((c >> 5) & 63) - g) * t) / 256; b += (((c & 31) - b) * t) / 256;
-               o[x] = (uint16_t)((r << 11) | (g << 5) | b);
+               if (abs(fl_cl[g] - fl_pl[g]) <= 6) { tl += fl_cl[g]; continue; }   /* 그대로인 줄 */
+               for (y = g * st; y < g * st + st && y < h; y++)
+               {
+                  uint16_t *o = buf + (size_t)y * pitch;
+                  for (x = 0; x < w; x++)
+                  {
+                     int c = o[x];
+                     int r = (r0 + (((((c >> 11) & 31) << 4) - r0) * t) / 256 + 8) >> 4;
+                     int gg = (g0 + (((((c >> 5) & 63) << 4) - g0) * t) / 256 + 8) >> 4;
+                     int b = (b0 + ((((c & 31) << 4) - b0) * t) / 256 + 8) >> 4;
+                     if (r > 31) r = 31;
+                     if (gg > 63) gg = 63;
+                     if (b > 31) b = 31;
+                     o[x] = (uint16_t)((r << 11) | (gg << 5) | b);
+                  }
+               }
+               fl_cr[g] = r0 + ((fl_cr[g] - r0) * t) / 256; fl_cg[g] = g0 + ((fl_cg[g] - g0) * t) / 256; fl_cb[g] = b0 + ((fl_cb[g] - b0) * t) / 256;
+               fl_cl[g] = fl_l16(fl_cr[g], fl_cg[g], fl_cb[g]);
+               tl += fl_cl[g];
             }
+            lum = (int)(tl / ng);
          }
-         lum = fl_last_lum + (d > 0 ? FL_STEP : -FL_STEP);
       }
    }
-   for (y = 0; y < h; y++) memcpy(fl_last + (size_t)y * w, buf + (size_t)y * pitch, (size_t)w * sizeof(uint16_t));
+   for (g = 0; g < ng; g++) { fl_pl[g] = fl_cl[g]; fl_pr[g] = fl_cr[g]; fl_pg[g] = fl_cg[g]; fl_pb[g] = fl_cb[g]; }
    fl_last_w = w; fl_last_h = h; fl_last_lum = lum;
 }
 static void fl_apply(uint16_t *buf, int w, int h, int pitch)
@@ -851,17 +877,8 @@ static int fg_predict4(int ra)
       fl_soon = !a0 && (a1 || a2);
       if (fl_cur) fl_col = (uint16_t)NGPGfx->ColorMap[c12 & 4095];
    }
-   pf_n = 0;
-   if (fl_opt == 2 && ss2comm_rom_is_ss2())   /* 99p: 거의 없게에만 */
-   {  /* 99n: 플레인 깜빡임(필살기 빛기둥 등) — 다른 위상과 섞을 칸 */
-      const ss2fg_frame *hh[7];
-      int i;
-      for (i = 0; i < 7; i++) hh[i] = ss2fg_hist(6 - i + extra); /* D-4 .. D+2 (99o: 2 프레임 더 돌렸으면 그만큼 밀림) */
-      pf_n = ss2fg_flicker_plan(hh, pf_oc, pf_om, pf_line);
-      if (pf_n)
-         for (i = 0; i < FB_WIDTH * FB_HEIGHT; i++)
-            if (pf_line[i / FB_WIDTH] && pf_om[i]) pf_oc[i] = (uint16_t)NGPGfx->ColorMap[pf_oc[i] & 4095];
-   }
+   pf_n = 0;   /* 99q: 플레인 깜빡임 섞기(99n)는 뺐다 — 2 프레임마다 켰다 끄는 이펙트(필살기 빛기둥·불꽃·붉은 원)를 반투명으로 붙잡아
+                  움직이지 않는 것처럼 보였다(유저 2026-10-14 「번쩍임 없게 하니 효과가 안 움직이니」·「깜빡임은 그런 거 말하는 게 아님」) */
 
    /* 스프라이트: 다음 바뀌는 프레임 K(D 기준 +1/+2), 지난번 바뀐 때 L(≤0, K-2 이상) */
    Ks = (m01 & 1) ? 1 : (m12 & 1) ? 2 : 0;
